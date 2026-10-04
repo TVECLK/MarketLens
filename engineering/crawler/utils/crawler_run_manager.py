@@ -12,7 +12,7 @@ from crawlers.xpressjobs_crawler import XpressJobsCrawler
 from crawlers.topjobs_crawler import TopJobsCrawler
 from crawlers.rooster_crawler import RoosterCrawler
 from crawlers.governmentjobs_crawler import GovernmentJobsCrawler
-from utils.thunder_id_client import ThunderIDClient
+from utils.thunder_id_client import ThunderAuth, ThunderIDClient
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ class CrawlerManager:
             "ikman": IkmanCrawler,
         }
         self._thunder_client = ThunderIDClient()
+        self._thunder_auth = ThunderAuth(self._thunder_client)
 
     # This function created the new crawler session and return the new crawler run id
     async def _start_run(self, client: httpx.AsyncClient) -> int:
@@ -39,11 +40,10 @@ class CrawlerManager:
             "status": "RUNNING",
         }
         try:
-            token = await self._thunder_client.get_access_token()
             init_res = await client.post(
                 f"{BACKEND_BASE_URL}/runs",
                 json=start_payload,
-                headers={"Authorization": f"Bearer {token}"},
+                auth=self._thunder_auth,
             )
             init_res.raise_for_status()
             response_data = init_res.json()
@@ -58,33 +58,31 @@ class CrawlerManager:
             return crawler_run_id
         except Exception as e:
             logger.warning(
-                f"Could not connect to tracking backend. Defaulting fallback to run sequence ID 1: {e}"
+                f"Crawler: Could not connect to tracking backend."
             )
             raise
 
-    # This function sets the status of the current crawling session to "COMPLETED"
-    # and sets the end date of the jobs that are not equal to current crawler run id
-    async def _finalize_run(
-        self, client: httpx.AsyncClient, crawler_run_id: int
-    ) -> None:
+    #This function sets the status of the current crawling session to "COMPLETED"
+    #and sets the end date of the jobs that are not equal to current crawler run id
+    async def _finalize_run(self, client: httpx.AsyncClient, crawler_run_id: int) -> None:
         try:
-            logger.info(
-                "Executing pipeline reconciliation. Retiring dead listings from active pool."
-            )
-            token = await self._thunder_client.get_access_token()
-            headers = {"Authorization": f"Bearer {token}"}
-            await client.post(
+            logger.info("Crawler: Executing pipeline reconciliation.")
+
+            reconcile_res = await client.post(
                 f"{BACKEND_BASE_URL}/jobs/reconcile",
                 json={"crawler_run_id": crawler_run_id},
-                headers=headers,
+                auth=self._thunder_auth,
             )
-            await client.post(
+            reconcile_res.raise_for_status()
+
+            complete_res = await client.post(
                 f"{BACKEND_BASE_URL}/runs/{crawler_run_id}/complete",
                 json={"id": crawler_run_id, "status": "COMPLETED"},
-                headers=headers,
+                auth=self._thunder_auth,
             )
+            complete_res.raise_for_status()
         except Exception as e:
-            logger.error(f"Failed to finalize crawler run {crawler_run_id}: {e}")
+            logger.error(f"Crawler: Failed to finalize crawler run {crawler_run_id}: {e}")
 
     # This function calls the relevant crawlers
     async def _run_crawler(
@@ -104,6 +102,7 @@ class CrawlerManager:
             await crawler_instance.crawl_jobs(
                 crawler_run_id=crawler_run_id,
                 async_client=client,
+                thunder_auth=self._thunder_auth
             )
             logger.info(f"--- Finished crawler: {name} ---")
         except Exception as e:

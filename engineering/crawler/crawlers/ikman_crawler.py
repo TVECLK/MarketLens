@@ -6,7 +6,7 @@ from typing import List
 
 from crawlers.base_crawler import BaseJobCrawler
 from parsers.ikman_parser import IkmanParser
-from utils.thunder_id_client import ThunderIDClient
+from utils.thunder_id_client import ThunderAuth
 from pydantic import ValidationError
 from models.raw_job import RawJobInput
 from config import BATCH_SIZE
@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 class IkmanCrawler(BaseJobCrawler):
     def __init__(self):
         self._parser = IkmanParser()
-        self._thunder_client = ThunderIDClient()
 
     # This function returns the last page number from the site
     async def _get_last_page_from_text(self) -> int:
@@ -46,17 +45,13 @@ class IkmanCrawler(BaseJobCrawler):
                 return 1
 
     async def crawl_jobs(
-        self, crawler_run_id: int, async_client: httpx.AsyncClient
+        self,
+        crawler_run_id: int,
+        async_client: httpx.AsyncClient,
+        thunder_auth: ThunderAuth,
     ) -> None:
 
         logger.info("Ikman: Ikman crawl started.")
-
-        try:
-            token = await self._thunder_client.get_access_token()
-        except Exception as e:
-            logger.error(f"Ikman: Failed to obtain ThunderID access token: {e}")
-            raise
-        auth_headers = {"Authorization": f"Bearer {token}"}
 
         max_pages = await self._get_last_page_from_text()
 
@@ -115,9 +110,9 @@ class IkmanCrawler(BaseJobCrawler):
                 job_batch.append(job_input)
 
                 if len(job_batch) >= BATCH_SIZE:
-                    await self._flush_batch(async_client, auth_headers, job_batch)
+                    await self._flush_batch(async_client, thunder_auth, job_batch)
 
             if job_batch:
-                await self._flush_batch(async_client, auth_headers, job_batch)
+                await self._flush_batch(async_client, thunder_auth, job_batch)
 
         logger.info("Ikman: Ikman crawl pass concluded.")

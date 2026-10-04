@@ -11,7 +11,7 @@ from PIL import Image
 from playwright.async_api import async_playwright
 from pydantic import ValidationError
 from crawlers.base_crawler import BaseJobCrawler
-from utils.thunder_id_client import ThunderIDClient
+from utils.thunder_id_client import ThunderAuth
 from parsers.topjobs_parser import TopJobsParser
 from models.raw_job import RawJobInput
 from config import BATCH_SIZE
@@ -32,7 +32,6 @@ logger = logging.getLogger(__name__)
 class TopJobsCrawler(BaseJobCrawler):
     def __init__(self):
         self._parser = TopJobsParser()
-        self._thunder_client = ThunderIDClient()
 
     async def _get_total_pages(self, html: str) -> int:
         soup = BeautifulSoup(html, "html.parser")
@@ -167,17 +166,11 @@ class TopJobsCrawler(BaseJobCrawler):
         self,
         crawler_run_id: int,
         async_client: httpx.AsyncClient,
+        thunder_auth: ThunderAuth,
     ) -> None:
 
         logger.info("TopJobs: Top jobs crawl started.")
-
-        try:
-            token = await self._thunder_client.get_access_token()
-        except Exception as e:
-            logger.error(f"TopJobs: Failed to obtain ThunderID access token: {e}")
-            raise
-        auth_headers = {"Authorization": f"Bearer {token}"}
-
+ 
         job_data_list = await self._extract_complete_jobs_details()
 
         job_batch: List[RawJobInput] = []
@@ -192,15 +185,11 @@ class TopJobsCrawler(BaseJobCrawler):
             job_batch.append(job_input)
 
             if len(job_batch) >= BATCH_SIZE:
-                logger.info(
-                    f"TopJobs: Flushing full batch of {len(job_batch)} job records to backend."
-                )
-                await self._flush_batch(async_client, auth_headers, job_batch)
-
+                logger.info(f"TopJobs: Flushing full batch of {len(job_batch)} job records to backend.")
+                await self._flush_batch(async_client, thunder_auth, job_batch)
+ 
         if job_batch:
-            logger.info(
-                f"TopJobs: Flushing remaining {len(job_batch)} job records to backend."
-            )
-            await self._flush_batch(async_client, auth_headers, job_batch)
-
+            logger.info(f"TopJobs: Flushing remaining {len(job_batch)} job records to backend.")
+            await self._flush_batch(async_client, thunder_auth, job_batch)
+ 
         logger.info("TopJobs: Top jobs crawl pass concluded.")

@@ -4,7 +4,7 @@ import logging
 import math
 from typing import List
 from pydantic import ValidationError
-from utils.thunder_id_client import ThunderIDClient
+from utils.thunder_id_client import ThunderAuth
 from config import BATCH_SIZE
 
 from crawlers.base_crawler import BaseJobCrawler
@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 class RoosterCrawler(BaseJobCrawler):
     def __init__(self):
         self._parser = RoosterParser()
-        self._thunder_client = ThunderIDClient()
 
     async def _fetch_all_jobs(self, async_client: httpx.AsyncClient):
         base_url = "https://api.rooster.jobs/jobSearch/jobs/search"
@@ -103,17 +102,11 @@ class RoosterCrawler(BaseJobCrawler):
         self,
         crawler_run_id: int,
         async_client: httpx.AsyncClient,
+        thunder_auth: ThunderAuth,
     ) -> None:
 
         logger.info("Rooster: Rooster crawl started.")
-
-        try:
-            token = await self._thunder_client.get_access_token()
-        except Exception as e:
-            logger.error(f"Rooster: Failed to obtain ThunderID access token: {e}")
-            raise
-        auth_headers = {"Authorization": f"Bearer {token}"}
-
+ 
         job_data_list = await self._fetch_all_jobs(async_client)
 
         job_batch: List[RawJobInput] = []
@@ -128,15 +121,11 @@ class RoosterCrawler(BaseJobCrawler):
             job_batch.append(job_input)
 
             if len(job_batch) >= BATCH_SIZE:
-                logger.info(
-                    f"Rooster: Flushing full batch of {len(job_batch)} job records to backend."
-                )
-                await self._flush_batch(async_client, auth_headers, job_batch)
-
+                logger.info(f"Rooster: Flushing full batch of {len(job_batch)} job records to backend.")
+                await self._flush_batch(async_client, thunder_auth, job_batch)
+ 
         if job_batch:
-            logger.info(
-                f"Rooster: Flushing remaining {len(job_batch)} job records to backend."
-            )
-            await self._flush_batch(async_client, auth_headers, job_batch)
-
+            logger.info(f"Rooster: Flushing remaining {len(job_batch)} job records to backend.")
+            await self._flush_batch(async_client, thunder_auth, job_batch)
+ 
         logger.info("Rooster: Rooster crawl pass concluded.")

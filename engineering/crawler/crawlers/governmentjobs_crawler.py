@@ -8,7 +8,7 @@ from crawl4ai import AsyncWebCrawler
 from bs4 import BeautifulSoup
 from PIL import Image
 from crawlers.base_crawler import BaseJobCrawler
-from utils.thunder_id_client import ThunderIDClient
+from utils.thunder_id_client import ThunderAuth
 from parsers.governmentjobs_parser import GovernmentJobsParser
 from config import BATCH_SIZE
 from pydantic import ValidationError
@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 class GovernmentJobsCrawler(BaseJobCrawler):
     def __init__(self):
         self._parser = GovernmentJobsParser()
-        self._thunder_client = ThunderIDClient()
 
     def _remove_sinhala_control_chars(self, text):
         cleaned_text = text.replace("\u200c", "").replace("\u200d", "")
@@ -116,19 +115,11 @@ class GovernmentJobsCrawler(BaseJobCrawler):
         self,
         crawler_run_id: int,
         async_client: httpx.AsyncClient,
+        thunder_auth: ThunderAuth,
     ) -> None:
 
         logger.info("GovernmentJobs: Government jobs crawl started.")
-
-        try:
-            token = await self._thunder_client.get_access_token()
-        except Exception as e:
-            logger.error(
-                f"GovernmentJobs: Failed to obtain ThunderID access token: {e}"
-            )
-            raise
-        auth_headers = {"Authorization": f"Bearer {token}"}
-
+ 
         job_data_list = await self._fetch_job_details(async_client)
 
         job_batch: List[RawJobInput] = []
@@ -143,15 +134,11 @@ class GovernmentJobsCrawler(BaseJobCrawler):
             job_batch.append(job_input)
 
             if len(job_batch) >= BATCH_SIZE:
-                logger.info(
-                    f"GovernmentJobs: Flushing full batch of {len(job_batch)} job records to backend."
-                )
-                await self._flush_batch(async_client, auth_headers, job_batch)
-
+                logger.info(f"GovernmentJobs: Flushing full batch of {len(job_batch)} job records to backend.")
+                await self._flush_batch(async_client, thunder_auth, job_batch)
+ 
         if job_batch:
-            logger.info(
-                f"GovernmentJobs: Flushing remaining {len(job_batch)} job records to backend."
-            )
-            await self._flush_batch(async_client, auth_headers, job_batch)
-
+            logger.info(f"GovernmentJobs: Flushing remaining {len(job_batch)} job records to backend.")
+            await self._flush_batch(async_client, thunder_auth, job_batch)
+ 
         logger.info("GovernmentJobs: Government jobs crawl pass concluded.")

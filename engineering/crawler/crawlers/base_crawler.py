@@ -6,6 +6,7 @@ import httpx
 
 from config import BACKEND_BASE_URL
 from models.raw_job import RawJobInput
+from utils.thunder_id_client import ThunderAuth, ThunderTokenError
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +20,14 @@ class BaseJobCrawler(ABC):
         self,
         crawler_run_id: int,
         async_client: httpx.AsyncClient,
+        thunder_auth: ThunderAuth,
     ) -> None:
         pass
 
     async def _flush_batch(
         self,
         async_client: httpx.AsyncClient,
-        auth_headers: dict,
+        thunder_auth: ThunderAuth,
         job_batch: List[RawJobInput],
     ) -> None:
 
@@ -37,10 +39,11 @@ class BaseJobCrawler(ABC):
                 attempt += 1
 
                 try:
+
                     response = await async_client.post(
                         f"{BACKEND_BASE_URL}/jobs/batch-save",
                         json=[job.model_dump() for job in pending],
-                        headers=auth_headers,
+                        auth=thunder_auth,
                     )
                     response.raise_for_status()
                     body = response.json()
@@ -77,6 +80,12 @@ class BaseJobCrawler(ABC):
                             f"Retrying {len(pending)} job(s) after attempt {attempt}/{MAX_RETRIES}"
                         )
 
+                except ThunderTokenError as e:
+                    logger.error(
+                        f"Batch POST could not obtain a ThunderID token on attempt "
+                        f"{attempt}/{MAX_RETRIES} ({len(pending)} jobs pending): {e}"
+                    )
+                    continue
                 except httpx.TimeoutException as e:
                     logger.error(
                         f"Batch POST timed out on attempt {attempt}/{MAX_RETRIES} "
