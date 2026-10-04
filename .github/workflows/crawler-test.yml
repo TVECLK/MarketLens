@@ -1,0 +1,132 @@
+name: Crawler - Container Test
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "engineering/crawler/**"
+      - ".github/workflows/crawler-test.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "engineering/crawler/**"
+      - ".github/workflows/crawler-test.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  crawler-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engineering/crawler
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: engineering/crawler/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Ruff lint
+        run: ruff check .
+
+      - name: Run Ruff format check
+        run: ruff format --check .
+
+      - name: Run tests
+        env:
+          THUNDER_INSECURE_TLS: "true"
+        run: pytest -v
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build crawler image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./engineering/crawler
+          file: ./engineering/crawler/Dockerfile.crawler
+          push: false
+          load: true
+          tags: crawler:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run docker container
+        run: |
+          # main.py runs one crawl pass and exits (no long-running server),
+          # so this only has to prove the image boots into application code.
+          docker run -d --name crawler \
+            -e DEEPSEEK_API_KEY=test_deepseek_api_key \
+            -e BACKEND_URL=http://backend:8080/api/v1/crawler \
+            -e BACKEND_URL_FOR_FETCHING=http://backend:8080/api/v1 \
+            -e THUNDER_BASE_URL=https://thunder:8090 \
+            -e THUNDER_CLIENT_ID=test_client_id \
+            -e THUNDER_CLIENT_SECRET=test_client_secret \
+            -e THUNDER_RESOURCE=https://tvec.gov.lk \
+            -e THUNDER_INSECURE_TLS=true \
+            crawler:latest
+
+          # Poll instead of a fixed sleep: cold imports of crawl4ai/Playwright
+          # can take a while, so give it up to 30s to reach application code.
+          for i in $(seq 1 30); do
+            docker logs crawler 2>&1 | grep -q "Crawling Started" && { echo "Success: Container booted and started the crawl pipeline..."; exit 0; }
+            sleep 1
+          done
+
+          echo "Error: Container never reached the crawl pipeline, showing logs below:"
+          docker logs crawler
+          exit 1
+
+      - name: Show container logs
+        run: docker logs crawler
+
+      - name: Stop docker container
+        run: |
+          docker stop crawler
+
+          if [ "$(docker inspect -f '{{.State.Status}}' crawler)" == "exited" ]; then
+            echo "Success: Container stopped!"
+          else
+            echo "Error: Container stop failed, showing logs below:"
+            docker logs crawler
+            exit 1
+          fi
+
+      - name: Remove docker container
+        run: |
+          docker rm -f crawler || true
+
+          # Check if the container ID still exists
+          if [ -z "$(docker ps -aq -f name=^crawler$)" ]; then
+            echo "Container removed successfully"
+          else
+            echo "Container removal failed"
+            exit 1
+          fi
+
+      - name: Remove docker image
+        run: |
+          docker rmi -f crawler:latest || true
+
+          # Check if the image still exists
+          if [ -z "$(docker images -q --filter "reference=crawler")" ]; then
+            echo "Image removed successfully"
+          else
+            echo "Image removal failed"
+            docker images
+            exit 1
+          fi
