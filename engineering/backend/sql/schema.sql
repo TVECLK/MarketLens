@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS geo_data (
 
 CREATE TABLE IF NOT EXISTS source (
     id          SERIAL PRIMARY KEY,
+    -- in the diagram this is renamed to 'name'
     source      VARCHAR(255) NOT NULL,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -99,6 +100,7 @@ CREATE TABLE IF NOT EXISTS employment_sector (
     deleted_at  TIMESTAMPTZ
 );
 
+-- 2. title comment is here but 1. is missing at the top of the file.
 -- -----------------------------------------------------------------------------
 -- 2. Occupation hierarchy (major -> sub-major -> minor -> unit -> occupation)
 -- -----------------------------------------------------------------------------
@@ -198,6 +200,7 @@ CREATE TABLE IF NOT EXISTS industry_class (
 CREATE TABLE IF NOT EXISTS industry_subclass (
     id                  SERIAL PRIMARY KEY,
     industry_class_id   INT NOT NULL REFERENCES industry_class(id) ON DELETE CASCADE,
+    -- there is a type mismatch (in the diagram this is varchar(300))
     name                VARCHAR(500) NOT NULL,
     code                VARCHAR(50) NOT NULL,
     created_at          TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -208,6 +211,15 @@ CREATE TABLE IF NOT EXISTS industry_subclass (
 -- -----------------------------------------------------------------------------
 -- 4. Core job post tables
 -- -----------------------------------------------------------------------------
+-- here there is an issue. pg_type has all the types of schemas and if any schema has 'work_mode_enum' already this will be skipped.
+-- so better option here is try to create the enum and catch it in the exception
+-- DO $$
+-- BEGIN
+--     CREATE TYPE work_mode_enum AS ENUM ('remote', 'onsite', 'hybrid');
+-- EXCEPTION
+--     WHEN duplicate_object THEN NULL;
+-- END
+-- $$;
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'work_mode_enum') THEN
@@ -218,6 +230,7 @@ $$;
 
 CREATE TABLE IF NOT EXISTS job_post (
     id              BIGSERIAL PRIMARY KEY,
+    -- employer_id and job_type_id are also nullable, so these should be employer |o--o{ job_post and job_type |o--o{ job_post in the diagram
     employer_id     BIGINT REFERENCES employer(id),
     job_type_id     INT REFERENCES job_type(id),
     job_role        VARCHAR(255) NOT NULL,
@@ -229,16 +242,21 @@ CREATE TABLE IF NOT EXISTS job_post (
     updated_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+-- why this tables doesnt have the created_at updated_at records?
 CREATE TABLE IF NOT EXISTS job_post_skills (
     job_post_id BIGINT REFERENCES job_post(id) ON DELETE CASCADE,
+    -- create an index with skill_id 
     skill_id    INT    REFERENCES skills(id)   ON DELETE CASCADE,
     PRIMARY KEY (job_post_id, skill_id)
 );
 
+-- What is the cardinality between job_post and meta_data? diagram says its one-to-may,
+-- but in the meta_data schema says job_post_id is UNIQUE. That makes it one-to-one.
 CREATE TABLE IF NOT EXISTS meta_data (
     id                      BIGSERIAL PRIMARY KEY,
     job_post_id             BIGINT UNIQUE REFERENCES job_post(id) ON DELETE CASCADE,
 
+    -- if we use ON DELETE SET NULL for these mentioned attributes in the diagram the relation should be `|o` (zero or one), not `||` (exactly one) - ex: ai_version |o--o{ meta_data (correct this in the diagram)
     -- classification / enrichment lookups (all nullable, ON DELETE SET NULL)
     ai_version_id           INT    REFERENCES ai_version(id)           ON DELETE SET NULL,
     education_level_id      INT    REFERENCES education_level(id)      ON DELETE SET NULL,
@@ -255,6 +273,7 @@ CREATE TABLE IF NOT EXISTS meta_data (
 
     posted_at               TIMESTAMPTZ,
     end_date                TIMESTAMPTZ,
+    -- here there is a possibility for integer overflow. this holds only 32 bit signed values. 
     minhash_signature       INTEGER[],
     confidence_score        DECIMAL(5,4),
 
@@ -266,9 +285,11 @@ CREATE TABLE IF NOT EXISTS meta_data (
 -- 5. Deduplication (LSH) index table
 -- -----------------------------------------------------------------------------
 
+-- why this tables doesnt have the created_at updated_at records?
 CREATE TABLE IF NOT EXISTS lsh_index (
     bucket_key  VARCHAR(64) NOT NULL,
     band_no     INT NOT NULL,
+    -- there is type mismatch in job post id in the diagram (correct one is BIGINT)
     job_post_id BIGINT NOT NULL REFERENCES job_post(id) ON DELETE CASCADE,
     PRIMARY KEY (bucket_key, job_post_id)
 );
@@ -277,9 +298,12 @@ CREATE TABLE IF NOT EXISTS lsh_index (
 -- 6. Indexes
 -- -----------------------------------------------------------------------------
 
+-- postgres usually creates index on primary key right? if so idx_lsh_bucket_radar is redunant.
+-- can we create an index on job_post_id in the lsh_index table
 CREATE INDEX IF NOT EXISTS idx_lsh_bucket_radar
     ON lsh_index (bucket_key, job_post_id);
 
+-- here the end_date is always null. so choosing it as the key index column is useless. can we use INCLUDE job_post_id here?
 CREATE INDEX IF NOT EXISTS idx_metadata_snapshot_reconcile
     ON meta_data (crawler_run_id, end_date)
     WHERE end_date IS NULL;
@@ -287,3 +311,4 @@ CREATE INDEX IF NOT EXISTS idx_metadata_snapshot_reconcile
 CREATE INDEX CONCURRENTLY idx_metadata_posted_at ON meta_data (posted_at);
 CREATE INDEX CONCURRENTLY idx_metadata_occgroup_posted_at ON meta_data (occupation_group_id, posted_at);
 CREATE INDEX CONCURRENTLY idx_metadata_indsubclass_posted_at ON meta_data (industry_subclass_id, posted_at);
+
