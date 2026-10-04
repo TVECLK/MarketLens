@@ -973,7 +973,6 @@ INSERT INTO public.industry_subclass (id, industry_class_id, name, code, created
 INSERT INTO public.industry_subclass (id, industry_class_id, name, code, created_at, updated_at, deleted_at) VALUES (82, 19, 'Raising of horses and other equines', '01420', '2026-07-30 03:51:42.484576+00', '2026-07-30 03:51:42.484576+00', NULL);
 INSERT INTO public.industry_subclass (id, industry_class_id, name, code, created_at, updated_at, deleted_at) VALUES (83, 20, 'Raising of camels and camelids', '01430', '2026-07-30 03:51:42.484576+00', '2026-07-30 03:51:42.484576+00', NULL);
 INSERT INTO public.industry_subclass (id, industry_class_id, name, code, created_at, updated_at, deleted_at) VALUES (84, 21, 'Raising and breeding of goats', '01441', '2026-07-30 03:51:42.484576+00', '2026-07-30 03:51:42.484576+00', NULL);
-INSERT INTO public.industry_subclass (id, industry_class_id, name, code, created_at, updated_at, deleted_at) VALUES (1591, 414, 'm5', '98', '2026-09-09 09:34:36.858524+00', '2026-09-09 09:34:36.858524+00', NULL);
 INSERT INTO public.industry_subclass (id, industry_class_id, name, code, created_at, updated_at, deleted_at) VALUES (85, 21, 'Production of raw goat milk', '01442', '2026-07-30 03:51:42.484576+00', '2026-07-30 03:51:42.484576+00', NULL);
 INSERT INTO public.industry_subclass (id, industry_class_id, name, code, created_at, updated_at, deleted_at) VALUES (86, 21, 'Raising and breeding of sheep', '01443', '2026-07-30 03:51:42.484576+00', '2026-07-30 03:51:42.484576+00', NULL);
 INSERT INTO public.industry_subclass (id, industry_class_id, name, code, created_at, updated_at, deleted_at) VALUES (87, 22, 'Raising of swine/pigs', '01450', '2026-07-30 03:51:42.484576+00', '2026-07-30 03:51:42.484576+00', NULL);
@@ -4633,7 +4632,6 @@ INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, 
 INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (1450, 130, 'Chief Technician (Workshop)', '3115072', '2026-07-30 03:25:58.065121+00', '2026-07-30 03:25:58.065121+00', NULL);
 INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (1451, 130, 'Superintendent (Engineering) - Motor Vehicles', '3115073', '2026-07-30 03:25:58.065121+00', '2026-07-30 03:25:58.065121+00', NULL);
 INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (1452, 130, 'Assistant Superintendent (Engineering)', '3115074', '2026-07-30 03:25:58.065121+00', '2026-07-30 03:25:58.065121+00', NULL);
-INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (4860, 467, 'er', '1234', '2026-09-09 07:49:32.584476+00', '2026-09-09 07:49:32.584476+00', NULL);
 INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (1453, 130, 'Deputy Superintendent (Engineering)', '3115075', '2026-07-30 03:25:58.065121+00', '2026-07-30 03:25:58.065121+00', NULL);
 INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (1454, 130, 'Supervisory Senior Technician', '3115076', '2026-07-30 03:25:58.065121+00', '2026-07-30 03:25:58.065121+00', NULL);
 INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (1455, 130, 'Foremen (Orthopedic Work Shop)', '3115077', '2026-07-30 03:25:58.065121+00', '2026-07-30 03:25:58.065121+00', NULL);
@@ -4996,7 +4994,6 @@ INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, 
 INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (1812, 150, 'Chief Air Traffic Controller', '3154011', '2026-07-30 03:25:58.065121+00', '2026-07-30 03:25:58.065121+00', NULL);
 INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (1813, 150, 'Senior Air Traffic Controller', '3154012', '2026-07-30 03:25:58.065121+00', '2026-07-30 03:25:58.065121+00', NULL);
 INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (1814, 150, 'Civil Aviation Officer', '3154013', '2026-07-30 03:25:58.065121+00', '2026-07-30 03:25:58.065121+00', NULL);
-INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (4861, 467, 'yy', '857', '2026-09-09 07:52:53.425488+00', '2026-09-09 07:52:53.425488+00', NULL);
 INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (1815, 151, 'Air Traffic Safety Electronic Technician', '3155002', '2026-07-30 03:25:58.065121+00', '2026-07-30 03:25:58.065121+00', NULL);
 INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (1816, 151, 'Air Craft Safety Officer', '3155003', '2026-07-30 03:25:58.065121+00', '2026-07-30 03:25:58.065121+00', NULL);
 INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, updated_at, deleted_at) VALUES (1817, 151, 'Technician - Air Traffic Safety', '3155004', '2026-07-30 03:25:58.065121+00', '2026-07-30 03:25:58.065121+00', NULL);
@@ -8157,7 +8154,7 @@ SELECT pg_catalog.setval('public.industry_sector_id_seq', 24, true);
 -- Name: industry_subclass_id_seq; Type: SEQUENCE SET; Schema: public; Owner: app_user
 --
 
-SELECT pg_catalog.setval('public.industry_subclass_id_seq', 1591, true);
+SELECT pg_catalog.setval('public.industry_subclass_id_seq', 1590, true);
 
 
 --
@@ -8193,7 +8190,7 @@ SELECT pg_catalog.setval('public.minor_group_id_seq', 137, true);
 -- Name: occupation_group_id_seq; Type: SEQUENCE SET; Schema: public; Owner: app_user
 --
 
-SELECT pg_catalog.setval('public.occupation_group_id_seq', 4861, true);
+SELECT pg_catalog.setval('public.occupation_group_id_seq', 4859, true);
 
 
 --
