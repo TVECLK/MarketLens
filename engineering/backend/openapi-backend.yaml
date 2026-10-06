@@ -323,14 +323,37 @@ components:
         name: { type: string }
         code: { type: string }
 
-    SubMajorGroup:
+    # Each level below the top has two response shapes instead of one nullable field:
+    # - the plain name (e.g. SubMajorGroup) is returned by its own GET list / GET by id,
+    #   where the backend preloads exactly one level of parent and it is always present.
+    # - the "Basic" variant (e.g. SubMajorGroupBasic) has no parent field at all. It is
+    #   returned by that resource's create/update responses and by "list children of
+    #   {parentId}" endpoints (none of which preload the parent), and it is also what
+    #   shows up nested one level further up (GORM preloads only a single relation deep,
+    #   so a populated parent's own parent is never included).
+
+    SubMajorGroupBasic:
+      description: Returned by create/update and by GET /major-groups/{id}/sub-major-groups.
       type: object
       properties:
         id: { type: integer }
         major_group_id: { type: integer }
         major_group:
           nullable: true
-          allOf: [{ $ref: '#/components/schemas/HierarchyNode' }]
+          enum: [null]
+          description: Always null in this response - the parent is not preloaded here.
+        name: { type: string }
+        code: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    SubMajorGroup:
+      description: Returned by GET /sub-major-groups and GET /sub-major-groups/{id}.
+      type: object
+      properties:
+        id: { type: integer }
+        major_group_id: { type: integer }
+        major_group: { $ref: '#/components/schemas/HierarchyNode' }
         name: { type: string }
         code: { type: string }
         created_at: { type: string, format: date-time }
@@ -351,14 +374,28 @@ components:
           type: array
           items: { $ref: '#/components/schemas/SubMajorGroup' }
 
-    MinorGroup:
+    MinorGroupBasic:
+      description: Returned by create/update and by GET /sub-major-groups/{id}/minor-groups.
       type: object
       properties:
         id: { type: integer }
         sub_major_group_id: { type: integer }
         sub_major_group:
           nullable: true
-          allOf: [{ $ref: '#/components/schemas/SubMajorGroup' }]
+          enum: [null]
+          description: Always null in this response - the parent is not preloaded here.
+        name: { type: string }
+        code: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    MinorGroup:
+      description: Returned by GET /minor-groups and GET /minor-groups/{id}.
+      type: object
+      properties:
+        id: { type: integer }
+        sub_major_group_id: { type: integer }
+        sub_major_group: { $ref: '#/components/schemas/SubMajorGroupBasic' }
         name: { type: string }
         code: { type: string }
         created_at: { type: string, format: date-time }
@@ -379,14 +416,28 @@ components:
           type: array
           items: { $ref: '#/components/schemas/MinorGroup' }
 
-    UnitGroup:
+    UnitGroupBasic:
+      description: Returned by create/update and by GET /minor-groups/{id}/unit-groups.
       type: object
       properties:
         id: { type: integer }
         minor_group_id: { type: integer }
         minor_group:
           nullable: true
-          allOf: [{ $ref: '#/components/schemas/MinorGroup' }]
+          enum: [null]
+          description: Always null in this response - the parent is not preloaded here.
+        name: { type: string }
+        code: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    UnitGroup:
+      description: Returned by GET /unit-groups and GET /unit-groups/{id}.
+      type: object
+      properties:
+        id: { type: integer }
+        minor_group_id: { type: integer }
+        minor_group: { $ref: '#/components/schemas/MinorGroupBasic' }
         name: { type: string }
         code: { type: string }
         created_at: { type: string, format: date-time }
@@ -407,14 +458,28 @@ components:
           type: array
           items: { $ref: '#/components/schemas/UnitGroup' }
 
-    OccupationGroup:
+    OccupationGroupBasic:
+      description: Returned by create/update and by GET /unit-groups/{id}/occupation-groups.
       type: object
       properties:
         id: { type: integer }
         unit_group_id: { type: integer }
         unit_group:
           nullable: true
-          allOf: [{ $ref: '#/components/schemas/UnitGroup' }]
+          enum: [null]
+          description: Always null in this response - the parent is not preloaded here.
+        name: { type: string }
+        code: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    OccupationGroup:
+      description: Returned by GET /occupation-groups and GET /occupation-groups/{id}.
+      type: object
+      properties:
+        id: { type: integer }
+        unit_group_id: { type: integer }
+        unit_group: { $ref: '#/components/schemas/UnitGroupBasic' }
         name: { type: string }
         code: { type: string }
         created_at: { type: string, format: date-time }
@@ -438,14 +503,28 @@ components:
           type: array
           items: { $ref: '#/components/schemas/OccupationGroup' }
 
-    IndustryDivision:
+    IndustryDivisionBasic:
+      description: Returned by create/update and by GET /industry-sectors/{id}/industry-divisions.
       type: object
       properties:
         id: { type: integer }
         industry_sector_id: { type: integer }
         industry_sector:
           nullable: true
-          allOf: [{ $ref: '#/components/schemas/HierarchyNode' }]
+          enum: [null]
+          description: Always null in this response - the parent is not preloaded here.
+        name: { type: string }
+        code: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    IndustryDivision:
+      description: Returned by GET /industry-divisions and GET /industry-divisions/{id}.
+      type: object
+      properties:
+        id: { type: integer }
+        industry_sector_id: { type: integer }
+        industry_sector: { $ref: '#/components/schemas/HierarchyNode' }
         name: { type: string }
         code: { type: string }
         created_at: { type: string, format: date-time }
@@ -466,14 +545,28 @@ components:
           type: array
           items: { $ref: '#/components/schemas/IndustryDivision' }
 
-    IndustryGroup:
+    IndustryGroupBasic:
+      description: Returned by create/update and by GET /industry-divisions/{id}/industry-groups.
       type: object
       properties:
         id: { type: integer }
         industry_division_id: { type: integer }
         industry_division:
           nullable: true
-          allOf: [{ $ref: '#/components/schemas/IndustryDivision' }]
+          enum: [null]
+          description: Always null in this response - the parent is not preloaded here.
+        name: { type: string }
+        code: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    IndustryGroup:
+      description: Returned by GET /industry-groups and GET /industry-groups/{id}.
+      type: object
+      properties:
+        id: { type: integer }
+        industry_division_id: { type: integer }
+        industry_division: { $ref: '#/components/schemas/IndustryDivisionBasic' }
         name: { type: string }
         code: { type: string }
         created_at: { type: string, format: date-time }
@@ -494,14 +587,28 @@ components:
           type: array
           items: { $ref: '#/components/schemas/IndustryGroup' }
 
-    IndustryClass:
+    IndustryClassBasic:
+      description: Returned by create/update and by GET /industry-groups/{id}/industry-classes.
       type: object
       properties:
         id: { type: integer }
         industry_group_id: { type: integer }
         industry_group:
           nullable: true
-          allOf: [{ $ref: '#/components/schemas/IndustryGroup' }]
+          enum: [null]
+          description: Always null in this response - the parent is not preloaded here.
+        name: { type: string }
+        code: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    IndustryClass:
+      description: Returned by GET /industry-classes and GET /industry-classes/{id}.
+      type: object
+      properties:
+        id: { type: integer }
+        industry_group_id: { type: integer }
+        industry_group: { $ref: '#/components/schemas/IndustryGroupBasic' }
         name: { type: string }
         code: { type: string }
         created_at: { type: string, format: date-time }
@@ -522,14 +629,28 @@ components:
           type: array
           items: { $ref: '#/components/schemas/IndustryClass' }
 
-    IndustrySubclass:
+    IndustrySubclassBasic:
+      description: Returned by create/update and by GET /industry-classes/{id}/industry-subclasses.
       type: object
       properties:
         id: { type: integer }
         industry_class_id: { type: integer }
         industry_class:
           nullable: true
-          allOf: [{ $ref: '#/components/schemas/IndustryClass' }]
+          enum: [null]
+          description: Always null in this response - the parent is not preloaded here.
+        name: { type: string }
+        code: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    IndustrySubclass:
+      description: Returned by GET /industry-subclasses and GET /industry-subclasses/{id}.
+      type: object
+      properties:
+        id: { type: integer }
+        industry_class_id: { type: integer }
+        industry_class: { $ref: '#/components/schemas/IndustryClassBasic' }
         name: { type: string }
         code: { type: string }
         created_at: { type: string, format: date-time }
@@ -1582,7 +1703,7 @@ paths:
                   count: { type: integer }
                   sub_major_groups:
                     type: array
-                    items: { $ref: '#/components/schemas/SubMajorGroup' }
+                    items: { $ref: '#/components/schemas/SubMajorGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /sub-major-groups:
@@ -1610,7 +1731,7 @@ paths:
           description: Created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SubMajorGroup' }
+              schema: { $ref: '#/components/schemas/SubMajorGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /sub-major-groups/{id}:
@@ -1642,7 +1763,7 @@ paths:
           description: Updated
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SubMajorGroup' }
+              schema: { $ref: '#/components/schemas/SubMajorGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
     delete:
       tags: [occupation-hierarchy]
@@ -1678,7 +1799,7 @@ paths:
                   count: { type: integer }
                   minor_groups:
                     type: array
-                    items: { $ref: '#/components/schemas/MinorGroup' }
+                    items: { $ref: '#/components/schemas/MinorGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /minor-groups:
@@ -1706,7 +1827,7 @@ paths:
           description: Created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/MinorGroup' }
+              schema: { $ref: '#/components/schemas/MinorGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /minor-groups/{id}:
@@ -1738,7 +1859,7 @@ paths:
           description: Updated
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/MinorGroup' }
+              schema: { $ref: '#/components/schemas/MinorGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
     delete:
       tags: [occupation-hierarchy]
@@ -1774,7 +1895,7 @@ paths:
                   count: { type: integer }
                   unit_groups:
                     type: array
-                    items: { $ref: '#/components/schemas/UnitGroup' }
+                    items: { $ref: '#/components/schemas/UnitGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /unit-groups:
@@ -1802,7 +1923,7 @@ paths:
           description: Created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/UnitGroup' }
+              schema: { $ref: '#/components/schemas/UnitGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /unit-groups/{id}:
@@ -1834,7 +1955,7 @@ paths:
           description: Updated
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/UnitGroup' }
+              schema: { $ref: '#/components/schemas/UnitGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
     delete:
       tags: [occupation-hierarchy]
@@ -1870,7 +1991,7 @@ paths:
                   count: { type: integer }
                   occupation_groups:
                     type: array
-                    items: { $ref: '#/components/schemas/OccupationGroup' }
+                    items: { $ref: '#/components/schemas/OccupationGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /occupation-groups:
@@ -1901,7 +2022,7 @@ paths:
           description: Created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/OccupationGroup' }
+              schema: { $ref: '#/components/schemas/OccupationGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /occupation-groups/{id}:
@@ -1933,7 +2054,7 @@ paths:
           description: Updated
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/OccupationGroup' }
+              schema: { $ref: '#/components/schemas/OccupationGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
     delete:
       tags: [occupation-hierarchy]
@@ -2056,7 +2177,7 @@ paths:
                   count: { type: integer }
                   industry_divisions:
                     type: array
-                    items: { $ref: '#/components/schemas/IndustryDivision' }
+                    items: { $ref: '#/components/schemas/IndustryDivisionBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /industry-divisions:
@@ -2084,7 +2205,7 @@ paths:
           description: Created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/IndustryDivision' }
+              schema: { $ref: '#/components/schemas/IndustryDivisionBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /industry-divisions/{id}:
@@ -2116,7 +2237,7 @@ paths:
           description: Updated
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/IndustryDivision' }
+              schema: { $ref: '#/components/schemas/IndustryDivisionBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
     delete:
       tags: [industry-hierarchy]
@@ -2152,7 +2273,7 @@ paths:
                   count: { type: integer }
                   industry_groups:
                     type: array
-                    items: { $ref: '#/components/schemas/IndustryGroup' }
+                    items: { $ref: '#/components/schemas/IndustryGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /industry-groups:
@@ -2180,7 +2301,7 @@ paths:
           description: Created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/IndustryGroup' }
+              schema: { $ref: '#/components/schemas/IndustryGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /industry-groups/{id}:
@@ -2212,7 +2333,7 @@ paths:
           description: Updated
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/IndustryGroup' }
+              schema: { $ref: '#/components/schemas/IndustryGroupBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
     delete:
       tags: [industry-hierarchy]
@@ -2248,7 +2369,7 @@ paths:
                   count: { type: integer }
                   industry_classes:
                     type: array
-                    items: { $ref: '#/components/schemas/IndustryClass' }
+                    items: { $ref: '#/components/schemas/IndustryClassBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /industry-classes:
@@ -2276,7 +2397,7 @@ paths:
           description: Created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/IndustryClass' }
+              schema: { $ref: '#/components/schemas/IndustryClassBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /industry-classes/{id}:
@@ -2308,7 +2429,7 @@ paths:
           description: Updated
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/IndustryClass' }
+              schema: { $ref: '#/components/schemas/IndustryClassBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
     delete:
       tags: [industry-hierarchy]
@@ -2344,7 +2465,7 @@ paths:
                   count: { type: integer }
                   industry_subclasses:
                     type: array
-                    items: { $ref: '#/components/schemas/IndustrySubclass' }
+                    items: { $ref: '#/components/schemas/IndustrySubclassBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /industry-subclasses:
@@ -2375,7 +2496,7 @@ paths:
           description: Created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/IndustrySubclass' }
+              schema: { $ref: '#/components/schemas/IndustrySubclassBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
   /industry-subclasses/{id}:
@@ -2407,7 +2528,7 @@ paths:
           description: Updated
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/IndustrySubclass' }
+              schema: { $ref: '#/components/schemas/IndustrySubclassBasic' }
         '400': { $ref: '#/components/responses/BadRequest' }
     delete:
       tags: [industry-hierarchy]
