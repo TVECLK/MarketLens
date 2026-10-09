@@ -80,8 +80,6 @@ func New(repo *repositories.JobRepository) *mcp.Server {
 	registerLookupTools(server, repo)
 	registerHierarchyTools(server, repo)
 	registerAnalysisTools(server, repo)
-	registerStatsTools(server, repo)
-	registerCrawlerTools(server, repo)
 	registerManualUploadTools(server)
 
 	return server
@@ -181,13 +179,10 @@ func registerLookupTools(server *mcp.Server, repo *repositories.JobRepository) {
 		func() (any, error) { return repo.GetAllExperiences() })
 
 	registerNoArgTool(server, "get_provinces", "List all Sri Lankan provinces used for geo-tagging job posts.",
-		func() (any, error) { return repo.GetAllProvinces() })
+		func() (any, error) { return repo.GetAllGeoData() })
 
 	registerNoArgTool(server, "get_job_types", "List all job types (Full Time, Part Time, Contract, Internship).",
 		func() (any, error) { return repo.GetAllJobTypes() })
-
-	registerNoArgTool(server, "get_sources", "List all crawl sources (e.g. Ikman, TopJobs) with their active job counts.",
-		func() (any, error) { return repo.GetSourcesWithActiveJobCount() })
 
 	registerNoArgTool(server, "get_employment_sectors", "List all employment sectors (Government, Private, NGO, etc.).",
 		func() (any, error) { return repo.GetAllEmploymentSectors() })
