@@ -7,9 +7,10 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o main .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/bin/api ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/bin/mcp ./cmd/mcp
 
-FROM alpine:3.19
+FROM alpine:3.19 AS base
 
 RUN apk add --no-cache ca-certificates \
     && addgroup -g 1000 -S appgroup \
@@ -17,11 +18,19 @@ RUN apk add --no-cache ca-certificates \
 
 WORKDIR /app
 
-COPY --from=builder /app/main .
-RUN chown -R appuser:appgroup /app
+# Two separate final images from here — api and mcp are independently
+# deployable processes (see cmd/api, cmd/mcp), each with only its own
+# binary. Build with `docker build --target api` / `--target mcp`;
+# docker-compose.yml's two backend services select these via `target:`.
 
+FROM base AS api
+COPY --from=builder --chown=appuser:appgroup /app/bin/api .
 USER 1000
-
 EXPOSE 8080
+CMD ["./api"]
 
-CMD ["./main"]
+FROM base AS mcp
+COPY --from=builder --chown=appuser:appgroup /app/bin/mcp .
+USER 1000
+EXPOSE 9090
+CMD ["./mcp"]

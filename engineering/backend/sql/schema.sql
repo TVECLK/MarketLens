@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS ai_version (
 
 CREATE TABLE IF NOT EXISTS education_level (
     id          SERIAL PRIMARY KEY,
-    level       VARCHAR(100) NOT NULL,
+    level       VARCHAR(100) NOT NULL UNIQUE,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     deleted_at  TIMESTAMPTZ
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS source (
 
 CREATE TABLE IF NOT EXISTS experience (
     id          SERIAL PRIMARY KEY,
-    name        VARCHAR(100) NOT NULL,
+    name        VARCHAR(100) NOT NULL UNIQUE,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     deleted_at  TIMESTAMPTZ
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS experience (
 
 CREATE TABLE IF NOT EXISTS formality (
     id              SERIAL PRIMARY KEY,
-    formality_type  VARCHAR(50) NOT NULL,
+    formality_type  VARCHAR(50) NOT NULL UNIQUE,
     created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     deleted_at      TIMESTAMPTZ
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS formality (
 
 CREATE TABLE IF NOT EXISTS gender (
     id          SERIAL PRIMARY KEY,
-    gender_type VARCHAR(50) NOT NULL,
+    gender_type VARCHAR(50) NOT NULL UNIQUE,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     deleted_at  TIMESTAMPTZ
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS gender (
 
 CREATE TABLE IF NOT EXISTS vocational_education (
     id          SERIAL PRIMARY KEY,
-    level       VARCHAR(100) NOT NULL,
+    level       VARCHAR(100) NOT NULL UNIQUE,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     deleted_at  TIMESTAMPTZ
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS vocational_education (
 
 CREATE TABLE IF NOT EXISTS employment_sector (
     id          SERIAL PRIMARY KEY,
-    sector      VARCHAR(100) NOT NULL,
+    sector      VARCHAR(100) NOT NULL UNIQUE,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     deleted_at  TIMESTAMPTZ
