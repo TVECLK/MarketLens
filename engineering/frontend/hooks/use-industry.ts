@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ENV } from "@/config/env";
 import { IndustryListResponse, 
-  IndustrySkillsAnalytics,
   IndustryDivisionChildrenResponse,
   IndustryGroupChildrenResponse,
   IndustryClassChildrenResponse,
@@ -105,35 +104,6 @@ export function useIndustryAnalysis(
     queryKey: ["industry-analysis", level, id, fromDate, toDate],
     queryFn: () => fetchIndustryAnalysis(level as string, id as number, fromDate, toDate),
     enabled: level !== null && id !== null && Boolean(fromDate) && Boolean(toDate) && fromDate <= toDate,
-    staleTime: 1000 * 60 * 5,
-  });
-}
-
-async function fetchIndustries(): Promise<IndustryListResponse> {
-  const res = await fetch(`${BASE}/industry`);
-  if (!res.ok) throw new Error("Failed to fetch industries");
-  return res.json();
-}
-
-export function useIndustries() {
-  return useQuery<IndustryListResponse>({
-    queryKey: ["industries"],
-    queryFn:  fetchIndustries,
-    staleTime: 1000 * 60 * 10,
-  });
-}
-
-async function fetchIndustrySkillsAnalytics(industryId: number): Promise<IndustrySkillsAnalytics> {
-  const res = await fetch(`${BASE}/industry/skills-analytics?industry_id=${industryId}`);
-  if (!res.ok) throw new Error("Failed to fetch industry skills analytics");
-  return res.json();
-}
-
-export function useIndustrySkillsAnalytics(industryId: number | null) {
-  return useQuery<IndustrySkillsAnalytics>({
-    queryKey: ["industry", "skills-analytics", industryId],
-    queryFn:  () => fetchIndustrySkillsAnalytics(industryId!),
-    enabled:  industryId !== null,
     staleTime: 1000 * 60 * 5,
   });
 }

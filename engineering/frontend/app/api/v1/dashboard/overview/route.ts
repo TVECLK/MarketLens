@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const GO_API = process.env.GO_BACKEND_URL;
+const GO_API = `${process.env.GO_BACKEND_URL}/api/v1`;
 
 // GET /api/dashboard/overview?from-date=YYYY-MM-DD&to-date=YYYY-MM-DD
 export async function GET(request: NextRequest) {

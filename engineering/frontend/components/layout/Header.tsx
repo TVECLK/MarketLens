@@ -11,14 +11,12 @@ import Image from "next/image";
 interface HeaderProps {
   title: string;
   subtitle?: string;
-  avatarInitials?: string;
   logoSrc?: string;
 }
 
 export default function Header({
   title,
   subtitle,
-  avatarInitials = "BJ",
   logoSrc,
 }: HeaderProps) {
   return (

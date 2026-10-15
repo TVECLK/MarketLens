@@ -4,7 +4,6 @@ const isProtectedRoute = createRouteMatcher(['/kpis'])
 
 export default thunderIDProxy(async (thunderid, request) => {
   if (isProtectedRoute(request)) {
-    console.log('isSignedIn:', thunderid.isSignedIn())
     return await thunderid.protectRoute()
   }
 })

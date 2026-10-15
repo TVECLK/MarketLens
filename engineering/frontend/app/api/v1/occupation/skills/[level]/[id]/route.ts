@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const GO_API = process.env.GO_BACKEND_URL;
+const GO_API = `${process.env.GO_BACKEND_URL}/api/v1`;
 
 // GET /api/v1/occupation/skills/:level/:id?from-date=&to-date=&limit=&offset=
 // Fans out to top-15-skills, all-skills (paginated), and top-hiring-employers

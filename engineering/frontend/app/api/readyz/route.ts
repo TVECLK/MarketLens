@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const GO_API = process.env.GO_BACKEND_HEALTH_URL;
+const GO_API = process.env.GO_BACKEND_URL;
 
 export async function GET() {
   console.log("[readyz] checking backend health:", `${GO_API}/healthz`);
