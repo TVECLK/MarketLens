@@ -59,24 +59,6 @@ type EducationLevel struct {
 
 func (EducationLevel) TableName() string { return "education_level" }
 
-// type Industry struct {
-// 	ID        uint      `json:"id"         gorm:"primaryKey"`
-// 	Name      string    `json:"name"       gorm:"size:255;not null"`
-// 	CreatedAt time.Time `json:"created_at"`
-// 	UpdatedAt time.Time `json:"updated_at"`
-// }
-
-// func (Industry) TableName() string { return "industry" }
-
-// type Occupation struct {
-// 	ID        uint      `json:"id"         gorm:"primaryKey"`
-// 	Name      string    `json:"name"       gorm:"size:255;not null"`
-// 	CreatedAt time.Time `json:"created_at"`
-// 	UpdatedAt time.Time `json:"updated_at"`
-// }
-
-// func (Occupation) TableName() string { return "occupation" }
-
 // Source model like ikman jobs, rooster
 type Source struct {
 	ID        uint      `json:"id"         gorm:"primaryKey"`
@@ -421,25 +403,6 @@ type EmployerDemand struct {
 	OpenJobCount int64  `json:"open_job_count"`
 }
 
-type CrawlTimeGap struct {
-	LastCrawledAt  *time.Time `json:"last_crawled_at"`
-	GapSeconds     float64    `json:"gap_seconds"`
-	GapHuman       string     `json:"gap_human"`
-}
-
-type SourceJobCount struct {
-	ID           uint   `json:"id"`
-	Source       string `json:"source"`
-	OpenJobCount int64  `json:"open_job_count"`
-}
-
-type JobCountWithTrend struct {
-	ActiveJobCount  int64   `json:"active_job_count"`
-	LastMonthCount  int64   `json:"last_month_count"`
-	ChangePercent   float64 `json:"change_percent"`
-	Trend           string  `json:"trend"` // "up", "down", "stable"
-}
-
 type OccupationJobCount struct {
 	ID           uint   `json:"id"`
 	Name         string `json:"name"`
@@ -464,7 +427,7 @@ type EducationLevelJobCount struct {
 	OpenJobCount int64  `json:"open_job_count"`
 }
 
-type RemoteOnSiteCount struct {
+type RemoteOnSiteHybridCount struct {
 	RemoteCount int64 `json:"remote_count"`
 	OnSiteCount int64 `json:"on_site_count"`
 	HybridCount int64 `json:"hybrid_count"`
@@ -476,23 +439,7 @@ type JobTypeJobCount struct {
 	OpenJobCount int64  `json:"open_job_count"`
 }
 
-type OccupationYearlyTrend struct {
-	Year         int   `json:"year"`
-	OpenJobCount int64 `json:"open_job_count"`
-}
-
 type TopJobRole struct {
-	ID           uint   `json:"id"`
-	Name         string `json:"name"`
-	OpenJobCount int64  `json:"open_job_count"`
-}
-
-type IndustryYearlyTrend struct {
-	Year         int   `json:"year"`
-	OpenJobCount int64 `json:"open_job_count"`
-}
-
-type ExperienceYearlyJobCount struct {
 	ID           uint   `json:"id"`
 	Name         string `json:"name"`
 	OpenJobCount int64  `json:"open_job_count"`
@@ -504,12 +451,6 @@ type ProvinceJobCount struct {
 	Latitude     float64 `json:"lat"`
 	Longitude    float64 `json:"lng"`
 	OpenJobCount int64   `json:"open_job_count"`
-}
-
-type EducationLevelYearlyJobCount struct {
-	ID           uint   `json:"id"`
-	Level        string `json:"level"`
-	OpenJobCount int64  `json:"open_job_count"`
 }
 
 type FormalityJobCount struct {
@@ -533,34 +474,5 @@ type GenderJobCount struct {
 type VocationalEducationJobCount struct {
 	ID           uint   `json:"id"`
 	Level        string `json:"level"`
-	OpenJobCount int64  `json:"open_job_count"`
-}
-
-type FormalityYearlyJobCount struct {
-	ID             uint   `json:"id"`
-	FormalityType  string `json:"formality_type"`
-	OpenJobCount   int64  `json:"open_job_count"`
-}
-
-type GenderYearlyJobCount struct {
-	ID           uint   `json:"id"`
-	GenderType   string `json:"gender_type"`
-	OpenJobCount int64  `json:"open_job_count"`
-}
-
-type VocationalEducationYearlyJobCount struct {
-	ID           uint   `json:"id"`
-	Level        string `json:"level"`
-	OpenJobCount int64  `json:"open_job_count"`
-}
-
-type EmploymentSectorYearlyTrend struct {
-	Year         int   `json:"year"`
-	OpenJobCount int64 `json:"open_job_count"`
-}
-
-type TopEmployerByIndustryYear struct {
-	ID           uint   `json:"id"`
-	Name         string `json:"name"`
 	OpenJobCount int64  `json:"open_job_count"`
 }

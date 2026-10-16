@@ -4,11 +4,14 @@ import (
 	"marketlens-go-backend/config"
 	"marketlens-go-backend/controllers"
 	"marketlens-go-backend/repositories"
+	"marketlens-go-backend/crawler"
 	"marketlens-go-backend/auth"
 	mcpserver "marketlens-go-backend/mcp"
 
 	"github.com/gin-gonic/gin"
 	"log"
+	"net/http"
+	"time"
 )
 
 
@@ -19,7 +22,10 @@ func main() {
 	r := gin.Default()
 
 	jobRepo := repositories.NewJobRepository(config.DB)
-	jobCtrl := controllers.NewJobController(jobRepo)
+	llmClient := crawler.NewDeepSeekClient(http.DefaultClient)
+	metaBuilder := crawler.NewMetadataBuilder(jobRepo, 30*time.Minute)
+	ingestionSvc := crawler.NewIngestionService(jobRepo, llmClient, metaBuilder, 0.65)
+	jobCtrl := controllers.NewJobController(jobRepo, ingestionSvc)
 
 	// Kubernetes liveness/readiness probes - unversioned, sit outside /api/v1
 	r.GET("/healthz", jobCtrl.HealthzHandler)
@@ -55,64 +61,13 @@ func main() {
 		v1.GET("/occupation/:level/:id/all-skills", jobCtrl.GetAllSkillsByOccupationLevelHandler)
 		v1.GET("/occupation/:level/:id/top-hiring-employers", jobCtrl.GetTopHiringEmployersByOccupationLevelHandler)
 
-		v1.DELETE("/jobs/:id", jobCtrl.DeleteJobHandler)
-		v1.GET("/jobs", jobCtrl.GetActiveJobsHandler)
-		// v1.GET("/industries", jobCtrl.GetAllIndustriesHandler)
-		v1.GET("/experiences", jobCtrl.GetAllExperiencesHandler)
-		v1.GET("/provinces", jobCtrl.GetAllProvincesHandler)
-		v1.GET("/job-types", jobCtrl.GetAllJobTypesHandler)
-		v1.GET("/industries/skills/count",      jobCtrl.GetUniqueSkillsCountByIndustryHandler)
-		v1.GET("/industries/skills/top-demand", jobCtrl.GetMostDemandingSkillByIndustryHandler)
-		v1.GET("/industries/skills/top15",      jobCtrl.GetTop15SkillsByIndustryHandler)
-		v1.GET("/industries/skills",            jobCtrl.GetAllSkillsByIndustryHandler)
-		v1.GET("/industries/employers",         jobCtrl.GetTopHiringEmployersByIndustryHandler)
-		v1.GET("/crawler/last-job-count", jobCtrl.GetLastCrawledJobCountHandler)
-		v1.GET("/crawler/time-gap",       jobCtrl.GetTimeSinceLastCrawlHandler)
-		v1.GET("/crawler/runs",           jobCtrl.GetAllCrawlerRunsHandler)
-		v1.GET("/sources",                jobCtrl.GetSourcesWithActiveJobCountHandler)
-		v1.GET("/stats/active-jobs",       jobCtrl.GetActiveJobCountWithTrendHandler)
-		v1.GET("/stats/by-occupation",     jobCtrl.GetActiveJobCountByOccupationHandler)
-		v1.GET("/stats/by-industry",       jobCtrl.GetActiveJobCountByIndustryHandler)
-		v1.GET("/stats/by-experience",     jobCtrl.GetActiveJobCountByExperienceHandler)
-		v1.GET("/stats/by-education",      jobCtrl.GetActiveJobCountByEducationLevelHandler)
-		v1.GET("/stats/by-formality", jobCtrl.GetActiveJobCountByFormalityHandler)
-		v1.GET("/stats/by-employment-sector", jobCtrl.GetActiveJobCountByEmploymentSectorHandler)
-		v1.GET("/stats/by-gender", jobCtrl.GetActiveJobCountByGenderHandler)
-		v1.GET("/stats/by-vocational-education", jobCtrl.GetActiveJobCountByVocationalEducationHandler)
-		v1.GET("/stats/remote-vs-onsite",  jobCtrl.GetRemoteVsOnSiteCountHandler)
-		v1.GET("/stats/by-job-type",       jobCtrl.GetActiveJobCountByJobTypeHandler)
-		v1.GET("/occupations/yearly-trend", jobCtrl.GetYearlyJobTrendByOccupationHandler)
-		v1.GET("/occupations/by-formality", jobCtrl.GetJobCountByFormalityForOccupationAndYearHandler)
-		v1.GET("/occupations/by-gender", jobCtrl.GetJobCountByGenderForOccupationAndYearHandler)
-		v1.GET("/occupations/top-job-roles", jobCtrl.GetTop3JobRolesByOccupationAndYearHandler)
-		v1.GET("/industries/yearly-trend",        jobCtrl.GetYearlyJobTrendByIndustryHandler)
-		v1.GET("/industries/by-experience",       jobCtrl.GetJobCountByExperienceForIndustryAndYearHandler)
-		v1.GET("/industries/by-province",         jobCtrl.GetProvinceWiseJobCountForIndustryAndYearHandler)
-		v1.GET("/industries/by-education",        jobCtrl.GetJobCountByEducationLevelForIndustryAndYearHandler)
-		v1.GET("/industries/by-vocational-education", jobCtrl.GetJobCountByVocationalEducationForIndustryAndYearHandler)
-		v1.GET("/industries/top-employers",       jobCtrl.GetTopHiringEmployersForIndustryAndYearHandler)
-		v1.GET("/employment-sectors/yearly-trend", jobCtrl.GetYearlyTrendByEmploymentSectorHandler)
-
 		crawler := v1.Group("/crawler")
 		crawler.Use(auth.AuthRequired())
 		{
 			crawler.POST("/runs", auth.RequireScope("crawler:runs"), jobCtrl.StartCrawlerRunHandler)
 			crawler.POST("/runs/:id/complete", auth.RequireScope("crawler:complete"), jobCtrl.CompleteCrawlerRunHandler)
-
-			crawler.POST("/radar/lookup", auth.RequireScope("crawler:lookup"), jobCtrl.GetJobsByBucketKeysHandler)
-
 			crawler.POST("/jobs/batch-save", auth.RequireScope("crawler:batch-save"), jobCtrl.BatchSaveJobsHandler)
-			crawler.POST("/jobs/batch-update", auth.RequireScope("crawler:batch-update"), jobCtrl.BatchUpdateDuplicatesHandler)
 			crawler.POST("/jobs/reconcile", auth.RequireScope("crawler:reconcile"), jobCtrl.ReconcileStaleVacanciesHandler)
-		}
-
-		geoData := v1.Group("/geo-data")
-		{
-			geoData.POST("", jobCtrl.CreateGeoDataHandler)
-			geoData.GET("", jobCtrl.GetAllGeoDataHandler)
-			geoData.GET("/:id", jobCtrl.GetGeoDataByIDHandler)
-			geoData.PUT("/:id", jobCtrl.UpdateGeoDataHandler)
-			geoData.DELETE("/:id", jobCtrl.DeleteGeoDataHandler)
 		}
 
 		educationLevels := v1.Group("/education-levels")
@@ -163,6 +118,7 @@ func main() {
 
 		experiences := v1.Group("/experiences")
 		{
+			experiences.GET("", jobCtrl.GetAllExperiencesHandler)
 			experiences.POST("", auth.AuthRequired(), auth.RequireScope("experiences:create"), jobCtrl.CreateExperienceHandler)
 			experiences.GET("/:id", jobCtrl.GetExperienceByIDHandler)
 			experiences.PUT("/:id", auth.AuthRequired(), auth.RequireScope("experiences:update"), jobCtrl.UpdateExperienceHandler)

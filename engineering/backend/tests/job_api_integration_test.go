@@ -177,7 +177,7 @@ func doRequest(t *testing.T, router *gin.Engine, method, path string, body inter
 
 func TestIntegration_EducationLevel_FullLifecycle(t *testing.T) {
 	db := setupTestDB(t)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	// Create
 	w := doRequest(t, router, http.MethodPost, "/education-levels", map[string]string{"level": "Bachelor's Degree"})
@@ -231,7 +231,7 @@ func TestIntegration_EducationLevel_FullLifecycle(t *testing.T) {
 
 func TestIntegration_Formality_FullLifecycle(t *testing.T) {
 	db := setupTestDB(t)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/formalities", map[string]string{"formality_type": "Formal"})
 	if w.Code != http.StatusCreated {
@@ -270,7 +270,7 @@ func TestIntegration_Formality_FullLifecycle(t *testing.T) {
 
 func TestIntegration_Gender_FullLifecycle(t *testing.T) {
 	db := setupTestDB(t)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/genders", map[string]string{"gender_type": "Male"})
 	if w.Code != http.StatusCreated {
@@ -311,7 +311,7 @@ func TestIntegration_Gender_FullLifecycle(t *testing.T) {
 
 func TestIntegration_EmploymentSector_FullLifecycle(t *testing.T) {
 	db := setupTestDB(t)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/employment-sectors", map[string]string{"sector": "Private"})
 	if w.Code != http.StatusCreated {
@@ -352,7 +352,7 @@ func TestIntegration_EmploymentSector_FullLifecycle(t *testing.T) {
 
 func TestIntegration_VocationalEducation_FullLifecycle(t *testing.T) {
 	db := setupTestDB(t)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/vocational-educations", map[string]string{"level": "NVQ 3"})
 	if w.Code != http.StatusCreated {
@@ -395,7 +395,7 @@ func TestIntegration_VocationalEducation_FullLifecycle(t *testing.T) {
 
 func TestIntegration_Experience_FullLifecycle(t *testing.T) {
 	db := setupTestDB(t)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/experiences", map[string]string{"name": "Entry Level"})
 	if w.Code != http.StatusCreated {
@@ -436,7 +436,7 @@ func TestIntegration_Experience_FullLifecycle(t *testing.T) {
 
 func TestIntegration_MajorGroup_FullLifecycle(t *testing.T) {
 	db := setupTestDB(t)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/major-groups", map[string]string{"name": "Managers", "code": "1"})
 	if w.Code != http.StatusCreated {
@@ -479,7 +479,7 @@ func TestIntegration_SubMajorGroup_FullLifecycle(t *testing.T) {
 	db := setupTestDB(t)
 	parent := models.MajorGroup{Name: "Managers", Code: "1"}
 	db.Create(&parent)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/sub-major-groups", map[string]interface{}{
 		"major_group_id": parent.ID, "name": "Chief Executives", "code": "11",
@@ -530,7 +530,7 @@ func TestIntegration_MinorGroup_FullLifecycle(t *testing.T) {
 	db.Create(&major)
 	sub := models.SubMajorGroup{MajorGroupID: major.ID, Name: "Chief Executives", Code: "11"}
 	db.Create(&sub)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/minor-groups", map[string]interface{}{
 		"sub_major_group_id": sub.ID, "name": "Legislators", "code": "111",
@@ -579,7 +579,7 @@ func TestIntegration_UnitGroup_FullLifecycle(t *testing.T) {
 	db.Create(&sub)
 	minor := models.MinorGroup{SubMajorGroupID: sub.ID, Name: "Legislators", Code: "111"}
 	db.Create(&minor)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/unit-groups", map[string]interface{}{
 		"minor_group_id": minor.ID, "name": "Senior Officials", "code": "1111",
@@ -630,7 +630,7 @@ func TestIntegration_OccupationGroup_FullLifecycle(t *testing.T) {
 	db.Create(&minor)
 	unit := models.UnitGroup{MinorGroupID: minor.ID, Name: "Senior Officials", Code: "1111"}
 	db.Create(&unit)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/occupation-groups", map[string]interface{}{
 		"unit_group_id": unit.ID, "name": "Legislator", "code": "11111",
@@ -673,7 +673,7 @@ func TestIntegration_OccupationGroup_FullLifecycle(t *testing.T) {
 
 func TestIntegration_IndustrySector_FullLifecycle(t *testing.T) {
 	db := setupTestDB(t)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/industry-sectors", map[string]string{"name": "Agriculture", "code": "A"})
 	if w.Code != http.StatusCreated {
@@ -716,7 +716,7 @@ func TestIntegration_IndustryDivision_FullLifecycle(t *testing.T) {
 	db := setupTestDB(t)
 	sector := models.IndustrySector{Name: "Agriculture", Code: "A"}
 	db.Create(&sector)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/industry-divisions", map[string]interface{}{
 		"industry_sector_id": sector.ID, "name": "Crop Farming", "code": "01",
@@ -767,7 +767,7 @@ func TestIntegration_IndustryGroup_FullLifecycle(t *testing.T) {
 	db.Create(&sector)
 	division := models.IndustryDivision{IndustrySectorID: sector.ID, Name: "Crop Farming", Code: "01"}
 	db.Create(&division)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/industry-groups", map[string]interface{}{
 		"industry_division_id": division.ID, "name": "Cereal Growing", "code": "011",
@@ -816,7 +816,7 @@ func TestIntegration_IndustryClass_FullLifecycle(t *testing.T) {
 	db.Create(&division)
 	group := models.IndustryGroup{IndustryDivisionID: division.ID, Name: "Cereal Growing", Code: "011"}
 	db.Create(&group)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/industry-classes", map[string]interface{}{
 		"industry_group_id": group.ID, "name": "Rice Growing", "code": "0111",
@@ -867,7 +867,7 @@ func TestIntegration_IndustrySubclass_FullLifecycle(t *testing.T) {
 	db.Create(&group)
 	class := models.IndustryClass{IndustryGroupID: group.ID, Name: "Rice Growing", Code: "0111"}
 	db.Create(&class)
-	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db)))
+	router := setupRouter(controllers.NewJobController(repositories.NewJobRepository(db), nil))
 
 	w := doRequest(t, router, http.MethodPost, "/industry-subclasses", map[string]interface{}{
 		"industry_class_id": class.ID, "name": "Rice Milling", "code": "01111",
