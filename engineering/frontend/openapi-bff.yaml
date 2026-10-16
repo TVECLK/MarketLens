@@ -1,0 +1,2012 @@
+openapi: 3.0.3
+info:
+  title: Labour Market Analysis Project - BFF
+  description: >
+    Backend-for-Frontend layer, built with Next.js Route Handlers.
+    Every route here proxies (and in several cases fans out to and aggregates)
+    calls to the Go backend at GO_BACKEND_URL — the frontend never calls the Go
+    backend directly. Error responses from the Go backend are forwarded through
+    unmodified, including the original status code.
+  version: "1.0.0"
+  contact:
+    name: TVEC
+    url: https://github.com/TVECLK/MarketLens
+
+servers:
+  - url: http://localhost:3000/api
+    description: Local development
+
+tags:
+  - name: health
+  - name: dashboard
+  - name: occupation-hierarchy
+  - name: industry-hierarchy
+  - name: analysis
+  - name: occupation-skills
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        ThunderID-issued access token. Send as `Authorization: Bearer <token>`.
+
+  parameters:
+    fromDateOptional:
+      name: from-date
+      in: query
+      required: false
+      schema: { type: string, format: date }
+      description: Start date, YYYY-MM-DD. Forwarded to the Go backend as-is.
+    toDateOptional:
+      name: to-date
+      in: query
+      required: false
+      schema: { type: string, format: date }
+      description: End date, YYYY-MM-DD. Forwarded to the Go backend as-is.
+    fromDateRequired:
+      name: from-date
+      in: query
+      required: true
+      schema: { type: string, format: date }
+      description: Start date, YYYY-MM-DD.
+    toDateRequired:
+      name: to-date
+      in: query
+      required: true
+      schema: { type: string, format: date }
+      description: End date, YYYY-MM-DD.
+    idPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: Numeric ID of the parent resource.
+    standardPath:
+      name: standard
+      in: path
+      required: true
+      schema: { type: string, enum: [occupation, industry] }
+    levelPath:
+      name: level
+      in: path
+      required: true
+      schema: { type: string }
+      description: >
+        Hierarchy level name — for occupation: major-group, sub-major-group,
+        minor-group, unit-group, occupation-group. For industry: industry-sector,
+        industry-division, industry-group, industry-class, industry-subclass.
+    occupationLevelPath:
+      name: level
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [major-group, sub-major-group, minor-group, unit-group, occupation-group]
+    limitQuery:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, default: 20 }
+    offsetQuery:
+      name: offset
+      in: query
+      required: false
+      schema: { type: integer, default: 0 }
+
+  responses:
+    BadRequest:
+      description: Invalid request, forwarded from the Go backend unmodified.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    UpstreamOrServerError:
+      description: >
+        Either the Go backend returned an error (forwarded with its original
+        status code), or the BFF itself failed to reach the backend (500).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ServiceUnavailable:
+      description: The Go backend is unreachable or unhealthy.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string }
+        details: { type: string }
+        reason: { type: string }
+
+    StatusResponse:
+      type: object
+      properties:
+        status: { type: string }
+
+    # ---- Dashboard overview ----
+
+    VacancyTrendPoint:
+      type: object
+      properties:
+        label: { type: string }
+        open_job_count: { type: integer }
+
+    VacancyTrendResponse:
+      type: object
+      properties:
+        from_date: { type: string }
+        to_date: { type: string }
+        granularity: { type: string, enum: [weekly, monthly] }
+        count: { type: integer }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/VacancyTrendPoint' }
+
+    VacancyTotalResponse:
+      type: object
+      properties:
+        from_date: { type: string }
+        to_date: { type: string }
+        total_vacancies: { type: integer }
+
+    OccupationDateRangeStat:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        open_job_count: { type: integer }
+
+    OccupationsByDateRangeResponse:
+      type: object
+      properties:
+        from_date: { type: string }
+        to_date: { type: string }
+        count: { type: integer }
+        occupations:
+          type: array
+          items: { $ref: '#/components/schemas/OccupationDateRangeStat' }
+
+    IndustryDateRangeStat:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        open_job_count: { type: integer }
+
+    IndustriesByDateRangeResponse:
+      type: object
+      properties:
+        from_date: { type: string }
+        to_date: { type: string }
+        count: { type: integer }
+        industries:
+          type: array
+          items: { $ref: '#/components/schemas/IndustryDateRangeStat' }
+
+    DashboardOverviewResponse:
+      type: object
+      description: Fans out to vacancy-trend, vacancy-total, occupations/by-date-range, and industries/by-date-range on the Go backend, in parallel.
+      properties:
+        vacancy_trend: { $ref: '#/components/schemas/VacancyTrendResponse' }
+        vacancy_total: { $ref: '#/components/schemas/VacancyTotalResponse' }
+        by_occupation: { $ref: '#/components/schemas/OccupationsByDateRangeResponse' }
+        by_industry: { $ref: '#/components/schemas/IndustriesByDateRangeResponse' }
+
+    # ---- Hierarchy passthrough ----
+
+    HierarchyNode:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        code: { type: string }
+
+    MajorGroupListResponse:
+      type: object
+      properties:
+        count: { type: integer }
+        major_groups:
+          type: array
+          items: { $ref: '#/components/schemas/HierarchyNode' }
+
+    SubMajorGroupChildrenResponse:
+      type: object
+      properties:
+        major_group_id: { type: integer }
+        count: { type: integer }
+        sub_major_groups:
+          type: array
+          items: { $ref: '#/components/schemas/HierarchyNode' }
+
+    MinorGroupChildrenResponse:
+      type: object
+      properties:
+        sub_major_group_id: { type: integer }
+        count: { type: integer }
+        minor_groups:
+          type: array
+          items: { $ref: '#/components/schemas/HierarchyNode' }
+
+    UnitGroupChildrenResponse:
+      type: object
+      properties:
+        minor_group_id: { type: integer }
+        count: { type: integer }
+        unit_groups:
+          type: array
+          items: { $ref: '#/components/schemas/HierarchyNode' }
+
+    OccupationGroupChildrenResponse:
+      type: object
+      properties:
+        unit_group_id: { type: integer }
+        count: { type: integer }
+        occupation_groups:
+          type: array
+          items: { $ref: '#/components/schemas/HierarchyNode' }
+
+    IndustrySectorListResponse:
+      type: object
+      properties:
+        count: { type: integer }
+        industry_sectors:
+          type: array
+          items: { $ref: '#/components/schemas/HierarchyNode' }
+
+    IndustryDivisionChildrenResponse:
+      type: object
+      properties:
+        industry_sector_id: { type: integer }
+        count: { type: integer }
+        industry_divisions:
+          type: array
+          items: { $ref: '#/components/schemas/HierarchyNode' }
+
+    IndustryGroupChildrenResponse:
+      type: object
+      properties:
+        industry_division_id: { type: integer }
+        count: { type: integer }
+        industry_groups:
+          type: array
+          items: { $ref: '#/components/schemas/HierarchyNode' }
+
+    IndustryClassChildrenResponse:
+      type: object
+      properties:
+        industry_group_id: { type: integer }
+        count: { type: integer }
+        industry_classes:
+          type: array
+          items: { $ref: '#/components/schemas/HierarchyNode' }
+
+    IndustrySubclassChildrenResponse:
+      type: object
+      properties:
+        industry_class_id: { type: integer }
+        count: { type: integer }
+        industry_subclasses:
+          type: array
+          items: { $ref: '#/components/schemas/HierarchyNode' }
+
+    # ---- Combined analysis ----
+
+    TotalJobCountResult:
+      type: object
+      properties:
+        standard: { type: string }
+        level: { type: string }
+        id: { type: integer }
+        total_job_count: { type: integer }
+
+    ChildJobCount:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        code: { type: string }
+        open_job_count: { type: integer }
+
+    ChildrenResult:
+      type: object
+      nullable: true
+      description: Null when the selected level is a leaf (occupation-group / industry-subclass), which has no children.
+      properties:
+        standard: { type: string }
+        level: { type: string }
+        id: { type: integer }
+        child_level: { type: string }
+        count: { type: integer }
+        children:
+          type: array
+          items: { $ref: '#/components/schemas/ChildJobCount' }
+
+    EmploymentSectorStat:
+      type: object
+      properties:
+        id: { type: integer }
+        sector: { type: string }
+        open_job_count: { type: integer }
+
+    ExperienceStat:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        open_job_count: { type: integer }
+
+    ProvinceStat:
+      type: object
+      properties:
+        id: { type: integer }
+        province: { type: string }
+        lat: { type: number, format: float }
+        lng: { type: number, format: float }
+        open_job_count: { type: integer }
+
+    EducationLevelStat:
+      type: object
+      properties:
+        id: { type: integer }
+        level: { type: string }
+        open_job_count: { type: integer }
+
+    FormalityStat:
+      type: object
+      properties:
+        id: { type: integer }
+        formality_type: { type: string }
+        open_job_count: { type: integer }
+
+    GenderStat:
+      type: object
+      properties:
+        id: { type: integer }
+        gender_type: { type: string }
+        open_job_count: { type: integer }
+
+    VocationalEducationStat:
+      type: object
+      properties:
+        id: { type: integer }
+        level: { type: string }
+        open_job_count: { type: integer }
+
+    JobTypeStat:
+      type: object
+      properties:
+        id: { type: integer }
+        type: { type: string }
+        open_job_count: { type: integer }
+
+    RemoteOnSiteStat:
+      type: object
+      properties:
+        remote_count: { type: integer }
+        on_site_count: { type: integer }
+
+    OccupationAnalysisResponse:
+      type: object
+      description: >
+        Fans out to all ten generic Go breakdown endpoints for the given
+        standard/level/id in parallel. "children" is the only field that may be
+        null (leaf levels) without the whole request failing.
+      properties:
+        standard: { type: string }
+        level: { type: string }
+        id: { type: string }
+        from_date: { type: string, nullable: true }
+        to_date: { type: string, nullable: true }
+        total_job_count: { $ref: '#/components/schemas/TotalJobCountResult' }
+        children: { $ref: '#/components/schemas/ChildrenResult' }
+        employment_sector:
+          type: object
+          properties:
+            employment_sectors:
+              type: array
+              items: { $ref: '#/components/schemas/EmploymentSectorStat' }
+        experience:
+          type: object
+          properties:
+            experiences:
+              type: array
+              items: { $ref: '#/components/schemas/ExperienceStat' }
+        province:
+          type: object
+          properties:
+            provinces:
+              type: array
+              items: { $ref: '#/components/schemas/ProvinceStat' }
+        education:
+          type: object
+          properties:
+            education_levels:
+              type: array
+              items: { $ref: '#/components/schemas/EducationLevelStat' }
+        formality:
+          type: object
+          properties:
+            formalities:
+              type: array
+              items: { $ref: '#/components/schemas/FormalityStat' }
+        gender:
+          type: object
+          properties:
+            genders:
+              type: array
+              items: { $ref: '#/components/schemas/GenderStat' }
+        vocational_education:
+          type: object
+          properties:
+            vocational_educations:
+              type: array
+              items: { $ref: '#/components/schemas/VocationalEducationStat' }
+        remote_onsite:
+          type: object
+          properties:
+            remote_vs_onsite: { $ref: '#/components/schemas/RemoteOnSiteStat' }
+        job_type:
+          type: object
+          properties:
+            job_types:
+              type: array
+              items: { $ref: '#/components/schemas/JobTypeStat' }
+
+    # ---- Occupation skills ----
+
+    SkillStat:
+      type: object
+      properties:
+        id: { type: integer }
+        skill: { type: string }
+        open_job_count: { type: integer }
+
+    Top15SkillsResponse:
+      type: object
+      properties:
+        level: { type: string }
+        id: { type: integer }
+        from_date: { type: string }
+        to_date: { type: string }
+        count: { type: integer }
+        skills:
+          type: array
+          items: { $ref: '#/components/schemas/SkillStat' }
+
+    AllSkillsResponse:
+      type: object
+      properties:
+        level: { type: string }
+        id: { type: integer }
+        from_date: { type: string }
+        to_date: { type: string }
+        count: { type: integer }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+        skills:
+          type: array
+          items: { $ref: '#/components/schemas/SkillStat' }
+
+    EmployerStat:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        open_job_count: { type: integer }
+
+    TopHiringEmployersResponse:
+      type: object
+      properties:
+        level: { type: string }
+        id: { type: integer }
+        from_date: { type: string }
+        to_date: { type: string }
+        count: { type: integer }
+        employers:
+          type: array
+          items: { $ref: '#/components/schemas/EmployerStat' }
+
+    OccupationSkillsResponse:
+      type: object
+      description: Fans out to top-15-skills, all-skills, and top-hiring-employers on the Go backend in parallel.
+      properties:
+        level: { type: string }
+        id: { type: string }
+        from_date: { type: string, nullable: true }
+        to_date: { type: string, nullable: true }
+        top_15_skills: { $ref: '#/components/schemas/Top15SkillsResponse' }
+        all_skills: { $ref: '#/components/schemas/AllSkillsResponse' }
+        top_hiring_employers: { $ref: '#/components/schemas/TopHiringEmployersResponse' }
+
+    # ---- Flat KPI reference tables (CRUD passthrough) ----
+
+    EmploymentSector:
+      type: object
+      properties:
+        id: { type: integer }
+        sector: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Experience:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    EducationLevel:
+      type: object
+      properties:
+        id: { type: integer }
+        level: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Formality:
+      type: object
+      properties:
+        id: { type: integer }
+        formality_type: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Gender:
+      type: object
+      properties:
+        id: { type: integer }
+        gender_type: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    VocationalEducation:
+      type: object
+      properties:
+        id: { type: integer }
+        level: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    # ---- Hierarchy CRUD passthrough ----
+
+    PaginatedHierarchyListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/HierarchyNode' }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+paths:
+
+  # ============================================================
+  # HEALTH
+  # ============================================================
+  /healthz:
+    get:
+      tags: [health]
+      summary: Liveness probe
+      description: Confirms the Next.js server itself is up — no dependencies checked.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatusResponse' }
+
+  /readyz:
+    get:
+      tags: [health]
+      summary: Readiness probe
+      description: Confirms the BFF can reach the Go backend's own /healthz endpoint.
+      responses:
+        '200':
+          description: Ready
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatusResponse' }
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  # ============================================================
+  # DASHBOARD OVERVIEW
+  # ============================================================
+  /dashboard/overview:
+    get:
+      tags: [dashboard]
+      summary: Combined national dashboard overview
+      description: >
+        Fans out to four Go backend endpoints in parallel (vacancy-trend,
+        vacancy-total, occupations/by-date-range, industries/by-date-range)
+        and returns them combined under one response.
+      parameters:
+        - { $ref: '#/components/parameters/fromDateOptional' }
+        - { $ref: '#/components/parameters/toDateOptional' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardOverviewResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/UpstreamOrServerError'
+
+  # ============================================================
+  # OCCUPATION HIERARCHY (proxied)
+  # ============================================================
+  /v1/occupation/major-groups:
+    get:
+      tags: [occupation-hierarchy]
+      summary: List major groups
+      parameters:
+        - { $ref: '#/components/parameters/fromDateOptional' }
+        - { $ref: '#/components/parameters/toDateOptional' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MajorGroupListResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/UpstreamOrServerError'
+    post:
+      tags: [occupation-hierarchy]
+      summary: Create a major group
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/occupation/major-groups/{id}:
+    get:
+      tags: [occupation-hierarchy]
+      summary: Get a major group by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [occupation-hierarchy]
+      summary: Update a major group
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [occupation-hierarchy]
+      summary: Delete (soft-delete) a major group
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/occupation/major-groups/{id}/sub-major-groups:
+    get:
+      tags: [occupation-hierarchy]
+      summary: List sub major groups under a major group
+      parameters:
+        - { $ref: '#/components/parameters/idPath' }
+        - { $ref: '#/components/parameters/fromDateOptional' }
+        - { $ref: '#/components/parameters/toDateOptional' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SubMajorGroupChildrenResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/UpstreamOrServerError'
+
+  /v1/occupation/sub-major-groups/{id}/minor-groups:
+    get:
+      tags: [occupation-hierarchy]
+      summary: List minor groups under a sub major group
+      parameters:
+        - { $ref: '#/components/parameters/idPath' }
+        - { $ref: '#/components/parameters/fromDateOptional' }
+        - { $ref: '#/components/parameters/toDateOptional' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MinorGroupChildrenResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/UpstreamOrServerError'
+
+  /v1/occupation/minor-groups/{id}/unit-groups:
+    get:
+      tags: [occupation-hierarchy]
+      summary: List unit groups under a minor group
+      parameters:
+        - { $ref: '#/components/parameters/idPath' }
+        - { $ref: '#/components/parameters/fromDateOptional' }
+        - { $ref: '#/components/parameters/toDateOptional' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UnitGroupChildrenResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/UpstreamOrServerError'
+
+  /v1/occupation/unit-groups/{id}/occupation-groups:
+    get:
+      tags: [occupation-hierarchy]
+      summary: List occupation groups under a unit group
+      parameters:
+        - { $ref: '#/components/parameters/idPath' }
+        - { $ref: '#/components/parameters/fromDateOptional' }
+        - { $ref: '#/components/parameters/toDateOptional' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OccupationGroupChildrenResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/UpstreamOrServerError'
+
+  /v1/occupation/sub-major-groups:
+    get:
+      tags: [occupation-hierarchy]
+      summary: List sub major groups
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/HierarchyNode' }
+    post:
+      tags: [occupation-hierarchy]
+      summary: Create a sub major group
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/occupation/sub-major-groups/{id}:
+    get:
+      tags: [occupation-hierarchy]
+      summary: Get a sub major group by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [occupation-hierarchy]
+      summary: Update a sub major group
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [occupation-hierarchy]
+      summary: Delete (soft-delete) a sub major group
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/occupation/minor-groups:
+    get:
+      tags: [occupation-hierarchy]
+      summary: List minor groups
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/HierarchyNode' }
+    post:
+      tags: [occupation-hierarchy]
+      summary: Create a minor group
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/occupation/minor-groups/{id}:
+    get:
+      tags: [occupation-hierarchy]
+      summary: Get a minor group by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [occupation-hierarchy]
+      summary: Update a minor group
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [occupation-hierarchy]
+      summary: Delete (soft-delete) a minor group
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/occupation/unit-groups:
+    get:
+      tags: [occupation-hierarchy]
+      summary: List unit groups
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/HierarchyNode' }
+    post:
+      tags: [occupation-hierarchy]
+      summary: Create a unit group
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/occupation/unit-groups/{id}:
+    get:
+      tags: [occupation-hierarchy]
+      summary: Get a unit group by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [occupation-hierarchy]
+      summary: Update a unit group
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [occupation-hierarchy]
+      summary: Delete (soft-delete) a unit group
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/occupation/occupation-groups:
+    get:
+      tags: [occupation-hierarchy]
+      summary: List occupation groups (paginated)
+      parameters:
+        - { $ref: '#/components/parameters/limitQuery' }
+        - { $ref: '#/components/parameters/offsetQuery' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedHierarchyListResponse' }
+    post:
+      tags: [occupation-hierarchy]
+      summary: Create an occupation group
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/occupation/occupation-groups/{id}:
+    get:
+      tags: [occupation-hierarchy]
+      summary: Get an occupation group by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [occupation-hierarchy]
+      summary: Update an occupation group
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [occupation-hierarchy]
+      summary: Delete (soft-delete) an occupation group
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  # ============================================================
+  # INDUSTRY HIERARCHY (proxied)
+  # ============================================================
+  /v1/industry/industry-sectors:
+    get:
+      tags: [industry-hierarchy]
+      summary: List industry sectors
+      parameters:
+        - { $ref: '#/components/parameters/fromDateOptional' }
+        - { $ref: '#/components/parameters/toDateOptional' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IndustrySectorListResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/UpstreamOrServerError'
+    post:
+      tags: [industry-hierarchy]
+      summary: Create an industry sector
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/industry/industry-sectors/{id}:
+    get:
+      tags: [industry-hierarchy]
+      summary: Get an industry sector by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [industry-hierarchy]
+      summary: Update an industry sector
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [industry-hierarchy]
+      summary: Delete (soft-delete) an industry sector
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/industry/industry-sectors/{id}/industry-divisions:
+    get:
+      tags: [industry-hierarchy]
+      summary: List industry divisions under an industry sector
+      parameters:
+        - { $ref: '#/components/parameters/idPath' }
+        - { $ref: '#/components/parameters/fromDateOptional' }
+        - { $ref: '#/components/parameters/toDateOptional' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IndustryDivisionChildrenResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/UpstreamOrServerError'
+
+  /v1/industry/industry-divisions/{id}/industry-groups:
+    get:
+      tags: [industry-hierarchy]
+      summary: List industry groups under an industry division
+      parameters:
+        - { $ref: '#/components/parameters/idPath' }
+        - { $ref: '#/components/parameters/fromDateOptional' }
+        - { $ref: '#/components/parameters/toDateOptional' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IndustryGroupChildrenResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/UpstreamOrServerError'
+
+  /v1/industry/industry-groups/{id}/industry-classes:
+    get:
+      tags: [industry-hierarchy]
+      summary: List industry classes under an industry group
+      parameters:
+        - { $ref: '#/components/parameters/idPath' }
+        - { $ref: '#/components/parameters/fromDateOptional' }
+        - { $ref: '#/components/parameters/toDateOptional' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IndustryClassChildrenResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/UpstreamOrServerError'
+
+  /v1/industry/industry-classes/{id}/industry-subclasses:
+    get:
+      tags: [industry-hierarchy]
+      summary: List industry subclasses under an industry class
+      parameters:
+        - { $ref: '#/components/parameters/idPath' }
+        - { $ref: '#/components/parameters/fromDateOptional' }
+        - { $ref: '#/components/parameters/toDateOptional' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IndustrySubclassChildrenResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/UpstreamOrServerError'
+
+  /v1/industry/industry-divisions:
+    get:
+      tags: [industry-hierarchy]
+      summary: List industry divisions
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/HierarchyNode' }
+    post:
+      tags: [industry-hierarchy]
+      summary: Create an industry division
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/industry/industry-divisions/{id}:
+    get:
+      tags: [industry-hierarchy]
+      summary: Get an industry division by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [industry-hierarchy]
+      summary: Update an industry division
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [industry-hierarchy]
+      summary: Delete (soft-delete) an industry division
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/industry/industry-groups:
+    get:
+      tags: [industry-hierarchy]
+      summary: List industry groups
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/HierarchyNode' }
+    post:
+      tags: [industry-hierarchy]
+      summary: Create an industry group
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/industry/industry-groups/{id}:
+    get:
+      tags: [industry-hierarchy]
+      summary: Get an industry group by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [industry-hierarchy]
+      summary: Update an industry group
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [industry-hierarchy]
+      summary: Delete (soft-delete) an industry group
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/industry/industry-classes:
+    get:
+      tags: [industry-hierarchy]
+      summary: List industry classes
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/HierarchyNode' }
+    post:
+      tags: [industry-hierarchy]
+      summary: Create an industry class
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/industry/industry-classes/{id}:
+    get:
+      tags: [industry-hierarchy]
+      summary: Get an industry class by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [industry-hierarchy]
+      summary: Update an industry class
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [industry-hierarchy]
+      summary: Delete (soft-delete) an industry class
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/industry/industry-subclasses:
+    get:
+      tags: [industry-hierarchy]
+      summary: List industry subclasses (paginated)
+      parameters:
+        - { $ref: '#/components/parameters/limitQuery' }
+        - { $ref: '#/components/parameters/offsetQuery' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedHierarchyListResponse' }
+    post:
+      tags: [industry-hierarchy]
+      summary: Create an industry subclass
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/industry/industry-subclasses/{id}:
+    get:
+      tags: [industry-hierarchy]
+      summary: Get an industry subclass by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [industry-hierarchy]
+      summary: Update an industry subclass
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HierarchyNode' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HierarchyNode' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [industry-hierarchy]
+      summary: Delete (soft-delete) an industry subclass
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  # ============================================================
+  # COMBINED ANALYSIS
+  # ============================================================
+  /v1/analysis/{standard}/{level}/{id}:
+    get:
+      tags: [analysis]
+      summary: Combined analysis for a hierarchy level
+      description: >
+        Fans out to all ten generic Go breakdown endpoints for the given
+        standard/level/id in parallel and returns them combined. The
+        "children" field is null (not a request failure) when the level is a
+        leaf (occupation-group / industry-subclass).
+      parameters:
+        - { $ref: '#/components/parameters/standardPath' }
+        - { $ref: '#/components/parameters/levelPath' }
+        - { $ref: '#/components/parameters/idPath' }
+        - { $ref: '#/components/parameters/fromDateOptional' }
+        - { $ref: '#/components/parameters/toDateOptional' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OccupationAnalysisResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/UpstreamOrServerError'
+
+  # ============================================================
+  # OCCUPATION SKILLS (combined)
+  # ============================================================
+  /v1/occupation/skills/{level}/{id}:
+    get:
+      tags: [occupation-skills]
+      summary: Combined skills analysis for an occupation hierarchy level
+      description: >
+        Fans out to top-15-skills, all-skills (paginated), and
+        top-hiring-employers on the Go backend in parallel and returns them
+        combined.
+      parameters:
+        - { $ref: '#/components/parameters/occupationLevelPath' }
+        - { $ref: '#/components/parameters/idPath' }
+        - { $ref: '#/components/parameters/fromDateOptional' }
+        - { $ref: '#/components/parameters/toDateOptional' }
+        - { $ref: '#/components/parameters/limitQuery' }
+        - { $ref: '#/components/parameters/offsetQuery' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OccupationSkillsResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/UpstreamOrServerError'
+
+  # ============================================================
+  # KPI: EMPLOYMENT SECTORS (CRUD passthrough)
+  # ============================================================
+  /v1/employment-sectors:
+    get:
+      tags: [kpi-employment-sectors]
+      summary: List employment sectors
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EmploymentSector' }
+        '500': { $ref: '#/components/responses/UpstreamOrServerError' }
+    post:
+      tags: [kpi-employment-sectors]
+      summary: Create an employment sector
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmploymentSector' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmploymentSector' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/employment-sectors/{id}:
+    get:
+      tags: [kpi-employment-sectors]
+      summary: Get an employment sector by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmploymentSector' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [kpi-employment-sectors]
+      summary: Update an employment sector
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmploymentSector' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmploymentSector' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [kpi-employment-sectors]
+      summary: Delete (soft-delete) an employment sector
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  # ============================================================
+  # KPI: EXPERIENCES (CRUD passthrough)
+  # ============================================================
+  /v1/experiences:
+    get:
+      tags: [kpi-experiences]
+      summary: List experience levels
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Experience' }
+    post:
+      tags: [kpi-experiences]
+      summary: Create an experience level
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Experience' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Experience' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/experiences/{id}:
+    get:
+      tags: [kpi-experiences]
+      summary: Get an experience level by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Experience' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [kpi-experiences]
+      summary: Update an experience level
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Experience' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Experience' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [kpi-experiences]
+      summary: Delete (soft-delete) an experience level
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  # ============================================================
+  # KPI: EDUCATION LEVELS (CRUD passthrough)
+  # ============================================================
+  /v1/education-levels:
+    get:
+      tags: [kpi-education-levels]
+      summary: List education levels
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EducationLevel' }
+    post:
+      tags: [kpi-education-levels]
+      summary: Create an education level
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EducationLevel' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EducationLevel' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/education-levels/{id}:
+    get:
+      tags: [kpi-education-levels]
+      summary: Get an education level by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EducationLevel' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [kpi-education-levels]
+      summary: Update an education level
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EducationLevel' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EducationLevel' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [kpi-education-levels]
+      summary: Delete (soft-delete) an education level
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  # ============================================================
+  # KPI: FORMALITIES (CRUD passthrough)
+  # ============================================================
+  /v1/formalities:
+    get:
+      tags: [kpi-formalities]
+      summary: List formality categories
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Formality' }
+    post:
+      tags: [kpi-formalities]
+      summary: Create a formality category
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Formality' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Formality' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/formalities/{id}:
+    get:
+      tags: [kpi-formalities]
+      summary: Get a formality category by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Formality' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [kpi-formalities]
+      summary: Update a formality category
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Formality' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Formality' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [kpi-formalities]
+      summary: Delete (soft-delete) a formality category
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  # ============================================================
+  # KPI: GENDERS (CRUD passthrough)
+  # ============================================================
+  /v1/genders:
+    get:
+      tags: [kpi-genders]
+      summary: List gender categories
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Gender' }
+    post:
+      tags: [kpi-genders]
+      summary: Create a gender category
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Gender' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Gender' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/genders/{id}:
+    get:
+      tags: [kpi-genders]
+      summary: Get a gender category by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Gender' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [kpi-genders]
+      summary: Update a gender category
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Gender' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Gender' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [kpi-genders]
+      summary: Delete (soft-delete) a gender category
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  # ============================================================
+  # KPI: VOCATIONAL EDUCATIONS (CRUD passthrough)
+  # ============================================================
+  /v1/vocational-educations:
+    get:
+      tags: [kpi-vocational-educations]
+      summary: List vocational education (NVQ) levels
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/VocationalEducation' }
+    post:
+      tags: [kpi-vocational-educations]
+      summary: Create a vocational education level
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VocationalEducation' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VocationalEducation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/vocational-educations/{id}:
+    get:
+      tags: [kpi-vocational-educations]
+      summary: Get a vocational education level by id
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VocationalEducation' }
+        '404': { $ref: '#/components/responses/UpstreamOrServerError' }
+    put:
+      tags: [kpi-vocational-educations]
+      summary: Update a vocational education level
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VocationalEducation' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VocationalEducation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [kpi-vocational-educations]
+      summary: Delete (soft-delete) a vocational education level
+      security:
+        - BearerAuth: []
+      parameters: [{ $ref: '#/components/parameters/idPath' }]
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
