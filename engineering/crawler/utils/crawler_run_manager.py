@@ -87,6 +87,7 @@ class CrawlerManager:
             logger.error(
                 f"Crawler: Failed to finalize crawler run {crawler_run_id}: {e}"
             )
+            raise
 
     # This function calls the relevant crawlers
     async def _run_crawler(
