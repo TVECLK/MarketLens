@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"os"
 
 	"marketlens-go-backend/internal/auth"
 	"marketlens-go-backend/internal/config"
@@ -24,14 +23,10 @@ func main() {
 	store := repositories.NewStore(db)
 	services := service.NewServices(store)
 
-	// MCP is a separate OAuth resource server from the REST API, so it
-	// checks tokens against its own resource identifier (MCP_RESOURCE_ID)
-	// rather than THUNDER_AUDIENCE — everything else (issuer, JWKS
-	// endpoint, TLS setting) is shared with the API's config.
 	mcpAuthCfg := auth.Config{
 		BaseURL:     cfg.Auth.BaseURL,
 		Issuer:      cfg.Auth.Issuer,
-		Audience:    os.Getenv("MCP_RESOURCE_ID"),
+		Audience:    cfg.MCP.ResourceID,
 		InsecureTLS: cfg.Auth.InsecureTLS,
 	}
 	if err := mcpAuthCfg.Validate(); err != nil {

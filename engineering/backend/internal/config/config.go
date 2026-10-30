@@ -19,6 +19,11 @@ type DBConfig struct {
 	ConnMaxIdleTimeMinutes           int
 }
 
+// MCPConfig holds the MCP server's own settings.
+type MCPConfig struct {
+	ResourceID string
+}
+
 // ServerConfig holds the HTTP server's own settings. GinModeEnv is the raw
 // GIN_MODE value (possibly empty) — resolving it to an actual gin mode is
 // left to main.go, which already imports gin.
@@ -34,6 +39,7 @@ type Config struct {
 	Auth      auth.Config
 	LLM       llm.Config
 	Ingestion ingestion.PipelineConfig
+	MCP       MCPConfig
 	Server    ServerConfig
 }
 
@@ -71,6 +77,9 @@ func LoadConfig() *Config {
 		Ingestion: ingestion.PipelineConfig{
 			DedupThreshold:   envFloatOrDefault("INGESTION_DEDUP_THRESHOLD", 0.65),
 			MetadataCacheTTL: time.Duration(envIntOrDefault("INGESTION_METADATA_CACHE_TTL_MINUTES", 30)) * time.Minute,
+		},
+		MCP: MCPConfig{
+			ResourceID: os.Getenv("MCP_RESOURCE_ID"),
 		},
 		Server: ServerConfig{
 			Port:       envOrDefault("PORT", "8080"),
