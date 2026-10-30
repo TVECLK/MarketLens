@@ -2,15 +2,18 @@ package mcpserver
 
 import (
 	"context"
-	"net/http"
 	"encoding/json"
+	"errors"
+	"log"
+	"net/http"
 	"os"
-	"strings"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"marketlens-go-backend/internal/auth"
 	"marketlens-go-backend/internal/service"
 )
 
@@ -28,26 +31,23 @@ func mustGetEnv(name string) string {
 	return v
 }
 
-func mcpResourceID() string      { return mustGetEnv("MCP_RESOURCE_ID") }
-func thunderIssuerURL() string   { return mustGetEnv("THUNDER_ISSUER") }
-func mcpPublicBaseURL() string   { return mustGetEnv("MCP_PUBLIC_BASE_URL") }
+func mcpResourceID() string    { return mustGetEnv("MCP_RESOURCE_ID") }
+func thunderIssuerURL() string { return mustGetEnv("THUNDER_ISSUER") }
+func mcpPublicBaseURL() string { return mustGetEnv("MCP_PUBLIC_BASE_URL") }
 
 func serveProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"resource":                 mcpResourceID(),        
-		"authorization_servers":    []string{thunderIssuerURL()}, 
-		"scopes_supported": []string{"submit-newspaper-vacancies"},
+		"resource":                 mcpResourceID(),
+		"authorization_servers":    []string{thunderIssuerURL()},
+		"scopes_supported":         []string{"submit-newspaper-vacancies"},
 		"bearer_methods_supported": []string{"header"},
 	})
 }
 
-const (
-	bearerTokenKey contextKey = "bearer_token"
-	scopesKey      contextKey = "scopes"        
-)
+const scopesKey contextKey = "scopes"
 
-func requireValidToken(next http.Handler) http.Handler {   
+func requireValidToken(verifier *auth.Verifier, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
@@ -58,14 +58,18 @@ func requireValidToken(next http.Handler) http.Handler {
 		}
 		rawToken := strings.TrimPrefix(authHeader, "Bearer ")
 
-		_, scopes, err := verifyMCPToken(rawToken)  
+		claims, err := verifier.VerifyToken(rawToken)
 		if err != nil {
+			log.Printf("mcp token verification failed: %v", err)
+			if errors.Is(err, auth.ErrJWKSUnavailable) {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), bearerTokenKey, rawToken)
-		ctx = context.WithValue(ctx, scopesKey, scopes)   
+		ctx := context.WithValue(r.Context(), scopesKey, strings.Fields(claims.Scope))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -87,15 +91,15 @@ func New(svcs *service.Services) *mcp.Server {
 }
 
 // StartHTTP serves the given MCP server over Streamable HTTP at addr
-// (e.g. ":9090"). 
-func StartHTTP(server *mcp.Server, addr string) error {
+// (e.g. ":9090"), authenticating every request against verifier.
+func StartHTTP(server *mcp.Server, verifier *auth.Verifier, addr string) error {
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return server
 	}, nil)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(protectedResPath, serveProtectedResourceMetadata)
-	mux.Handle("/mcp", requireValidToken(handler))   
+	mux.Handle("/mcp", requireValidToken(verifier, handler))
 
 	return http.ListenAndServe(addr, mux)
 }
@@ -109,9 +113,9 @@ func wrapIfList(v any) any {
 	case reflect.Slice, reflect.Array:
 		return map[string]any{"items": v}
 	case reflect.Map, reflect.Struct, reflect.Ptr:
-		return v 
+		return v
 	default:
-		return map[string]any{"value": v} 
+		return map[string]any{"value": v}
 	}
 }
 

@@ -330,7 +330,7 @@ func TestVerifyToken_Valid(t *testing.T) {
 
 	raw := signTestToken(t, key, "kid1", validTestClaims("test-issuer", "test-audience", "user-1", "book:create book:update"))
 
-	claims, err := v.verifyToken(raw)
+	claims, err := v.VerifyToken(raw)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -351,7 +351,7 @@ func TestVerifyToken_Expired(t *testing.T) {
 	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(-time.Hour))
 	raw := signTestToken(t, key, "kid1", claims)
 
-	if _, err := v.verifyToken(raw); err == nil {
+	if _, err := v.VerifyToken(raw); err == nil {
 		t.Fatal("expected an error for an expired token")
 	}
 }
@@ -363,7 +363,7 @@ func TestVerifyToken_WrongIssuer(t *testing.T) {
 
 	raw := signTestToken(t, key, "kid1", validTestClaims("someone-else", "test-audience", "user-1", ""))
 
-	if _, err := v.verifyToken(raw); err == nil {
+	if _, err := v.VerifyToken(raw); err == nil {
 		t.Fatal("expected an error for a mismatched issuer")
 	}
 }
@@ -375,7 +375,7 @@ func TestVerifyToken_WrongAudience(t *testing.T) {
 
 	raw := signTestToken(t, key, "kid1", validTestClaims("test-issuer", "someone-else", "user-1", ""))
 
-	if _, err := v.verifyToken(raw); err == nil {
+	if _, err := v.VerifyToken(raw); err == nil {
 		t.Fatal("expected an error for a mismatched audience")
 	}
 }
@@ -387,7 +387,7 @@ func TestVerifyToken_UnknownKid(t *testing.T) {
 
 	raw := signTestToken(t, key, "kid-does-not-exist", validTestClaims("test-issuer", "test-audience", "user-1", ""))
 
-	if _, err := v.verifyToken(raw); err == nil {
+	if _, err := v.VerifyToken(raw); err == nil {
 		t.Fatal("expected an error for an unrecognized kid")
 	}
 }
@@ -402,7 +402,7 @@ func TestVerifyToken_BadSignature(t *testing.T) {
 	// public key — the signature must not verify.
 	raw := signTestToken(t, wrongKey, "kid1", validTestClaims("test-issuer", "test-audience", "user-1", ""))
 
-	if _, err := v.verifyToken(raw); err == nil {
+	if _, err := v.VerifyToken(raw); err == nil {
 		t.Fatal("expected an error for a signature that doesn't match the published key")
 	}
 }

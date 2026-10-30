@@ -213,7 +213,7 @@ func findJWK(keys []jwk, kid string) (jwk, bool) {
 	return jwk{}, false
 }
 
-func (v *Verifier) verifyToken(raw string) (*customClaims, error) {
+func (v *Verifier) VerifyToken(raw string) (*customClaims, error) {
 	opts := []jwt.ParserOption{
 		jwt.WithValidMethods([]string{"RS256"}), // algorithm pinning: the server decides, never the token.
 		jwt.WithIssuer(v.cfg.Issuer),

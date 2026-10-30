@@ -2,7 +2,9 @@ package main
 
 import (
 	"log"
+	"os"
 
+	"marketlens-go-backend/internal/auth"
 	"marketlens-go-backend/internal/config"
 	"marketlens-go-backend/internal/mcpserver"
 	"marketlens-go-backend/internal/repositories"
@@ -22,10 +24,25 @@ func main() {
 	store := repositories.NewStore(db)
 	services := service.NewServices(store)
 
+	// MCP is a separate OAuth resource server from the REST API, so it
+	// checks tokens against its own resource identifier (MCP_RESOURCE_ID)
+	// rather than THUNDER_AUDIENCE — everything else (issuer, JWKS
+	// endpoint, TLS setting) is shared with the API's config.
+	mcpAuthCfg := auth.Config{
+		BaseURL:     cfg.Auth.BaseURL,
+		Issuer:      cfg.Auth.Issuer,
+		Audience:    os.Getenv("MCP_RESOURCE_ID"),
+		InsecureTLS: cfg.Auth.InsecureTLS,
+	}
+	if err := mcpAuthCfg.Validate(); err != nil {
+		log.Fatalf("mcp auth misconfigured: %v", err)
+	}
+	mcpVerifier := auth.NewVerifier(mcpAuthCfg)
+
 	mcpServer := mcpserver.New(services)
 
 	log.Println("MCP server listening on :9090/mcp")
-	if err := mcpserver.StartHTTP(mcpServer, ":9090"); err != nil {
+	if err := mcpserver.StartHTTP(mcpServer, mcpVerifier, ":9090"); err != nil {
 		log.Fatalf("MCP server failed: %v", err)
 	}
 }

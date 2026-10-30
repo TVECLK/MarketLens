@@ -22,7 +22,7 @@ func AuthRequired(v *Verifier) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := v.verifyToken(strings.TrimPrefix(authHeader, "Bearer "))
+		claims, err := v.VerifyToken(strings.TrimPrefix(authHeader, "Bearer "))
 		if err != nil {
 			respondAuthError(c, err)
 			return
