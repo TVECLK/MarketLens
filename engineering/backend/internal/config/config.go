@@ -21,7 +21,8 @@ type DBConfig struct {
 
 // MCPConfig holds the MCP server's own settings.
 type MCPConfig struct {
-	ResourceID string
+	ResourceID    string
+	PublicBaseURL string
 }
 
 // ServerConfig holds the HTTP server's own settings. GinModeEnv is the raw
@@ -79,7 +80,8 @@ func LoadConfig() *Config {
 			MetadataCacheTTL: time.Duration(envIntOrDefault("INGESTION_METADATA_CACHE_TTL_MINUTES", 30)) * time.Minute,
 		},
 		MCP: MCPConfig{
-			ResourceID: os.Getenv("MCP_RESOURCE_ID"),
+			ResourceID:    os.Getenv("MCP_RESOURCE_ID"),
+			PublicBaseURL: os.Getenv("MCP_PUBLIC_BASE_URL"),
 		},
 		Server: ServerConfig{
 			Port:       envOrDefault("PORT", "8080"),

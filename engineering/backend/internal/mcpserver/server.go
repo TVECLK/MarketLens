@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -23,36 +22,36 @@ const (
 
 type contextKey string
 
-func mustGetEnv(name string) string {
-	v := os.Getenv(name)
-	if v == "" {
-		panic("missing required environment variable: " + name)
-	}
-	return v
+// Metadata holds the values needed for the OAuth protected-resource
+// metadata endpoint and the WWW-Authenticate challenge header — loaded
+// by the caller (see cmd/mcp/main.go) and passed in explicitly, not read
+// from the environment here.
+type Metadata struct {
+	ResourceID    string
+	IssuerURL     string
+	PublicBaseURL string
 }
 
-func mcpResourceID() string    { return mustGetEnv("MCP_RESOURCE_ID") }
-func thunderIssuerURL() string { return mustGetEnv("THUNDER_ISSUER") }
-func mcpPublicBaseURL() string { return mustGetEnv("MCP_PUBLIC_BASE_URL") }
-
-func serveProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"resource":                 mcpResourceID(),
-		"authorization_servers":    []string{thunderIssuerURL()},
-		"scopes_supported":         []string{"submit-newspaper-vacancies"},
-		"bearer_methods_supported": []string{"header"},
-	})
+func serveProtectedResourceMetadata(meta Metadata) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"resource":                 meta.ResourceID,
+			"authorization_servers":    []string{meta.IssuerURL},
+			"scopes_supported":         []string{"submit-newspaper-vacancies"},
+			"bearer_methods_supported": []string{"header"},
+		})
+	}
 }
 
 const scopesKey contextKey = "scopes"
 
-func requireValidToken(verifier *auth.Verifier, next http.Handler) http.Handler {
+func requireValidToken(verifier *auth.Verifier, publicBaseURL string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
 			w.Header().Set("WWW-Authenticate",
-				`Bearer resource_metadata="`+mcpPublicBaseURL()+protectedResPath+`"`)
+				`Bearer resource_metadata="`+publicBaseURL+protectedResPath+`"`)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -92,14 +91,14 @@ func New(svcs *service.Services) *mcp.Server {
 
 // StartHTTP serves the given MCP server over Streamable HTTP at addr
 // (e.g. ":9090"), authenticating every request against verifier.
-func StartHTTP(server *mcp.Server, verifier *auth.Verifier, addr string) error {
+func StartHTTP(server *mcp.Server, verifier *auth.Verifier, meta Metadata, addr string) error {
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return server
 	}, nil)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc(protectedResPath, serveProtectedResourceMetadata)
-	mux.Handle("/mcp", requireValidToken(verifier, handler))
+	mux.HandleFunc(protectedResPath, serveProtectedResourceMetadata(meta))
+	mux.Handle("/mcp", requireValidToken(verifier, meta.PublicBaseURL, handler))
 
 	return http.ListenAndServe(addr, mux)
 }

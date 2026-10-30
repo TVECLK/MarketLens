@@ -36,8 +36,14 @@ func main() {
 
 	mcpServer := mcpserver.New(services)
 
+	meta := mcpserver.Metadata{
+		ResourceID:    cfg.MCP.ResourceID,
+		IssuerURL:     cfg.Auth.Issuer,
+		PublicBaseURL: cfg.MCP.PublicBaseURL,
+	}
+
 	log.Println("MCP server listening on :9090/mcp")
-	if err := mcpserver.StartHTTP(mcpServer, mcpVerifier, ":9090"); err != nil {
+	if err := mcpserver.StartHTTP(mcpServer, mcpVerifier, meta, ":9090"); err != nil {
 		log.Fatalf("MCP server failed: %v", err)
 	}
 }
