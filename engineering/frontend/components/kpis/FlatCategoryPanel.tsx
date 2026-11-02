@@ -40,15 +40,16 @@ export default function FlatCategoryPanel({
   const items = bundle.items;
 
   return (
-    <main className="flex-1 p-8 max-w-4xl mx-auto space-y-6">
-      <div>
-        <h2 className="text-lg font-black text-gray-900">{config.title}</h2>
-        <p className="text-xs text-gray-400 mt-1">{config.description}</p>
-      </div>
-
-      <div className="bg-white p-5 rounded-xl shadow-sm w-fit min-w-[200px]">
-        <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">Total Items</p>
-        <p className="text-2xl font-black text-gray-900 mt-1">{items.length}</p>
+    <main className="flex-1 p-4 mx-auto space-y-4">
+      <div className="flex justify-between">
+        <div>
+          <h2 className="text-lg font-black text-gray-900">{config.title}</h2>
+          <p className="text-xs text-gray-400 mt-1">{config.description}</p>
+        </div>
+        <div className="text-center">
+          <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">Total Items</p>
+          <p className="text-2xl font-black text-gray-900 mt-1">{items.length}</p>
+        </div>
       </div>
 
       {bundle.isError && (
@@ -59,7 +60,7 @@ export default function FlatCategoryPanel({
 
       <form
         onSubmit={onSubmit}
-        className="bg-white p-5 rounded-xl shadow-sm flex flex-col sm:flex-row gap-3 sm:items-end"
+        className="bg-white p-3 rounded-md shadow-sm flex flex-col sm:flex-row gap-3 sm:items-end"
       >
         <div className="flex-1">
           <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
@@ -75,14 +76,14 @@ export default function FlatCategoryPanel({
         <button
           type="submit"
           disabled={bundle.createMut.isPending}
-          className={`${accent.bg} text-white text-xs font-bold px-5 py-2.5 rounded-lg hover:opacity-90 transition-all shrink-0 disabled:opacity-50`}
+          className={`${accent.bg} ${accent.solidText} text-xs font-bold px-5 py-2.5 rounded-lg hover:opacity-90 transition-all shrink-0 disabled:opacity-50`}
         >
           {bundle.createMut.isPending ? "Adding..." : `+ Add ${config.itemLabel}`}
         </button>
       </form>
       {formError && <p className="text-[11px] font-bold text-red-500 -mt-3 px-1">{formError}</p>}
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-white rounded-md shadow-sm overflow-hidden">
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-gray-50 text-gray-400 text-[10px] font-black uppercase tracking-wider">

@@ -44,7 +44,7 @@ export default function CategoryNav() {
   const flatCounts = useFlatCounts();
 
   return (
-    <aside className="w-72 min-w-72 border-r border-gray-100 bg-white h-screen overflow-y-auto sticky top-0 py-4 px-3 space-y-1">
+    <aside className="border-r border-gray-100 bg-white h-screen overflow-y-auto sticky top-0 p-3 space-y-1">
       {CATEGORY_ORDER.map((key) => {
         const cfg = KPI_CATEGORIES[key];
         const acc = ACCENT_CLASSES[cfg.accent];
@@ -56,14 +56,13 @@ export default function CategoryNav() {
             key={key}
             href={href}
             aria-current={isActive ? "page" : undefined}
-            className={`w-full text-left px-4 py-3 rounded-xl transition-all flex items-center justify-between gap-2 ${isActive ? `${acc.lightBg} ring-1 ${acc.ring}` : "hover:bg-gray-50"
+            className={`w-full text-left px-3 py-2 rounded-md transition-all flex items-center justify-between gap-2 ${isActive ? `${acc.lightBg} ring-1 ${acc.ring}` : "hover:bg-gray-50"
               }`}
           >
             <div>
               <p className={`text-xs font-bold ${isActive ? acc.text : "text-gray-700"}`}>{cfg.title}</p>
               <p className="text-[10px] text-gray-400 mt-0.5">{count ?? "–"} items</p>
             </div>
-            <span className={`w-2 h-2 rounded-full shrink-0 ${isActive ? acc.solidBg : "bg-gray-200"}`} />
           </Link>
         );
       })}
@@ -72,26 +71,27 @@ export default function CategoryNav() {
         <p className="px-4 pb-1.5 text-[10px] font-black uppercase text-gray-300 tracking-wider">
           Hierarchical
         </p>
-        {HIERARCHY_ORDER.map((id) => {
-          const def = HIERARCHIES[id];
-          const acc = ACCENT_CLASSES[def.accent];
-          const isActive = pathname.startsWith(`/kpis/${id}/`);
-          return (
-            <Link
-              key={id}
-              href={hierarchyLevelHref(id, 0)}
-              aria-current={isActive ? "page" : undefined}
-              className={`w-full text-left px-4 py-3 rounded-xl transition-all flex items-center justify-between gap-2 ${isActive ? `${acc.lightBg} ring-1 ${acc.ring}` : "hover:bg-gray-50"
-                }`}
-            >
-              <div>
-                <p className={`text-xs font-bold ${isActive ? acc.text : "text-gray-700"}`}>{def.label}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">{def.levels.length} levels</p>
-              </div>
-              <span className={`w-2 h-2 rounded-full shrink-0 ${isActive ? acc.solidBg : "bg-gray-200"}`} />
-            </Link>
-          );
-        })}
+        <div className="space-y-1">
+          {HIERARCHY_ORDER.map((id) => {
+            const def = HIERARCHIES[id];
+            const acc = ACCENT_CLASSES[def.accent];
+            const isActive = pathname.startsWith(`/kpis/${id}/`);
+            return (
+              <Link
+                key={id}
+                href={hierarchyLevelHref(id, 0)}
+                aria-current={isActive ? "page" : undefined}
+                className={`w-full text-left px-3 py-2 rounded-md transition-all flex items-center justify-between gap-2 ${isActive ? `${acc.lightBg} ring-1 ${acc.ring}` : "hover:bg-gray-50"
+                  }`}
+              >
+                <div>
+                  <p className={`text-xs font-bold ${isActive ? acc.text : "text-gray-700"}`}>{def.label}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{def.levels.length} levels</p>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </aside>
   );

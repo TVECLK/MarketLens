@@ -73,7 +73,7 @@ export default function HierarchyLevelPanel({
   const items = levelBundle.items;
 
   return (
-    <main className="flex-1 p-8 max-w-5xl mx-auto space-y-6">
+    <main className="flex-1 p-4 mx-auto space-y-4">
       <div>
         <h2 className="text-lg font-black text-gray-900">{hierarchyDef.label} Classification</h2>
         <p className="text-xs text-gray-400 mt-1">
@@ -90,27 +90,20 @@ export default function HierarchyLevelPanel({
               key={level.key}
               href={levelHref(idx)}
               aria-current={isActive ? "page" : undefined}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${isActive ? `${hAccent.solidBg} text-white` : "bg-white text-gray-500 hover:bg-gray-100 shadow-sm"
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold transition-all ${isActive ? `${hAccent.solidBg} ${hAccent.solidText}` : "bg-white text-gray-500 hover:bg-gray-100 shadow-sm"
                 }`}
             >
               <span
-                className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] ${isActive ? "bg-white/20" : "bg-gray-100"
+                className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] ${isActive ? "bg-white/70" : "bg-gray-100"
                   }`}
               >
                 {idx + 1}
               </span>
               {level.title}
-              <span className={isActive ? "text-white/70" : "text-gray-300"}>({levelCounts[idx]})</span>
+              <span className={isActive ? "" : "text-gray-300"}>({levelCounts[idx]})</span>
             </Link>
           );
         })}
-      </div>
-
-      <div className="bg-white p-5 rounded-xl shadow-sm w-fit min-w-[200px]">
-        <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">
-          Total {levelDef.title} Items
-        </p>
-        <p className="text-2xl font-black text-gray-900 mt-1">{levelBundle.total ?? items.length}</p>
       </div>
 
       {levelBundle.isError && (
@@ -121,7 +114,7 @@ export default function HierarchyLevelPanel({
 
       <form
         onSubmit={onSubmit}
-        className="bg-white p-5 rounded-xl shadow-sm flex flex-col sm:flex-row gap-3 sm:items-end sm:flex-wrap"
+        className="bg-white p-3 rounded-md shadow-sm flex flex-col sm:flex-row gap-3 sm:items-end sm:flex-wrap"
       >
         <div className="flex-1 min-w-[160px]">
           <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5">
@@ -167,7 +160,7 @@ export default function HierarchyLevelPanel({
         <button
           type="submit"
           disabled={levelBundle.createMut.isPending}
-          className={`${hAccent.bg} text-white text-xs font-bold px-5 py-2.5 rounded-lg hover:opacity-90 transition-all shrink-0 disabled:opacity-50`}
+          className={`${hAccent.bg} ${hAccent.solidText} text-xs font-bold px-5 py-2.5 rounded-lg hover:opacity-90 transition-all shrink-0 disabled:opacity-50`}
         >
           {levelBundle.createMut.isPending ? "Adding..." : `+ Add ${levelDef.itemLabel}`}
         </button>
@@ -180,7 +173,7 @@ export default function HierarchyLevelPanel({
       )}
       {formError && <p className="text-[11px] font-bold text-red-500 -mt-3 px-1">{formError}</p>}
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-white rounded-md shadow-sm overflow-hidden">
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-gray-50 text-gray-400 text-[10px] font-black uppercase tracking-wider">

@@ -44,7 +44,7 @@ export default function Sidebar() {
       ref={asideRef}
       className={clsx(
         "fixed inset-y-0 left-0 z-50 bg-zinc-950 border-r border-zinc-800 flex flex-col font-sans transition-all duration-200",
-        collapsed ? "w-16" : "w-64",
+        collapsed ? "w-16" : "w-56",
       )}
     >
       {/* Collapse toggle — sits on the sidebar's right border */}
@@ -82,7 +82,7 @@ export default function Sidebar() {
             <h1 className="text-white font-bold text-sm tracking-tight leading-tight">
               TVEC
             </h1>
-            <p className="text-zinc-400 text-[10px] uppercase font-semibold tracking-wider leading-tight mt-0.5">
+            <p className="text-zinc-400 text-[9px] uppercase font-semibold tracking-wider leading-tight mt-0.5">
               Labour Intelligence
             </p>
           </div>
