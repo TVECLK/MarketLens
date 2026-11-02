@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS ai_version (
 
 CREATE TABLE IF NOT EXISTS education_level (
     id          SERIAL PRIMARY KEY,
-    level       VARCHAR(100) NOT NULL,
+    level       VARCHAR(100) NOT NULL UNIQUE,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     deleted_at  TIMESTAMPTZ
@@ -38,16 +38,16 @@ CREATE TABLE IF NOT EXISTS crawler_runs (
     id          BIGSERIAL PRIMARY KEY,
     started_at  TIMESTAMPTZ,
     finished_at TIMESTAMPTZ,
-    status      VARCHAR(50),
+    status      VARCHAR(50) NOT NULL,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS geo_data (
     id          BIGSERIAL PRIMARY KEY,
-    longitude   DECIMAL(9,6),
-    latitude    DECIMAL(9,6),
-    province    VARCHAR(100),
+    longitude   DECIMAL(9,6) NOT NULL,
+    latitude    DECIMAL(9,6) NOT NULL,
+    province    VARCHAR(100) NOT NULL,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS source (
 
 CREATE TABLE IF NOT EXISTS experience (
     id          SERIAL PRIMARY KEY,
-    name        VARCHAR(100) NOT NULL,
+    name        VARCHAR(100) NOT NULL UNIQUE,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     deleted_at  TIMESTAMPTZ
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS experience (
 
 CREATE TABLE IF NOT EXISTS formality (
     id              SERIAL PRIMARY KEY,
-    formality_type  VARCHAR(50) NOT NULL,
+    formality_type  VARCHAR(50) NOT NULL UNIQUE,
     created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     deleted_at      TIMESTAMPTZ
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS formality (
 
 CREATE TABLE IF NOT EXISTS gender (
     id          SERIAL PRIMARY KEY,
-    gender_type VARCHAR(50) NOT NULL,
+    gender_type VARCHAR(50) NOT NULL UNIQUE,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     deleted_at  TIMESTAMPTZ
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS gender (
 
 CREATE TABLE IF NOT EXISTS vocational_education (
     id          SERIAL PRIMARY KEY,
-    level       VARCHAR(100) NOT NULL,
+    level       VARCHAR(100) NOT NULL UNIQUE,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     deleted_at  TIMESTAMPTZ
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS vocational_education (
 
 CREATE TABLE IF NOT EXISTS employment_sector (
     id          SERIAL PRIMARY KEY,
-    sector      VARCHAR(100) NOT NULL,
+    sector      VARCHAR(100) NOT NULL UNIQUE,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     deleted_at  TIMESTAMPTZ
@@ -253,10 +253,10 @@ CREATE TABLE IF NOT EXISTS meta_data (
     vocational_education_id INT    REFERENCES vocational_education(id) ON DELETE SET NULL,
     employment_sector_id    INT    REFERENCES employment_sector(id)    ON DELETE SET NULL,
 
-    posted_at               TIMESTAMPTZ,
+    posted_at               TIMESTAMPTZ NOT NULL,
     end_date                TIMESTAMPTZ,
     minhash_signature       INTEGER[],
-    confidence_score        DECIMAL(5,4),
+    confidence_score        DECIMAL(5,4) NOT NULL,
 
     created_at              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at              TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -287,6 +287,6 @@ CREATE INDEX IF NOT EXISTS idx_metadata_snapshot_reconcile
     ON meta_data (crawler_run_id, end_date)
     WHERE end_date IS NULL;
 
-CREATE INDEX CONCURRENTLY idx_metadata_posted_at ON meta_data (posted_at);
-CREATE INDEX CONCURRENTLY idx_metadata_occgroup_posted_at ON meta_data (occupation_group_id, posted_at);
-CREATE INDEX CONCURRENTLY idx_metadata_indsubclass_posted_at ON meta_data (industry_subclass_id, posted_at);
+CREATE INDEX IF NOT EXISTS idx_metadata_posted_at ON meta_data (posted_at);
+CREATE INDEX IF NOT EXISTS idx_metadata_occgroup_posted_at ON meta_data (occupation_group_id, posted_at);
+CREATE INDEX IF NOT EXISTS idx_metadata_indsubclass_posted_at ON meta_data (industry_subclass_id, posted_at);

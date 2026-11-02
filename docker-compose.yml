@@ -23,14 +23,31 @@ services:
       retries: 10
       start_period: 60s
 
-  # BACKEND SERVICE 
+  # BACKEND API SERVICE
   backend:
     build:
       context: ./engineering/backend
       dockerfile: Dockerfile.backend
-    container_name: go_backend
+      target: api
+    container_name: go_backend_api
     ports:
       - "8080:8080"
+    env_file:
+      - ./engineering/backend/.env
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # BACKEND MCP SERVICE
+  backend-mcp:
+    build:
+      context: ./engineering/backend
+      dockerfile: Dockerfile.backend
+      target: mcp
+    container_name: go_backend_mcp
+    ports:
       - "9090:9090"
     env_file:
       - ./engineering/backend/.env
