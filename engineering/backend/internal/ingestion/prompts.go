@@ -9,10 +9,12 @@ import (
 // on DB data, so it's a package-level value built once rather than
 // rebuilt on every call.
 var Schema = map[string]any{
-	"type": "object",
+	"type":                 "object",
+	"additionalProperties": false,
 	"properties": map[string]any{
 		"job_type": map[string]any{
-			"type": "object",
+			"type":                 "object",
+			"additionalProperties": false,
 			"properties": map[string]any{
 				"type": map[string]any{"type": "string"},
 			},
@@ -22,12 +24,14 @@ var Schema = map[string]any{
 			"type": "string",
 			"enum": []string{"remote", "onsite", "hybrid"},
 		},
-		"no_of_vacancies": map[string]any{"type": "integer"},
+		"no_of_vacancies": map[string]any{"type": "integer", "minimum": 1},
 		"meta_data": map[string]any{
-			"type": "object",
+			"type":                 "object",
+			"additionalProperties": false,
 			"properties": map[string]any{
 				"geo_data": map[string]any{
-					"type": "object",
+					"type":                 "object",
+					"additionalProperties": false,
 					"properties": map[string]any{
 						"province": map[string]any{"type": "string"},
 					},
@@ -37,7 +41,7 @@ var Schema = map[string]any{
 					"type":    "string",
 					"pattern": `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$`,
 				},
-				"confidence_score":        map[string]any{"type": "number"},
+				"confidence_score":        map[string]any{"type": "number", "minimum": 0, "maximum": 1},
 				"formality_id":            map[string]any{"type": "integer"},
 				"gender_id":               map[string]any{"type": "integer"},
 				"vocational_education_id": map[string]any{"type": "integer"},
@@ -54,7 +58,8 @@ var Schema = map[string]any{
 		"skills": map[string]any{
 			"type": "array",
 			"items": map[string]any{
-				"type": "object",
+				"type":                 "object",
+				"additionalProperties": false,
 				"properties": map[string]any{
 					"skill": map[string]any{"type": "string"},
 				},
