@@ -244,9 +244,9 @@ func (s *IngestionService) extractAndClassify(ctx context.Context, raw RawJobInp
 		return models.JobPost{}, fmt.Errorf("occupation classification: %w", err)
 	}
 
-	postedAt, err := time.Parse(time.RFC3339, extracted.MetaData.PostedAt)
+	postedAt, err := parsePostedAt(extracted.MetaData.PostedAt)
 	if err != nil {
-		return models.JobPost{}, fmt.Errorf("missing or invalid posted_at date: %w", err)
+		return models.JobPost{}, fmt.Errorf("invalid posted_at date: %w", err)
 	}
 
 	skills := make([]models.Skill, 0, len(extracted.Skills))
@@ -298,9 +298,13 @@ func (s *IngestionService) extractAndClassify(ctx context.Context, raw RawJobInp
 	}, nil
 }
 
-// validateID zeroes out id if it isn't one of the options actually
-// offered to the LLM, so a hallucinated id becomes "not set" instead of
-// a foreign-key violation at save time.
+func parsePostedAt(raw string) (time.Time, error) {
+	if raw == "" {
+		return time.Now().UTC(), nil
+	}
+	return time.Parse(time.RFC3339, raw)
+}
+
 func validateID(field string, id uint, valid map[uint]struct{}) uint {
 	if id == 0 {
 		return 0

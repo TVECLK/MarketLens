@@ -46,7 +46,7 @@ var Schema = map[string]any{
 				"experience_id":           map[string]any{"type": "integer"},
 			},
 			"required": []string{
-				"geo_data", "posted_at", "confidence_score",
+				"geo_data", "confidence_score",
 				"formality_id", "gender_id", "vocational_education_id",
 				"employment_sector_id", "education_level_id", "experience_id",
 			},
@@ -95,9 +95,9 @@ Default: "onsite"
         "North Central", "Uva", "Southern", "Sabaragamuwa"]
     Default: {"province": "Western"}
 
-- 'posted_at': ISO 8601 timestamp of when the job was posted, if detectable from the page.
+- 'posted_at': ISO 8601 timestamp, ONLY if an explicit posting date is stated in the job text (e.g. "Posted on 15th March 2026").
     Format: "YYYY-MM-DDTHH:MM:SSZ"
-    Default: current UTC timestamp.
+    You do not know the current date — if no explicit date is stated, OMIT this field rather than guessing. The system fills in today's date automatically when it's absent.
 
 - 'confidence_score': Your confidence in the extraction accuracy.
     Float between 0.00 and 1.00. Use 1.00 if all fields are clearly present.
