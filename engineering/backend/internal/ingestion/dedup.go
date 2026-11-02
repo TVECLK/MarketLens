@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -44,10 +45,7 @@ func GenerateMinHashAndLSH(job JobData, numPerm, numBands int) ([]uint32, []LSHI
 
 	shingles := shingle(text, shingleSize)
 
-	sig := make([]uint32, numPerm)
-	for i := range sig {
-		sig[i] = maxHash32
-	}
+	sig := slices.Repeat([]uint32{maxHash32}, numPerm)
 
 	for s := range shingles {
 		b := []byte(s)
