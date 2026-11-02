@@ -40,8 +40,8 @@ func (r *Store) SaveOneJob(ctx context.Context, job *models.JobPost, lshIndexRec
 				return wrapSaveErr(err, "employer lookup failed")
 			}
 			job.EmployerID = &employer.ID
-			job.Employer = nil
 		}
+		job.Employer = nil
 
 		// JobType (FirstOrCreate)
 		if job.JobType != nil && job.JobType.Type != "" {
@@ -51,8 +51,8 @@ func (r *Store) SaveOneJob(ctx context.Context, job *models.JobPost, lshIndexRec
 				return wrapSaveErr(err, "job_type lookup failed")
 			}
 			job.JobTypeID = &jt.ID
-			job.JobType = nil
 		}
+		job.JobType = nil
 
 		// Skills (FirstOrCreate per skill)
 		var linkedSkills []models.Skill
@@ -81,8 +81,8 @@ func (r *Store) SaveOneJob(ctx context.Context, job *models.JobPost, lshIndexRec
 				return wrapSaveErr(err, "geo lookup failed")
 			}
 			job.MetaData.GeoDataID = &geo.ID
-			job.MetaData.GeoData = nil
 		}
+		job.MetaData.GeoData = nil
 
 		// Source (FirstOrCreate)
 		if job.MetaData.Source != nil && job.MetaData.Source.Name != "" {
@@ -92,8 +92,8 @@ func (r *Store) SaveOneJob(ctx context.Context, job *models.JobPost, lshIndexRec
 				return wrapSaveErr(err, "source lookup failed")
 			}
 			job.MetaData.SourceID = &source.ID
-			job.MetaData.Source = nil
 		}
+		job.MetaData.Source = nil
 
 		// AiVersion (FirstOrCreate)
 		if job.MetaData.AiVersion != nil && job.MetaData.AiVersion.Version != "" {
@@ -103,8 +103,8 @@ func (r *Store) SaveOneJob(ctx context.Context, job *models.JobPost, lshIndexRec
 				return wrapSaveErr(err, "ai_version lookup failed")
 			}
 			job.MetaData.AiVersionID = &av.ID
-			job.MetaData.AiVersion = nil
 		}
+		job.MetaData.AiVersion = nil
 
 		// Save JobPost (cascades MetaData + join table)
 		if err := tx.Create(job).Error; err != nil {
