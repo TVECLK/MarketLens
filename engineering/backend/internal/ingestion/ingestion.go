@@ -42,9 +42,9 @@ func hasNoUsableText(raw RawJobInput) bool {
 // job_id. A job not present in a ProcessBatch response's failures either
 // saved successfully or was a duplicate that got its crawler_run_id updated.
 type FailedJob struct {
-	JobID      string `json:"job_id"`
-	StatusCode int    `json:"status_code"`
-	Error      string `json:"error"`
+	JobID      string
+	StatusCode int
+	Error      string
 }
 
 // IngestionService processes a batch of crawled jobs end to end: MinHash

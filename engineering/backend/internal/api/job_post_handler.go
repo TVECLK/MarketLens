@@ -8,10 +8,24 @@ import (
 )
 
 type batchSaveJobsResponse struct {
-	Message     string                `json:"message"`
-	Submitted   int                   `json:"submitted"`
-	FailedCount int                   `json:"failed_count"`
-	FailedJobs  []ingestion.FailedJob `json:"failed_jobs"`
+	Message     string            `json:"message"`
+	Submitted   int               `json:"submitted"`
+	FailedCount int               `json:"failed_count"`
+	FailedJobs  []failedJobOutput `json:"failed_jobs"`
+}
+
+type failedJobOutput struct {
+	JobID      string `json:"job_id"`
+	StatusCode int    `json:"status_code"`
+	Error      string `json:"error"`
+}
+
+func toFailedJobOutputs(failed []ingestion.FailedJob) []failedJobOutput {
+	out := make([]failedJobOutput, len(failed))
+	for i, f := range failed {
+		out[i] = failedJobOutput{JobID: f.JobID, StatusCode: f.StatusCode, Error: f.Error}
+	}
+	return out
 }
 
 type batchSaveJobInput struct {
@@ -51,7 +65,7 @@ func (h *Handler) BatchSaveJobsHandler(c *gin.Context) {
 
 	failedJobs := h.ingestion.ProcessBatch(c.Request.Context(), rawJobs)
 
-	c.JSON(http.StatusOK, batchSaveJobsResponse{Message: "Batch processed", Submitted: len(rawJobs), FailedCount: len(failedJobs), FailedJobs: failedJobs})
+	c.JSON(http.StatusOK, batchSaveJobsResponse{Message: "Batch processed", Submitted: len(rawJobs), FailedCount: len(failedJobs), FailedJobs: toFailedJobOutputs(failedJobs)})
 }
 
 type reconcileStaleVacanciesInput struct {
