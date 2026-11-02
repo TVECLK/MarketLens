@@ -117,6 +117,7 @@ func locationsCompatible(locA, locB string) bool {
 
 	stopwords := map[string]struct{}{
 		"the": {}, "of": {}, "in": {}, "at": {}, "and": {}, "a": {},
+		"sri": {}, "lanka": {}, "district": {}, "province": {},
 	}
 	wordsA := wordSet(locA, stopwords)
 	wordsB := wordSet(locB, stopwords)
