@@ -30,6 +30,18 @@ function getDefaultRange(): DateRange {
   };
 }
 
+// A URL date the picker could have produced: a real date within the
+// selectable bounds, or "" (a cleared input). Anything else (a hand-edited or
+// stale link) is treated as missing and replaced below.
+function isUsableUrlDate(value: string | null): value is string {
+  if (!isUsableDateParam(value)) return false;
+  const trimmed = value.trim();
+  return (
+    trimmed === "" ||
+    (trimmed >= toISODate(getMinSelectableDate()) && trimmed <= toISODate(getMaxSelectableDate()))
+  );
+}
+
 // The last range saved in this browser session, if it is still valid. Reads
 // sessionStorage (client-only), so call it from effects and handlers only.
 function readSavedRange(storageKey: string): DateRange | null {
@@ -71,8 +83,8 @@ export function useUrlDateRange(
   const [restored, setRestored] = useState(false);
   const initialRangeChecked = useRef(false);
 
-  const fromDate = isUsableDateParam(rawFrom) ? rawFrom.trim() : fallback.from;
-  const toDate = isUsableDateParam(rawTo) ? rawTo.trim() : fallback.to;
+  const fromDate = isUsableUrlDate(rawFrom) ? rawFrom.trim() : fallback.from;
+  const toDate = isUsableUrlDate(rawTo) ? rawTo.trim() : fallback.to;
 
   // Restoring from sessionStorage (a client-only API, unavailable during SSR)
   // has to happen post-mount so the first client render matches the server's.
@@ -89,8 +101,8 @@ export function useUrlDateRange(
   // since this hook mounted.
   useEffect(() => {
     if (!restored) return;
-    const missingFrom = !isUsableDateParam(rawFrom);
-    const missingTo = !isUsableDateParam(rawTo);
+    const missingFrom = !isUsableUrlDate(rawFrom);
+    const missingTo = !isUsableUrlDate(rawTo);
     if (!missingFrom && !missingTo) return;
 
     const base = readSavedRange(storageKey) ?? getDefaultRange();

@@ -164,7 +164,7 @@ export default function HierarchyLevelView({
   }
 
   const deleteDescendantCount = deleteTarget ? countDescendants(levelIndex, deleteTarget.id) : 0;
-  const levelCounts = levels.map((lvl) => lvl.items.length);
+  const levelCounts = levels.map((lvl) => lvl.total ?? lvl.items.length);
 
   return (
     <>

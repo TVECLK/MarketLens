@@ -20,14 +20,28 @@ interface ParamReader {
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+// YYYY-MM-DD that is also a real calendar day (rejects 2026-02-30). Built from
+// numeric parts with Date.UTC: `new Date("2026-02-30")` doesn't reject it, it
+// silently rolls over to March 2 in V8.
+function isCalendarDate(value: string): boolean {
+  if (!DATE_PATTERN.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
 export function isDateString(value: unknown): value is string {
-  return typeof value === "string" && DATE_PATTERN.test(value.trim());
+  return typeof value === "string" && isCalendarDate(value.trim());
 }
 
 export function isUsableDateParam(value: string | null): value is string {
   if (value === null) return false;
   const trimmed = value.trim();
-  return trimmed === "" || DATE_PATTERN.test(trimmed);
+  return trimmed === "" || isCalendarDate(trimmed);
 }
 
 /** Returns the param's value if it is one of `allowed`, otherwise `fallback`. */

@@ -31,6 +31,21 @@ describe("isDateString", () => {
     expect(isDateString("      ")).toBe(false);
     expect(isDateString(" 31-01-2026 ")).toBe(false);
   });
+
+  it("rejects dates that don't exist on the calendar", () => {
+    expect(isDateString("2026-02-30")).toBe(false);
+    expect(isDateString("2026-04-31")).toBe(false);
+    expect(isDateString("2026-02-29")).toBe(false);
+    expect(isDateString("2026-13-01")).toBe(false);
+    expect(isDateString("2026-00-10")).toBe(false);
+    expect(isDateString("2026-01-00")).toBe(false);
+  });
+
+  it("accepts real edge-of-month and leap days", () => {
+    expect(isDateString("2024-02-29")).toBe(true);
+    expect(isDateString("2026-12-31")).toBe(true);
+    expect(isDateString("2026-04-30")).toBe(true);
+  });
 });
 
 describe("isUsableDateParam", () => {
@@ -45,6 +60,12 @@ describe("isUsableDateParam", () => {
     expect(isUsableDateParam("      ")).toBe(true);
     expect(isUsableDateParam(" 2026-01-31 ")).toBe(true);
     expect(isUsableDateParam(" 31-01-2026 ")).toBe(false);
+  });
+
+  it("rejects dates that don't exist on the calendar", () => {
+    expect(isUsableDateParam("2026-02-30")).toBe(false);
+    expect(isUsableDateParam(" 2026-04-31 ")).toBe(false);
+    expect(isUsableDateParam("2024-02-29")).toBe(true);
   });
 });
 

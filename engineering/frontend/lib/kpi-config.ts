@@ -21,7 +21,7 @@ export const KPI_CATEGORIES = {
   experience: {
     slug: "experience",
     title: "Experience",
-    description: "Experience breakdown used for job categrization",
+    description: "Experience breakdown used for job categorization",
     itemLabel: "Experience Level",
     accent: "amber",
   },

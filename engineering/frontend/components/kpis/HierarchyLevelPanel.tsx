@@ -110,7 +110,7 @@ export default function HierarchyLevelPanel({
         <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">
           Total {levelDef.title} Items
         </p>
-        <p className="text-2xl font-black text-gray-900 mt-1">{items.length}</p>
+        <p className="text-2xl font-black text-gray-900 mt-1">{levelBundle.total ?? items.length}</p>
       </div>
 
       {levelBundle.isError && (

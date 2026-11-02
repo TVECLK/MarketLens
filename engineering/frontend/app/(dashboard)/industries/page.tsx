@@ -110,7 +110,7 @@ export default function IndustryAnalysisPage() {
   ];
 
   const { path, prunedNotice, handleSelect, handleAddLevel, handleRemoveLevel } =
-    useHierarchyDrilldown(ids, setIds, levels);
+    useHierarchyDrilldown(ids, setIds, levels, `${fromDate}|${toDate}`);
 
   const deepest = path[path.length - 1] ?? null;
   const deepestLevelIndex = path.length - 1;

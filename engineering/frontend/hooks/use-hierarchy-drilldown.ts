@@ -66,8 +66,15 @@ export function useHierarchyDrilldown<TLevelKey extends string>(
   ids: number[],
   setIds: (ids: number[]) => void,
   levels: HierarchyLevelState<TLevelKey>[],
+  resetKey: string,
 ): UseHierarchyDrilldownResult<TLevelKey> {
   const [prunedNotice, setPrunedNotice] = useState<string | null>(null);
+
+  const [noticeResetKey, setNoticeResetKey] = useState(resetKey);
+  if (noticeResetKey !== resetKey) {
+    setNoticeResetKey(resetKey);
+    setPrunedNotice(null);
+  }
   // Names of nodes seen in the path, so a pruned node can still be named in
   // the notice after its options have been replaced by a new date range.
   const seenNames = useRef(new Map<string, string>());
@@ -111,13 +118,12 @@ export function useHierarchyDrilldown<TLevelKey extends string>(
         return;
       }
     }
-
-    setPrunedNotice(null);
   }, [ids, levels, setIds]);
 
   const handleSelect = (levelIndex: number, idStr: string) => {
     const node = (levels[levelIndex]?.options ?? []).find((o) => String(o.id) === idStr);
     if (!node) return;
+    setPrunedNotice(null);
     setIds([...ids.slice(0, levelIndex), node.id]);
   };
 
@@ -125,11 +131,13 @@ export function useHierarchyDrilldown<TLevelKey extends string>(
     if (ids.length >= levels.length) return;
     const children = levels[ids.length]?.options ?? [];
     if (children.length === 0) return;
+    setPrunedNotice(null);
     setIds([...ids, children[0].id]);
   };
 
   const handleRemoveLevel = () => {
     if (ids.length <= 1) return;
+    setPrunedNotice(null);
     setIds(ids.slice(0, -1));
   };
 
