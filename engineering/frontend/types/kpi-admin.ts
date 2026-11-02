@@ -1,12 +1,5 @@
 import type { HierarchyRow } from "@/types/kpi";
-import type { HierarchyId } from "@/lib/kpi-config";
 
-// Deliberately loosely typed (payload: any) — six flat KPIs and ten hierarchy
-// levels each have a different payload shape server-side, and collapsing
-// them into one generic table/form means the container has to erase those
-// specific types. Each concrete hook still enforces its own payload type at
-// the call site (useCreateEmploymentSector, etc.) — only this bundle
-// wiring loses that specificity, by design.
 export interface MutationLike<TVars> {
   mutate: (vars: TVars, opts?: { onSuccess?: () => void; onError?: (err: unknown) => void }) => void;
   isPending: boolean;
@@ -43,5 +36,3 @@ export interface HierarchyLevelBundle {
   page?: number;
   setPage?: (p: number) => void;
 }
-
-export type SectionKey = "flat" | HierarchyId;

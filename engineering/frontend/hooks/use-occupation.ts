@@ -9,6 +9,7 @@ import {
   OccupationAnalysisResponse,
   OccupationSkillsResponse
 } from "@/types/occupation";
+import { getApiErrorMessage } from "@/lib/errors";
 
 const BASE = ENV.NEXT_PUBLIC_API_BASE_URL;
 
@@ -16,7 +17,7 @@ async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error || body?.details || `Request failed: ${url}`);
+    throw new Error(getApiErrorMessage(body, `Request failed: ${url}`));
   }
   return res.json();
 }
@@ -31,7 +32,7 @@ async function fetchOccupationSkills(
   const res = await fetch(`${BASE}/occupation/skills/${level}/${id}?${params.toString()}`);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error || body?.details || "Failed to fetch occupation skills");
+    throw new Error(getApiErrorMessage(body, "Failed to fetch occupation skills"));
   }
   return res.json();
 }
@@ -61,7 +62,7 @@ async function fetchOccupationAnalysis(
   const res = await fetch(`${BASE}/analysis/occupation/${level}/${id}?${params.toString()}`);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error || body?.details || "Failed to fetch occupation analysis");
+    throw new Error(getApiErrorMessage(body, "Failed to fetch occupation analysis"));
   }
   return res.json();
 }

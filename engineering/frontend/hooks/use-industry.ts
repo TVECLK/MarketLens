@@ -7,6 +7,7 @@ import { IndustryListResponse,
   IndustrySubclassChildrenResponse,
   IndustryAnalysisResponse,
 } from "@/types/industry";
+import { getApiErrorMessage } from "@/lib/errors";
 
 const BASE = ENV.NEXT_PUBLIC_API_BASE_URL;
 
@@ -14,7 +15,7 @@ async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error || body?.details || `Request failed: ${url}`);
+    throw new Error(getApiErrorMessage(body, `Request failed: ${url}`));
   }
   return res.json();
 }
@@ -89,7 +90,7 @@ async function fetchIndustryAnalysis(
   const res = await fetch(`${BASE}/analysis/industry/${level}/${id}?${params.toString()}`);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error || body?.details || "Failed to fetch industry analysis");
+    throw new Error(getApiErrorMessage(body, "Failed to fetch industry analysis"));
   }
   return res.json();
 }

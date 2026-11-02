@@ -1,6 +1,6 @@
 import { thunderIDProxy, createRouteMatcher, } from '@thunderid/nextjs/server'
 
-const isProtectedRoute = createRouteMatcher(['/kpis'])
+const isProtectedRoute = createRouteMatcher(['/kpis', '/kpis/*'])
 
 export default thunderIDProxy(async (thunderid, request) => {
   if (isProtectedRoute(request)) {

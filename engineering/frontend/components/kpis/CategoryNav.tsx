@@ -1,50 +1,70 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  useEmploymentSectors,
+  useExperiences,
+  useEducationLevels,
+  useFormalities,
+  useGenders,
+  useVocationalEducations,
+} from "@/hooks/use-kpi";
 import {
   KPI_CATEGORIES,
   CATEGORY_ORDER,
   HIERARCHIES,
   HIERARCHY_ORDER,
   ACCENT_CLASSES,
+  kpiCategoryHref,
+  hierarchyLevelHref,
   type KPICategoryKey,
-  type HierarchyId,
 } from "@/lib/kpi-config";
-import type { SectionKey } from "@/types/kpi-admin";
 
-interface CategoryNavProps {
-  activeSection: SectionKey;
-  activeCategory: KPICategoryKey;
-  flatCounts: Record<KPICategoryKey, number>;
-  onSwitchCategory: (key: KPICategoryKey) => void;
-  onSwitchHierarchy: (id: HierarchyId) => void;
+// access the values from the cache
+function useFlatCounts(): Record<KPICategoryKey, number | undefined> {
+  const employmentSectors = useEmploymentSectors();
+  const experiences = useExperiences();
+  const educationLevels = useEducationLevels();
+  const formalities = useFormalities();
+  const genders = useGenders();
+  const vocationalEducations = useVocationalEducations();
+  return {
+    employmentSector: employmentSectors.data?.employment_sectors?.length,
+    experience: experiences.data?.experiences?.length,
+    educationLevel: educationLevels.data?.education_levels?.length,
+    formalInformal: formalities.data?.formalities?.length,
+    gender: genders.data?.genders?.length,
+    vocationalEducation: vocationalEducations.data?.vocational_educations?.length,
+  };
 }
 
-export default function CategoryNav({
-  activeSection,
-  activeCategory,
-  flatCounts,
-  onSwitchCategory,
-  onSwitchHierarchy,
-}: CategoryNavProps) {
+export default function CategoryNav() {
+  const pathname = usePathname();
+  const flatCounts = useFlatCounts();
+
   return (
     <aside className="w-72 min-w-72 border-r border-gray-100 bg-white h-screen overflow-y-auto sticky top-0 py-4 px-3 space-y-1">
       {CATEGORY_ORDER.map((key) => {
         const cfg = KPI_CATEGORIES[key];
         const acc = ACCENT_CLASSES[cfg.accent];
         const count = flatCounts[key];
-        const isActive = activeSection === "flat" && activeCategory === key;
+        const href = kpiCategoryHref(key);
+        const isActive = pathname === href;
         return (
-          <button
+          <Link
             key={key}
-            onClick={() => onSwitchCategory(key)}
-            className={`w-full text-left px-4 py-3 rounded-xl transition-all flex items-center justify-between gap-2 ${
-              isActive ? `${acc.lightBg} ring-1 ${acc.ring}` : "hover:bg-gray-50"
-            }`}
+            href={href}
+            aria-current={isActive ? "page" : undefined}
+            className={`w-full text-left px-4 py-3 rounded-xl transition-all flex items-center justify-between gap-2 ${isActive ? `${acc.lightBg} ring-1 ${acc.ring}` : "hover:bg-gray-50"
+              }`}
           >
             <div>
               <p className={`text-xs font-bold ${isActive ? acc.text : "text-gray-700"}`}>{cfg.title}</p>
-              <p className="text-[10px] text-gray-400 mt-0.5">{count} items</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{count ?? "–"} items</p>
             </div>
             <span className={`w-2 h-2 rounded-full shrink-0 ${isActive ? acc.solidBg : "bg-gray-200"}`} />
-          </button>
+          </Link>
         );
       })}
 
@@ -55,21 +75,21 @@ export default function CategoryNav({
         {HIERARCHY_ORDER.map((id) => {
           const def = HIERARCHIES[id];
           const acc = ACCENT_CLASSES[def.accent];
-          const isActive = activeSection === id;
+          const isActive = pathname.startsWith(`/kpis/${id}/`);
           return (
-            <button
+            <Link
               key={id}
-              onClick={() => onSwitchHierarchy(id)}
-              className={`w-full text-left px-4 py-3 rounded-xl transition-all flex items-center justify-between gap-2 ${
-                isActive ? `${acc.lightBg} ring-1 ${acc.ring}` : "hover:bg-gray-50"
-              }`}
+              href={hierarchyLevelHref(id, 0)}
+              aria-current={isActive ? "page" : undefined}
+              className={`w-full text-left px-4 py-3 rounded-xl transition-all flex items-center justify-between gap-2 ${isActive ? `${acc.lightBg} ring-1 ${acc.ring}` : "hover:bg-gray-50"
+                }`}
             >
               <div>
                 <p className={`text-xs font-bold ${isActive ? acc.text : "text-gray-700"}`}>{def.label}</p>
                 <p className="text-[10px] text-gray-400 mt-0.5">{def.levels.length} levels</p>
               </div>
               <span className={`w-2 h-2 rounded-full shrink-0 ${isActive ? acc.solidBg : "bg-gray-200"}`} />
-            </button>
+            </Link>
           );
         })}
       </div>

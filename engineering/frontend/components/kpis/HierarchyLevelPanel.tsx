@@ -1,4 +1,5 @@
 import type { FormEvent } from "react";
+import Link from "next/link";
 import type { HierarchyDef, AccentClasses } from "@/lib/kpi-config";
 import type { HierarchyLevelBundle } from "@/types/kpi-admin";
 import type { HierarchyRow } from "@/types/kpi";
@@ -8,7 +9,7 @@ interface HierarchyLevelPanelProps {
   hAccent: AccentClasses;
   activeLevelIndex: number;
   levelCounts: number[];
-  onSwitchLevel: (index: number) => void;
+  levelHref: (index: number) => string;
   pageSize: number;
 
   levelBundle: HierarchyLevelBundle;
@@ -42,7 +43,7 @@ export default function HierarchyLevelPanel({
   hAccent,
   activeLevelIndex,
   levelCounts,
-  onSwitchLevel,
+  levelHref,
   pageSize,
   levelBundle,
   parentItems,
@@ -85,23 +86,22 @@ export default function HierarchyLevelPanel({
         {hierarchyDef.levels.map((level, idx) => {
           const isActive = activeLevelIndex === idx;
           return (
-            <button
+            <Link
               key={level.key}
-              onClick={() => onSwitchLevel(idx)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                isActive ? `${hAccent.solidBg} text-white` : "bg-white text-gray-500 hover:bg-gray-100 shadow-sm"
-              }`}
+              href={levelHref(idx)}
+              aria-current={isActive ? "page" : undefined}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${isActive ? `${hAccent.solidBg} text-white` : "bg-white text-gray-500 hover:bg-gray-100 shadow-sm"
+                }`}
             >
               <span
-                className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] ${
-                  isActive ? "bg-white/20" : "bg-gray-100"
-                }`}
+                className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] ${isActive ? "bg-white/20" : "bg-gray-100"
+                  }`}
               >
                 {idx + 1}
               </span>
               {level.title}
               <span className={isActive ? "text-white/70" : "text-gray-300"}>({levelCounts[idx]})</span>
-            </button>
+            </Link>
           );
         })}
       </div>

@@ -3,6 +3,7 @@ import { ENV } from "@/config/env";
 import {
   DashboardOverview,
 } from "@/types/dashboard";
+import { getApiErrorMessage } from "@/lib/errors";
 
 const BASE = ENV.NEXT_PUBLIC_API_BASE_URL;
 
@@ -11,7 +12,7 @@ async function fetchDashboardOverview(fromDate: string, toDate: string): Promise
   const res = await fetch(`${BASE}/dashboard/overview?${params.toString()}`);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error || body?.details || "Failed to fetch dashboard overview");
+    throw new Error(getApiErrorMessage(body, "Failed to fetch dashboard overview"));
   }
   return res.json();
 }
