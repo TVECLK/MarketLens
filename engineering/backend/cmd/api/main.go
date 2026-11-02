@@ -79,6 +79,7 @@ func main() {
 	ingestionSvc := ingestion.NewIngestionService(
 		services.JobPosts,
 		llmClient,
+		cfg.LLM.Model,
 		industryClassifier,
 		occupationClassifier,
 		metadataBuilder,

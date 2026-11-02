@@ -53,6 +53,7 @@ type FailedJob struct {
 type IngestionService struct {
 	jobPosts             *service.JobPostService
 	llmClient            *llm.Client
+	model                string
 	metadataBuilder      *MetadataBuilder
 	industryClassifier   *IndustryClassifier
 	occupationClassifier *OccupationClassifier
@@ -65,10 +66,11 @@ type IngestionService struct {
 // NewIngestionService wires dedup, classification, and metadata
 // together. industryClassifier, occupationClassifier, and
 // metadataBuilder are built by the caller (each needs its own set of
-// services), same as llm.
+// services)
 func NewIngestionService(
 	jobPosts *service.JobPostService,
 	llmClient *llm.Client,
+	model string,
 	industryClassifier *IndustryClassifier,
 	occupationClassifier *OccupationClassifier,
 	metadataBuilder *MetadataBuilder,
@@ -80,6 +82,7 @@ func NewIngestionService(
 	return &IngestionService{
 		jobPosts:             jobPosts,
 		llmClient:            llmClient,
+		model:                model,
 		metadataBuilder:      metadataBuilder,
 		industryClassifier:   industryClassifier,
 		occupationClassifier: occupationClassifier,
@@ -279,7 +282,7 @@ func (s *IngestionService) extractAndClassify(ctx context.Context, raw RawJobInp
 			CrawlerRunID:          &crawlerRunID,
 			GeoData:               &models.GeoData{Province: extracted.MetaData.GeoData.Province},
 			Source:                &models.Source{Name: raw.Source},
-			AiVersion:             &models.AiVersion{Version: "llm-v1"},
+			AiVersion:             &models.AiVersion{Version: s.model},
 			FormalityID:           nilIfZero(formalityID),
 			GenderID:              nilIfZero(genderID),
 			VocationalEducationID: nilIfZero(vocationalEducationID),
