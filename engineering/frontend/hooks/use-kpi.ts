@@ -19,6 +19,7 @@ import type {
   IndustryClass, IndustryClassListResponse, IndustryClassPayload,
   IndustrySubclass, IndustrySubclassListResponse, IndustrySubclassPayload,
 } from "@/types/kpi";
+import { getApiErrorMessage } from "@/lib/errors";
 
 
 function useListQuery<TResponse>(
@@ -40,7 +41,7 @@ function useListQuery<TResponse>(
       const res = await fetch(url);
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(data?.error || data?.details || `Failed to fetch ${key}`);
+        throw new Error(getApiErrorMessage(data, `Failed to fetch ${key}`));
       }
       return data as TResponse;
     },
@@ -59,7 +60,7 @@ function useCreateMutation<TPayload, TResult>(key: string, endpoint: string) {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(data?.error || data?.details || `Failed to create ${key}`);
+        throw new Error(getApiErrorMessage(data, `Failed to create ${key}`));
       }
       return data as TResult;
     },
@@ -80,7 +81,7 @@ function useUpdateMutation<TPayload, TResult>(key: string, endpoint: string) {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(data?.error || data?.details || `Failed to update ${key}`);
+        throw new Error(getApiErrorMessage(data, `Failed to update ${key}`));
       }
       return data as TResult;
     },
@@ -99,7 +100,7 @@ function useDeleteMutation(key: string, endpoint: string) {
       const res = await fetch(`${endpoint}/${id}`, { method: "DELETE" });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(data?.error || data?.details || `Failed to delete ${key}`);
+        throw new Error(getApiErrorMessage(data, `Failed to delete ${key}`));
       }
       return data;
     },
@@ -122,7 +123,7 @@ function useHierarchyDeleteMutation(key: string, endpoint: string, relatedKeys: 
       const res = await fetch(`${endpoint}/${id}`, { method: "DELETE" });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(data?.error || data?.details || `Failed to delete ${key}`);
+        throw new Error(getApiErrorMessage(data, `Failed to delete ${key}`));
       }
       return data;
     },

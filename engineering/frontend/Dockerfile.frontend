@@ -1,25 +1,52 @@
+# ============================================
+# Stage 1: Dependencies Installation Stage
+# ============================================
+FROM node:20-alpine AS dependencies
+
+WORKDIR /app
+
+# Copy package-related files first to leverage Docker's layer caching: the
+# install layer below is rebuilt only when these files change.
+COPY package.json package-lock.json ./
+
+# Install dependencies from the lockfile for reproducible builds. The npm
+# download cache is kept across builds with a BuildKit cache mount.
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --no-audit --no-fund
+
+# ============================================
+# Stage 2: Build Next.js application in standalone mode
+# ============================================
 FROM node:20-alpine AS builder
 
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
 
+# Copy project dependencies from the dependencies stage
+COPY --from=dependencies /app/node_modules ./node_modules
+
+# Copy application source code
 COPY . .
 
-RUN npm install @thunderid/nextjs
-
+# To speed up rebuilds, the Next.js build cache can be kept across builds by
+# adding `--mount=type=cache,target=/app/.next/cache` to the RUN below. That
+# also keeps .next/cache/fetch-cache out of the final image, so cached fetch
+# responses from the build won't be available at runtime.
 RUN npm run build
 
+# ============================================
+# Stage 3: Run Next.js application
+# ============================================
 FROM node:20-alpine AS runner
+
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
-
-RUN chown -R node:node /app
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/public ./public
 
 USER node
 

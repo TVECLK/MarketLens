@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAccessToken } from "@/lib/token";
 
-const GO_API = process.env.GO_BACKEND_URL;
+const GO_API = `${process.env.GO_BACKEND_URL}/api/v1`;
 
 // Get major group by id
 export async function GET(

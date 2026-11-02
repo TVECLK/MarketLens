@@ -1,8 +1,7 @@
-export interface HierarchyNode {
-  id: number;
-  name: string;
-  code: string;
-}
+import type { SectionError } from "@/types/bff";
+import type { AnalysisResponse, HierarchyNode } from "./analysis";
+
+export type { HierarchyNode } from "./analysis";
 
 export interface MajorGroupListResponse {
   count: number;
@@ -29,57 +28,7 @@ export interface OccupationGroupChildrenResponse {
   occupation_groups: HierarchyNode[];
 }
 
-export interface TotalJobCountResult {
-  standard: string;
-  level: string;
-  id: number;
-  total_job_count: number;
-}
-
-export interface ChildJobCount {
-  id: number;
-  name: string;
-  code: string;
-  open_job_count: number;
-}
-
-export interface ChildrenResult {
-  standard: string;
-  level: string;
-  id: number;
-  child_level: string;
-  count: number;
-  children: ChildJobCount[];
-}
-
-export interface EmploymentSectorStat { id: number; sector: string; open_job_count: number; }
-export interface ExperienceStat { id: number; name: string; open_job_count: number; }
-export interface ProvinceStat { id: number; province: string; lat: number; lng: number; open_job_count: number; }
-export interface EducationLevelStat { id: number; level: string; open_job_count: number; }
-export interface FormalityStat { id: number; formality_type: string; open_job_count: number; }
-export interface GenderStat { id: number; gender_type: string; open_job_count: number; }
-export interface VocationalEducationStat { id: number; level: string; open_job_count: number; }
-export interface JobTypeStat { id: number; type: string; open_job_count: number; }
-export interface RemoteOnSiteHybridStat { remote_count: number; on_site_count: number; hybrid_count: number; }
-
-export interface OccupationAnalysisResponse {
-  standard: string;
-  level: string;
-  id: string;
-  from_date: string | null;
-  to_date: string | null;
-  total_job_count: TotalJobCountResult;
-  children: ChildrenResult | null;
-  employment_sector: { employment_sectors: EmploymentSectorStat[] };
-  experience: { experiences: ExperienceStat[] };
-  province: { provinces: ProvinceStat[] };
-  education: { education_levels: EducationLevelStat[] };
-  formality: { formalities: FormalityStat[] };
-  gender: { genders: GenderStat[] };
-  vocational_education: { vocational_educations: VocationalEducationStat[] };
-  remote_onsite_hybrid: { remote_vs_onsite_vs_hybrid: RemoteOnSiteHybridStat };
-  job_type: { job_types: JobTypeStat[] };
-}
+export type OccupationAnalysisResponse = AnalysisResponse;
 
 export interface SkillStat { id: number; skill: string; open_job_count: number; }
 export interface EmployerStat { id: number; name: string; open_job_count: number; }
@@ -96,9 +45,15 @@ export interface TopHiringEmployersResponse {
   level: string; id: number; from_date: string; to_date: string;
   count: number; employers: EmployerStat[];
 }
+export type SkillsSection = "top_15_skills" | "all_skills" | "top_hiring_employers";
+
+export type SkillsSectionErrors = Partial<Record<SkillsSection, SectionError>>;
+
+// A section is `null` when its backend call failed; the reason is in `errors`.
 export interface OccupationSkillsResponse {
   level: string; id: string; from_date: string | null; to_date: string | null;
-  top_15_skills: Top15SkillsResponse;
-  all_skills: AllSkillsResponse;
-  top_hiring_employers: TopHiringEmployersResponse;
+  top_15_skills: Top15SkillsResponse | null;
+  all_skills: AllSkillsResponse | null;
+  top_hiring_employers: TopHiringEmployersResponse | null;
+  errors: SkillsSectionErrors;
 }

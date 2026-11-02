@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAccessToken } from "@/lib/token";
 
-const GO_API = process.env.GO_BACKEND_URL;
+const GO_API = `${process.env.GO_BACKEND_URL}/api/v1`;
 
 // Get all major groups - currently-active by default, or active during a
 // given date range if from-date and to-date query params are provided
