@@ -11,14 +11,6 @@ import (
 var Schema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
-		"employer": map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"name": map[string]any{"type": "string"},
-			},
-			"required": []string{"name"},
-		},
-		"job_role": map[string]any{"type": "string"},
 		"job_type": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -26,8 +18,6 @@ var Schema = map[string]any{
 			},
 			"required": []string{"type"},
 		},
-		"job_description": map[string]any{"type": "string"},
-		"location":        map[string]any{"type": "string"},
 		"work_mode": map[string]any{
 			"type": "string",
 			"enum": []string{"remote", "onsite", "hybrid"},
@@ -43,20 +33,6 @@ var Schema = map[string]any{
 					},
 					"required": []string{"province"},
 				},
-				"source": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"source": map[string]any{"type": "string"},
-					},
-					"required": []string{"source"},
-				},
-				"ai_version": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"version": map[string]any{"type": "string"},
-					},
-					"required": []string{"version"},
-				},
 				"posted_at": map[string]any{
 					"type":    "string",
 					"pattern": `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$`,
@@ -70,7 +46,7 @@ var Schema = map[string]any{
 				"experience_id":           map[string]any{"type": "integer"},
 			},
 			"required": []string{
-				"geo_data", "source", "ai_version", "posted_at", "confidence_score",
+				"geo_data", "posted_at", "confidence_score",
 				"formality_id", "gender_id", "vocational_education_id",
 				"employment_sector_id", "education_level_id", "experience_id",
 			},
@@ -87,8 +63,7 @@ var Schema = map[string]any{
 		},
 	},
 	"required": []string{
-		"employer", "job_role", "job_type", "job_description",
-		"location", "work_mode", "no_of_vacancies", "meta_data", "skills",
+		"job_type", "work_mode", "no_of_vacancies", "meta_data", "skills",
 	},
 }
 
@@ -97,34 +72,21 @@ CRITICAL: If a field is missing, use the strict default provided. Do not halluci
 
 Fields & Defaults:
 
-1. 'employer': Object with company name.
-Format: {"name": "Company Name"}
-Default: {"name": ""}
-
-2. 'job_role': Vacancy title string.
-Default: ""
-
-3. 'job_type': Object with contract type.
+1. 'job_type': Object with contract type.
 Format: {"type": "Full Time"} or {"type": "Part Time"} or {"type": "Contract"} or {"type": "Internship"}
 Default: {"type": "Full Time"}
 
-4. 'job_description': Combined summary of responsibilities, qualifications, and any offered benefits. Single string.
-Default: ""
-
-5. 'location': City/region string (e.g. "Colombo 03, Sri Lanka").
-Default: "Sri Lanka"
-
-6. 'no_of_vacancies': Number of open positions for this role, if stated.
+2. 'no_of_vacancies': Number of open positions for this role, if stated.
 Default: 1
 
-7. 'work_mode': The job's work arrangement.
+3. 'work_mode': The job's work arrangement.
 Must be one of: "remote", "onsite", "hybrid"
 - "remote": explicit remote/work-from-home wording exists, with no on-site requirement
 - "hybrid": explicit mention of a mix of remote and in-office work
 - "onsite": no remote/hybrid wording, or the role explicitly requires in-office presence
 Default: "onsite"
 
-8. 'meta_data': Object containing all metadata fields:
+4. 'meta_data': Object containing all metadata fields:
 
 - 'geo_data': Infer the Sri Lankan province from the location text.
     Format: {"province": "<province>"}
@@ -132,15 +94,6 @@ Default: "onsite"
     ["Western", "Central", "Northern", "Eastern", "North Western",
         "North Central", "Uva", "Southern", "Sabaragamuwa"]
     Default: {"province": "Western"}
-
-- 'source': The website or platform this job was crawled from.
-    Format: {"source": "<source name>"}
-    Example: {"source": "Ikman"} or {"source": "TopJobs"}
-    Default: {"source": "Unknown"}
-
-- 'ai_version': The AI model version used for extraction.
-    Format: {"version": "llm-v1"}
-    Always use: {"version": "llm-v1"}
 
 - 'posted_at': ISO 8601 timestamp of when the job was posted, if detectable from the page.
     Format: "YYYY-MM-DDTHH:MM:SSZ"
@@ -168,7 +121,7 @@ Default: "onsite"
 - 'experience_id': Must be one of these ids:
 %s
 
-9. 'skills': Array of skill objects extracted from the job description.
+5. 'skills': Array of skill objects extracted from the job description.
 Format: [{"skill": "Skill Name"}, ...]
 Extract only concrete technical or professional skills mentioned.
 Default: []
