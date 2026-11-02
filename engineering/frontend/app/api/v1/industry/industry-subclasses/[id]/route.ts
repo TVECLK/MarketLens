@@ -9,7 +9,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const goUrl = `${GO_API}/industry-subclasses/${id}`;
+  const goUrl = `${GO_API}/industry-sub-classes/${id}`;
 
   try {
     const response = await fetch(goUrl);
@@ -47,7 +47,7 @@ export async function PUT(
   }
 
   const { id } = await params;
-  const goUrl = `${GO_API}/industry-subclasses/${id}`;
+  const goUrl = `${GO_API}/industry-sub-classes/${id}`;
 
   try {
     const body = await request.json();
@@ -92,7 +92,7 @@ export async function DELETE(
   }
 
   const { id } = await params;
-  const goUrl = `${GO_API}/industry-subclasses/${id}`;
+  const goUrl = `${GO_API}/industry-sub-classes/${id}`;
 
   try {
     const response = await fetch(goUrl, { 

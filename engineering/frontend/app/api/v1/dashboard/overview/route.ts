@@ -23,9 +23,9 @@ export async function GET(request: NextRequest) {
 
   const { data, errors, allFailed, firstError } = await fetchSections([
     { key: "vacancy_trend", url: `${GO_API}/vacancy-trend?${queryString}` },
-    { key: "vacancy_total", url: `${GO_API}/vacancy-total?${queryString}` },
-    { key: "by_occupation", url: `${GO_API}/occupations/by-date-range?${queryString}` },
-    { key: "by_industry", url: `${GO_API}/industries/by-date-range?${queryString}` },
+    { key: "vacancy_total", url: `${GO_API}/total-vacancy?${queryString}` },
+    { key: "by_occupation", url: `${GO_API}/analytics/occupation/vacancy-summary?${queryString}` },
+    { key: "by_industry", url: `${GO_API}/analytics/industry/vacancy-summary?${queryString}` },
   ]);
 
   if (allFailed && firstError) {

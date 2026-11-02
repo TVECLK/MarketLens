@@ -353,7 +353,7 @@ export default function AnalysisBreakdownCharts({
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: accent.primary }} />
             Remote / On-Site / Hybrid
           </h3>
-          {sectionErrors.remote_onsite_hybrid ? (
+          {sectionErrors.work_modes ? (
             <SectionMessage />
           ) : (
             <div className="space-y-4">

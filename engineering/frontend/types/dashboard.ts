@@ -29,7 +29,7 @@ export interface OccupationsByDateRangeResponse {
   from_date: string;
   to_date: string;
   count: number;
-  occupations: OccupationDateRangeStat[];
+  data: OccupationDateRangeStat[];
 }
 
 export interface IndustryDateRangeStat {
@@ -42,7 +42,7 @@ export interface IndustriesByDateRangeResponse {
   from_date: string;
   to_date: string;
   count: number;
-  industries: IndustryDateRangeStat[];
+  data: IndustryDateRangeStat[];
 }
 
 export type DashboardSection =

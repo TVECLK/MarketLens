@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   if (offset) goParams.set("offset", offset);
 
   const queryString = goParams.toString();
-  const goUrl = `${GO_API}/industry-subclasses${queryString ? `?${queryString}` : ""}`;
+  const goUrl = `${GO_API}/industry-sub-classes${queryString ? `?${queryString}` : ""}`;
 
   console.log("[industry-subclasses] fetching from Go:", goUrl);
 
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Please sign in first' }, { status: 401 })
   }
 
-  const goUrl = `${GO_API}/industry-subclasses`;
+  const goUrl = `${GO_API}/industry-sub-classes`;
 
   try {
     const body = await request.json();

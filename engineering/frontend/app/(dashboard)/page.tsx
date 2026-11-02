@@ -29,7 +29,7 @@ export default function DashboardPage() {
 
   const occData = useMemo(
     () =>
-      (overview?.by_occupation?.occupations ?? []).map((o) => ({
+      (overview?.by_occupation?.data ?? []).map((o) => ({
         name: o.name,
         value: o.open_job_count,
       })),
@@ -38,7 +38,7 @@ export default function DashboardPage() {
 
   const indData = useMemo(
     () =>
-      (overview?.by_industry?.industries ?? []).map((i) => ({
+      (overview?.by_industry?.data ?? []).map((i) => ({
         name: i.name,
         value: i.open_job_count,
       })),

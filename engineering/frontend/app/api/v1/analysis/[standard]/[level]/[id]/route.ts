@@ -13,7 +13,7 @@ const ANALYSIS_TYPES = [
   "formality",
   "gender",
   "vocational-education",
-  "remote-onsite-hybrid",
+  "work-modes",
   "job-type",
 ] as const;
 

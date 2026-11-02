@@ -113,7 +113,7 @@ export function useAnalysisBreakdown(
     [analysis],
   );
   const remoteData = useMemo(() => {
-    const r = analysis?.remote_onsite_hybrid?.remote_vs_onsite_vs_hybrid;
+    const r = analysis?.work_modes?.remote_vs_onsite_vs_hybrid;
     if (!r) return [];
     return [
       { name: "On-Site", value: r.on_site_count },
