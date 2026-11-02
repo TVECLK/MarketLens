@@ -47,13 +47,13 @@ jobs:
               run: npm test
 
             - name: Set up docker buildx
-              run: docker/setup-buildx-action@v3
+              uses: docker/setup-buildx-action@v3
 
             - name: Build crawler image
               uses: docker/build-push-action@v6
               with:
                   context: ./engineering/frontend
-                  file: ./engineering/frontend/Dockerfile.crawler
+                  file: ./engineering/frontend/Dockerfile.frontend
                   push: false
                   load: true
                   tags: frontend:latest
