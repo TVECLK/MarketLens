@@ -186,6 +186,7 @@ func CheckDuplicate(
 	for _, job := range jobs {
 		dbLoc := strings.ToLower(strings.TrimSpace(job.Location))
 		if !locationsCompatible(dbLoc, incLoc) {
+			log.Printf("skipping candidate job_id=%d: location mismatch (incoming=%q db=%q)", job.ID, incLoc, dbLoc)
 			continue
 		}
 
