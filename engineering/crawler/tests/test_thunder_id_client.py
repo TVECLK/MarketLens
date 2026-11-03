@@ -117,8 +117,7 @@ class TestFetchAccessToken:
         assert kwargs["data"] == {
             "grant_type": "client_credentials",
             "scope": (
-                "crawler:runs crawler:complete crawler:lookup "
-                "crawler:batch-save crawler:batch-update crawler:reconcile"
+                "crawler:runs crawler:complete crawler:batch-save crawler:reconcile"
             ),
             "resource": "https://resource.test",
         }
