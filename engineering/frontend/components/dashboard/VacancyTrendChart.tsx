@@ -23,7 +23,7 @@ import type { VacancyTrendPoint } from "@/types/dashboard";
 
 interface VacancyTrendChartProps {
   data: VacancyTrendPoint[];
-  granularity?: "weekly" | "monthly";
+  granularity?: "daily" | "monthly";
   totalVacancies?: number;
   isLoading: boolean;
   isError: boolean;
@@ -37,8 +37,8 @@ export default function VacancyTrendChart({
   isError,
 }: VacancyTrendChartProps) {
   const subtitle =
-    granularity === "weekly"
-      ? "Weekly vacancy counts"
+    granularity === "daily"
+      ? "Daily vacancy counts"
       : granularity === "monthly"
         ? "Monthly vacancy counts"
         : "Vacancy counts";

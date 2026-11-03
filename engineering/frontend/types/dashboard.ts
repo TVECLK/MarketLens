@@ -8,7 +8,7 @@ export interface VacancyTrendPoint {
 export interface VacancyTrendResponse {
   from_date: string;
   to_date: string;
-  granularity: "weekly" | "monthly";
+  granularity: "daily" | "monthly";
   count: number;
   data: VacancyTrendPoint[];
 }
