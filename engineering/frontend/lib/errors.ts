@@ -24,8 +24,8 @@ function backendError(details: unknown): string | undefined {
 /**
  * Picks a user-facing message from an error body returned by our /api routes.
  *
- * When the Go backend fails, the routes reply with a generic
- * `{ error: "Go backend returned an error", details: <backend body> }`; the
+ * When the backend fails, the routes reply with a generic
+ * `{ error: "Backend returned an error", details: <backend body> }`; the
  * useful message (e.g. "missing required scope: genders:create") is the
  * backend body's own `error`. The backend's `details` (raw validation / SQL
  * errors) are deliberately not shown.

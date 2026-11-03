@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchSections } from "@/lib/bff-aggregate";
 
-const GO_API = `${process.env.GO_BACKEND_URL}/api/v1`;
+const BACKEND_API = `${process.env.BACKEND_API_URL}/api/v1`;
 
 const ANALYSIS_TYPES = [
   "total-job-count",
@@ -18,11 +18,11 @@ const ANALYSIS_TYPES = [
 ] as const;
 
 // GET /api/v1/analysis/:standard/:level/:id?from-date=&to-date=
-// Fans out to all 11 Go analysis endpoints for the given standard/level/id,
+// Fans out to all 11 backend analysis endpoints for the given standard/level/id,
 // in parallel, and returns one combined JSON response. A section that fails
 // comes back as `null` with its reason under `errors`, so the sections that
 // worked can still be shown. `children` is allowed to fail silently: leaf
-// levels have none. Only when every other section fails is the Go error
+// levels have none. Only when every other section fails is the backend error
 // (status and body) forwarded as-is.
 export async function GET(
   request: NextRequest,
@@ -34,17 +34,17 @@ export async function GET(
   const fromDate = searchParams.get("from-date");
   const toDate = searchParams.get("to-date");
 
-  const goParams = new URLSearchParams();
-  if (fromDate) goParams.set("from-date", fromDate);
-  if (toDate) goParams.set("to-date", toDate);
-  const queryString = goParams.toString();
+  const backendParams = new URLSearchParams();
+  if (fromDate) backendParams.set("from-date", fromDate);
+  if (toDate) backendParams.set("to-date", toDate);
+  const queryString = backendParams.toString();
 
-  console.log("[analysis] fetching from Go:", { standard, level, id, fromDate, toDate });
+  console.log("[analysis] fetching from backend:", { standard, level, id, fromDate, toDate });
 
   const { data, errors, allFailed, firstError } = await fetchSections(
     ANALYSIS_TYPES.map((type) => ({
       key: type.replace(/-/g, "_"),
-      url: `${GO_API}/${standard}/${level}/${id}/${type}${queryString ? `?${queryString}` : ""}`,
+      url: `${BACKEND_API}/${standard}/${level}/${id}/${type}${queryString ? `?${queryString}` : ""}`,
       optional: type === "children",
     })),
   );

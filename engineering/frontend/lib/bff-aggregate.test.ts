@@ -79,7 +79,7 @@ describe("fetchSections", () => {
       [{ key: "a", url: "/a" }],
       fakeFetch({ "/a": () => new Response("oops", { status: 503 }) }),
     );
-    expect(result.errors.a).toEqual({ status: 503, message: "Go backend returned an error from a" });
+    expect(result.errors.a).toEqual({ status: 503, message: "Backend returned an error from a" });
   });
 
   it("treats an unparseable success body as a failed section", async () => {

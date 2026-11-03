@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAccessToken } from '@/lib/token'
 
-const GO_API = `${process.env.GO_BACKEND_URL}/api/v1`;
+const BACKEND_API = `${process.env.BACKEND_API_URL}/api/v1`;
 
 // Get all experiences
 export async function GET() {
-  const goUrl = `${GO_API}/experiences`;
+  const backendUrl = `${BACKEND_API}/experiences`;
 
-  console.log("[experiences] fetching from Go:", goUrl);
+  console.log("[experiences] fetching from backend:", backendUrl);
 
   try {
-    const response = await fetch(goUrl);
+    const response = await fetch(backendUrl);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[experiences] Go error body:", errorText);
+      console.error("[experiences] backend error body:", errorText);
       return NextResponse.json(
-        { error: "Go backend returned an error", details: errorText },
+        { error: "Backend returned an error", details: errorText },
         { status: response.status }
       );
     }
@@ -42,12 +42,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Please sign in first' }, { status: 401 })
   }
 
-  const goUrl = `${GO_API}/experiences`;
+  const backendUrl = `${BACKEND_API}/experiences`;
 
   try {
     const body = await request.json();
 
-    const response = await fetch(goUrl, {
+    const response = await fetch(backendUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
       body: JSON.stringify(body),
@@ -56,9 +56,9 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("[experiences] Go error body:", data);
+      console.error("[experiences] backend error body:", data);
       return NextResponse.json(
-        { error: "Go backend returned an error", details: data },
+        { error: "Backend returned an error", details: data },
         { status: response.status }
       );
     }

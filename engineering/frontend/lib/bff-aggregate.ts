@@ -55,7 +55,7 @@ export async function fetchSections(
     const res = result.value;
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      const message = body?.error ?? body?.details ?? `Go backend returned an error from ${key}`;
+      const message = body?.error ?? body?.details ?? `Backend returned an error from ${key}`;
       fail(key, optional, res.status, body ?? { error: message }, message);
       continue;
     }

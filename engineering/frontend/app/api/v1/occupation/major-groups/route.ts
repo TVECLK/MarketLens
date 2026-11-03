@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAccessToken } from "@/lib/token";
 
-const GO_API = `${process.env.GO_BACKEND_URL}/api/v1`;
+const BACKEND_API = `${process.env.BACKEND_API_URL}/api/v1`;
 
 // Get all major groups - currently-active by default, or active during a
 // given date range if from-date and to-date query params are provided
@@ -11,23 +11,23 @@ export async function GET(request: NextRequest) {
   const fromDate = searchParams.get("from-date");
   const toDate = searchParams.get("to-date");
 
-  const goParams = new URLSearchParams();
-  if (fromDate) goParams.set("from-date", fromDate);
-  if (toDate) goParams.set("to-date", toDate);
-  const queryString = goParams.toString();
+  const backendParams = new URLSearchParams();
+  if (fromDate) backendParams.set("from-date", fromDate);
+  if (toDate) backendParams.set("to-date", toDate);
+  const queryString = backendParams.toString();
 
-  const goUrl = `${GO_API}/major-groups${queryString ? `?${queryString}` : ""}`;
+  const backendUrl = `${BACKEND_API}/major-groups${queryString ? `?${queryString}` : ""}`;
 
-  console.log("[major-groups] fetching from Go:", goUrl);
+  console.log("[major-groups] fetching from backend:", backendUrl);
 
   try {
-    const response = await fetch(goUrl);
+    const response = await fetch(backendUrl);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[major-groups] Go error body:", errorText);
+      console.error("[major-groups] backend error body:", errorText);
       return NextResponse.json(
-        { error: "Go backend returned an error", details: errorText },
+        { error: "Backend returned an error", details: errorText },
         { status: response.status }
       );
     }
@@ -53,12 +53,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Please sign in first' }, { status: 401 })
   }
 
-  const goUrl = `${GO_API}/major-groups`;
+  const backendUrl = `${BACKEND_API}/major-groups`;
 
   try {
     const body = await request.json();
 
-    const response = await fetch(goUrl, {
+    const response = await fetch(backendUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
       body: JSON.stringify(body),
@@ -67,9 +67,9 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("[major-groups] Go error body:", data);
+      console.error("[major-groups] backend error body:", data);
       return NextResponse.json(
-        { error: "Go backend returned an error", details: data },
+        { error: "Backend returned an error", details: data },
         { status: response.status }
       );
     }

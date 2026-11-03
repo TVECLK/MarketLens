@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAccessToken } from "@/lib/token";
 
-const GO_API = `${process.env.GO_BACKEND_URL}/api/v1`;
+const BACKEND_API = `${process.env.BACKEND_API_URL}/api/v1`;
 
 // Get industry sector by id
 export async function GET(
@@ -9,16 +9,16 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const goUrl = `${GO_API}/industry-sectors/${id}`;
+  const backendUrl = `${BACKEND_API}/industry-sectors/${id}`;
 
   try {
-    const response = await fetch(goUrl);
+    const response = await fetch(backendUrl);
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("[industry-sectors] Go error body:", data);
+      console.error("[industry-sectors] backend error body:", data);
       return NextResponse.json(
-        { error: "Go backend returned an error", details: data },
+        { error: "Backend returned an error", details: data },
         { status: response.status }
       );
     }
@@ -47,12 +47,12 @@ export async function PUT(
   }
 
   const { id } = await params;
-  const goUrl = `${GO_API}/industry-sectors/${id}`;
+  const backendUrl = `${BACKEND_API}/industry-sectors/${id}`;
 
   try {
     const body = await request.json();
 
-    const response = await fetch(goUrl, {
+    const response = await fetch(backendUrl, {
       method: "PUT",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
       body: JSON.stringify(body),
@@ -61,9 +61,9 @@ export async function PUT(
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("[industry-sectors] Go error body:", data);
+      console.error("[industry-sectors] backend error body:", data);
       return NextResponse.json(
-        { error: "Go backend returned an error", details: data },
+        { error: "Backend returned an error", details: data },
         { status: response.status }
       );
     }
@@ -92,19 +92,19 @@ export async function DELETE(
   }
 
   const { id } = await params;
-  const goUrl = `${GO_API}/industry-sectors/${id}`;
+  const backendUrl = `${BACKEND_API}/industry-sectors/${id}`;
 
   try {
-    const response = await fetch(goUrl, { 
+    const response = await fetch(backendUrl, { 
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}`, },
     });
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("[industry-sectors] Go error body:", data);
+      console.error("[industry-sectors] backend error body:", data);
       return NextResponse.json(
-        { error: "Go backend returned an error", details: data },
+        { error: "Backend returned an error", details: data },
         { status: response.status }
       );
     }
