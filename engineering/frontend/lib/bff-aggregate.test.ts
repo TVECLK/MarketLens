@@ -73,6 +73,26 @@ describe("fetchSections", () => {
     expect(result.data.b).toBeNull();
   });
 
+  it("aborts each section's request after a timeout", async () => {
+    const fetchFn = fakeFetch({ "/a": () => json({ n: 1 }) });
+    await fetchSections([{ key: "a", url: "/a" }], fetchFn);
+    expect(fetchFn).toHaveBeenCalledWith("/a", { signal: expect.any(AbortSignal) });
+  });
+
+  it("reports a timed-out section as a 504 and keeps the others", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await fetchSections(
+      requests,
+      fakeFetch({
+        "/a": () => json({ n: 1 }),
+        "/b": () => Promise.reject(new DOMException("The operation timed out", "TimeoutError")),
+        "/c": () => json({ n: 3 }),
+      }),
+    );
+    expect(result.errors.b).toEqual({ status: 504, message: "The operation timed out" });
+    expect(result.data).toMatchObject({ a: { n: 1 }, b: null, c: { n: 3 } });
+  });
+
   it("falls back to a generic message when the error body isn't JSON", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await fetchSections(

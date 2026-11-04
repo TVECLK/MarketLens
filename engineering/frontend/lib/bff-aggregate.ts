@@ -1,5 +1,8 @@
 import type { SectionError } from "@/types/bff";
 
+/** How long each section's backend call may take before it is aborted. */
+const SECTION_TIMEOUT_MS = 3000;
+
 export interface SectionRequest {
   /** Key the section's data is returned under. */
   key: string;
@@ -28,7 +31,7 @@ export async function fetchSections(
   requests: SectionRequest[],
   fetchFn: typeof fetch = fetch,
 ): Promise<AggregateResult> {
-  const settled = await Promise.allSettled(requests.map(({ url }) => fetchFn(url)));
+  const settled = await Promise.allSettled(requests.map(({ url }) => fetchFn(url, { signal: AbortSignal.timeout(SECTION_TIMEOUT_MS) })));
 
   const data: Record<string, unknown> = {};
   const errors: Record<string, SectionError> = {};
@@ -48,7 +51,11 @@ export async function fetchSections(
 
     if (result.status === "rejected") {
       const details = result.reason instanceof Error ? result.reason.message : String(result.reason);
-      fail(key, optional, 502, { error: `Failed to reach the backend for ${key}`, details }, details);
+      if (result.reason instanceof Error && result.reason.name === "TimeoutError") {
+        fail(key, optional, 504, { error: `Timed out waiting for the backend for ${key}`, details }, details);
+      } else {
+        fail(key, optional, 502, { error: `Failed to reach the backend for ${key}`, details }, details);
+      }
       continue;
     }
 
