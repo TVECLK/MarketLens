@@ -2,7 +2,8 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, ReactNode } from "react";
-import { STALE_TIME } from "@/config/query";
+
+const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 
 export default function QueryProvider({ children }: { children: ReactNode }) {
   // Using useState ensures Next.js only instantiates the cache once per session
