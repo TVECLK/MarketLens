@@ -37,8 +37,8 @@ function useListQuery<TResponse>(
    const url = qs ? `${endpoint}?${qs}` : endpoint;
   return useQuery<TResponse>({
     queryKey: [key, "list", params ?? {}],
-    queryFn: async () => {
-      const res = await fetch(url);
+    queryFn: async ({ signal }) => {
+      const res = await fetch(url, { signal });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         throw new Error(getApiErrorMessage(data, `Failed to fetch ${key}`));

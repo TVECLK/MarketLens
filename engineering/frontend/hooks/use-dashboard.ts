@@ -7,9 +7,9 @@ import { getApiErrorMessage } from "@/lib/errors";
 
 const BASE = ENV.NEXT_PUBLIC_API_BASE_URL;
 
-async function fetchDashboardOverview(fromDate: string, toDate: string): Promise<DashboardOverview> {
+async function fetchDashboardOverview(fromDate: string, toDate: string, signal?: AbortSignal): Promise<DashboardOverview> {
   const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-  const res = await fetch(`${BASE}/dashboard/overview?${params.toString()}`);
+  const res = await fetch(`${BASE}/dashboard/overview?${params.toString()}`, { signal });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new Error(getApiErrorMessage(body, "Failed to fetch dashboard overview"));
@@ -20,7 +20,7 @@ async function fetchDashboardOverview(fromDate: string, toDate: string): Promise
 export function useDashboardOverview(fromDate: string, toDate: string) {
   return useQuery<DashboardOverview>({
     queryKey: ["dashboard", "overview", fromDate, toDate],
-    queryFn: () => fetchDashboardOverview(fromDate, toDate),
+    queryFn: ({ signal }) => fetchDashboardOverview(fromDate, toDate, signal),
     enabled: Boolean(fromDate) && Boolean(toDate) && fromDate <= toDate,
   });
 }
