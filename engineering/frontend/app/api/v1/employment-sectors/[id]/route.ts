@@ -13,15 +13,16 @@ export async function GET(
 
   try {
     const response = await fetch(backendUrl);
-    const data = await response.json();
-
     if (!response.ok) {
-      console.error("[employment-sectors] backend error body:", data);
+      const errorBody = await response.json().catch(() => null);
+      console.error("[employment-sectors] backend error body:", errorBody);
       return NextResponse.json(
-        { error: "Backend returned an error", details: data },
+        { error: "Backend returned an error", details: errorBody },
         { status: response.status }
       );
     }
+
+    const data = await response.json();
 
     return NextResponse.json(data);
   } catch (error) {
@@ -58,15 +59,16 @@ export async function PUT(
       body: JSON.stringify(body),
     });
 
-    const data = await response.json();
-
     if (!response.ok) {
-      console.error("[employment-sectors] backend error body:", data);
+      const errorBody = await response.json().catch(() => null);
+      console.error("[employment-sectors] backend error body:", errorBody);
       return NextResponse.json(
-        { error: "Backend returned an error", details: data },
+        { error: "Backend returned an error", details: errorBody },
         { status: response.status }
       );
     }
+
+    const data = await response.json();
 
     return NextResponse.json(data);
   } catch (error) {
@@ -99,15 +101,16 @@ export async function DELETE(
       method: "DELETE", 
       headers: { Authorization: `Bearer ${token}` }
     });
-    const data = await response.json();
-
     if (!response.ok) {
-      console.error("[employment-sectors] backend error body:", data);
+      const errorBody = await response.json().catch(() => null);
+      console.error("[employment-sectors] backend error body:", errorBody);
       return NextResponse.json(
-        { error: "Backend returned an error", details: data },
+        { error: "Backend returned an error", details: errorBody },
         { status: response.status }
       );
     }
+
+    const data = await response.json();
 
     return NextResponse.json(data);
   } catch (error) {

@@ -62,15 +62,16 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(body),
     });
 
-    const data = await response.json();
-
     if (!response.ok) {
-      console.error("[occupation-groups] backend error body:", data);
+      const errorBody = await response.json().catch(() => null);
+      console.error("[occupation-groups] backend error body:", errorBody);
       return NextResponse.json(
-        { error: "Backend returned an error", details: data },
+        { error: "Backend returned an error", details: errorBody },
         { status: response.status }
       );
     }
+
+    const data = await response.json();
 
     return NextResponse.json(data, { status: 201 });
   } catch (error) {

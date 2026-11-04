@@ -24,12 +24,13 @@ export async function GET(
 
   try {
     const response = await fetch(backendUrl);
-    const data = await response.json();
-
     if (!response.ok) {
-      console.error("[industry-classes-industry-subclasses] backend error body:", data);
-      return NextResponse.json(data, { status: response.status });
+      const errorBody = await response.json().catch(() => null);
+      console.error("[industry-classes-industry-subclasses] backend error body:", errorBody);
+      return NextResponse.json(errorBody ?? { error: "Backend returned an error" }, { status: response.status });
     }
+
+    const data = await response.json();
 
     return NextResponse.json(data);
   } catch (error) {
