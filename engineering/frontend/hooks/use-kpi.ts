@@ -19,7 +19,6 @@ import type {
   IndustryClass, IndustryClassListResponse, IndustryClassPayload,
   IndustrySubclass, IndustrySubclassListResponse, IndustrySubclassPayload,
 } from "@/types/kpi";
-import { STALE_TIME } from "@/config/query";
 import { getApiErrorMessage } from "@/lib/errors";
 
 
@@ -46,7 +45,6 @@ function useListQuery<TResponse>(
       }
       return data as TResponse;
     },
-    staleTime: STALE_TIME,
   });
 }
 

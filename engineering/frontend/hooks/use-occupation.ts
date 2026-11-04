@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { ENV } from "@/config/env";
-import { STALE_TIME } from "@/config/query";
 import {
   MajorGroupListResponse,
   SubMajorGroupChildrenResponse,
@@ -49,7 +48,6 @@ export function useOccupationSkills(
     queryKey: ["occupation-skills", level, id, fromDate, toDate],
     queryFn: () => fetchOccupationSkills(level as string, id as number, fromDate, toDate),
     enabled: enabled && level !== null && id !== null && Boolean(fromDate) && Boolean(toDate) && fromDate <= toDate,
-    staleTime: STALE_TIME,
   });
 }
 
@@ -78,7 +76,6 @@ export function useOccupationAnalysis(
     queryKey: ["occupation-analysis", level, id, fromDate, toDate],
     queryFn: () => fetchOccupationAnalysis(level as string, id as number, fromDate, toDate),
     enabled: level !== null && id !== null && Boolean(fromDate) && Boolean(toDate) && fromDate <= toDate,
-    staleTime: STALE_TIME,
   });
 }
 
@@ -90,7 +87,6 @@ export function useMajorGroup(fromDate: string, toDate: string) {
       return fetchJson(`${BASE}/occupation/major-groups?${params.toString()}`);
     },
     enabled: Boolean(fromDate) && Boolean(toDate),
-    staleTime: STALE_TIME,
   });
 }
 
@@ -102,7 +98,6 @@ export function useSubMajorGroups(majorGroupId: number | null, fromDate: string,
       return fetchJson(`${BASE}/occupation/major-groups/${majorGroupId}/sub-major-groups?${params.toString()}`);
     },
     enabled: majorGroupId !== null && Boolean(fromDate) && Boolean(toDate),
-    staleTime: STALE_TIME,
   });
 }
 
@@ -114,7 +109,6 @@ export function useMinorGroups(subMajorGroupId: number | null, fromDate: string,
       return fetchJson(`${BASE}/occupation/sub-major-groups/${subMajorGroupId}/minor-groups?${params.toString()}`);
     },
     enabled: subMajorGroupId !== null && Boolean(fromDate) && Boolean(toDate),
-    staleTime: STALE_TIME,
   });
 }
 
@@ -126,7 +120,6 @@ export function useUnitGroups(minorGroupId: number | null, fromDate: string, toD
       return fetchJson(`${BASE}/occupation/minor-groups/${minorGroupId}/unit-groups?${params.toString()}`);
     },
     enabled: minorGroupId !== null && Boolean(fromDate) && Boolean(toDate),
-    staleTime: STALE_TIME,
   });
 }
 
@@ -138,6 +131,5 @@ export function useOccupationGroups(unitGroupId: number | null, fromDate: string
       return fetchJson(`${BASE}/occupation/unit-groups/${unitGroupId}/occupation-groups?${params.toString()}`);
     },
     enabled: unitGroupId !== null && Boolean(fromDate) && Boolean(toDate),
-    staleTime: STALE_TIME,
   });
 }
