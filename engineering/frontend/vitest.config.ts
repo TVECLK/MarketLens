@@ -10,5 +10,6 @@ export default defineConfig({
   test: {
     include: ["**/*.test.ts"],
     exclude: ["node_modules"],
+    restoreMocks: true,
   },
 });
