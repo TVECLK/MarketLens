@@ -32,5 +32,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(firstError.body, { status: firstError.status });
   }
 
-  return NextResponse.json({ ...data, errors });
+  return NextResponse.json({ from_date: fromDate, to_date: toDate, ...data, errors });
 }

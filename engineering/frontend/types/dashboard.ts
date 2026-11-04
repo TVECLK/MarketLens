@@ -6,16 +6,12 @@ export interface VacancyTrendPoint {
 }
 
 export interface VacancyTrendResponse {
-  from_date: string;
-  to_date: string;
   granularity: "daily" | "monthly";
   count: number;
   data: VacancyTrendPoint[];
 }
 
 export interface VacancyTotalResponse {
-  from_date: string;
-  to_date: string;
   total_vacancies: number;
 }
 
@@ -26,8 +22,6 @@ export interface OccupationDateRangeStat {
 }
 
 export interface OccupationsByDateRangeResponse {
-  from_date: string;
-  to_date: string;
   count: number;
   data: OccupationDateRangeStat[];
 }
@@ -39,8 +33,6 @@ export interface IndustryDateRangeStat {
 }
 
 export interface IndustriesByDateRangeResponse {
-  from_date: string;
-  to_date: string;
   count: number;
   data: IndustryDateRangeStat[];
 }
@@ -53,6 +45,8 @@ export type DashboardSection =
 
 // A section is `null` when its backend call failed; the reason is in `errors`.
 export interface DashboardOverview {
+  from_date: string | null;
+  to_date: string | null;
   vacancy_trend: VacancyTrendResponse | null;
   vacancy_total: VacancyTotalResponse | null;
   by_occupation: OccupationsByDateRangeResponse | null;
