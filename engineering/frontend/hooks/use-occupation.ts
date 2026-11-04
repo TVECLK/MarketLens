@@ -9,18 +9,9 @@ import {
   OccupationAnalysisResponse,
   OccupationSkillsResponse
 } from "@/types/occupation";
-import { getApiErrorMessage } from "@/lib/errors";
+import { fetchJson } from "@/lib/fetch-json";
 
 const BASE = ENV.NEXT_PUBLIC_API_BASE_URL;
-
-async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(url, { signal });
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(getApiErrorMessage(body, `Request failed: ${url}`));
-  }
-  return res.json();
-}
 
 async function fetchOccupationSkills(
   level: string,
@@ -30,12 +21,7 @@ async function fetchOccupationSkills(
   signal?: AbortSignal,
 ): Promise<OccupationSkillsResponse> {
   const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate, limit: "50", offset: "0" });
-  const res = await fetch(`${BASE}/occupation/skills/${level}/${id}?${params.toString()}`, { signal });
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(getApiErrorMessage(body, "Failed to fetch occupation skills"));
-  }
-  return res.json();
+  return fetchJson<OccupationSkillsResponse>(`${BASE}/occupation/skills/${level}/${id}?${params.toString()}`, { signal, errorMessage: "Failed to fetch occupation skills" });
 }
 
 export function useOccupationSkills(
@@ -60,12 +46,7 @@ async function fetchOccupationAnalysis(
   signal?: AbortSignal,
 ): Promise<OccupationAnalysisResponse> {
   const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-  const res = await fetch(`${BASE}/analysis/occupation/${level}/${id}?${params.toString()}`, { signal });
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(getApiErrorMessage(body, "Failed to fetch occupation analysis"));
-  }
-  return res.json();
+  return fetchJson<OccupationAnalysisResponse>(`${BASE}/analysis/occupation/${level}/${id}?${params.toString()}`, { signal, errorMessage: "Failed to fetch occupation analysis" });
 }
 
 export function useOccupationAnalysis(
@@ -86,7 +67,7 @@ export function useMajorGroup(fromDate: string, toDate: string) {
     queryKey: ["occupation", "major-groups", fromDate, toDate],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/occupation/major-groups?${params.toString()}`, signal);
+      return fetchJson(`${BASE}/occupation/major-groups?${params.toString()}`, { signal });
     },
     enabled: Boolean(fromDate) && Boolean(toDate),
   });
@@ -97,7 +78,7 @@ export function useSubMajorGroups(majorGroupId: number | null, fromDate: string,
     queryKey: ["occupation", "sub-major-groups", majorGroupId, fromDate, toDate],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/occupation/major-groups/${majorGroupId}/sub-major-groups?${params.toString()}`, signal);
+      return fetchJson(`${BASE}/occupation/major-groups/${majorGroupId}/sub-major-groups?${params.toString()}`, { signal });
     },
     enabled: majorGroupId !== null && Boolean(fromDate) && Boolean(toDate),
   });
@@ -108,7 +89,7 @@ export function useMinorGroups(subMajorGroupId: number | null, fromDate: string,
     queryKey: ["occupation", "minor-groups", subMajorGroupId, fromDate, toDate],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/occupation/sub-major-groups/${subMajorGroupId}/minor-groups?${params.toString()}`, signal);
+      return fetchJson(`${BASE}/occupation/sub-major-groups/${subMajorGroupId}/minor-groups?${params.toString()}`, { signal });
     },
     enabled: subMajorGroupId !== null && Boolean(fromDate) && Boolean(toDate),
   });
@@ -119,7 +100,7 @@ export function useUnitGroups(minorGroupId: number | null, fromDate: string, toD
     queryKey: ["occupation", "unit-groups", minorGroupId, fromDate, toDate],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/occupation/minor-groups/${minorGroupId}/unit-groups?${params.toString()}`, signal);
+      return fetchJson(`${BASE}/occupation/minor-groups/${minorGroupId}/unit-groups?${params.toString()}`, { signal });
     },
     enabled: minorGroupId !== null && Boolean(fromDate) && Boolean(toDate),
   });
@@ -130,7 +111,7 @@ export function useOccupationGroups(unitGroupId: number | null, fromDate: string
     queryKey: ["occupation", "occupation-groups", unitGroupId, fromDate, toDate],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/occupation/unit-groups/${unitGroupId}/occupation-groups?${params.toString()}`, signal);
+      return fetchJson(`${BASE}/occupation/unit-groups/${unitGroupId}/occupation-groups?${params.toString()}`, { signal });
     },
     enabled: unitGroupId !== null && Boolean(fromDate) && Boolean(toDate),
   });

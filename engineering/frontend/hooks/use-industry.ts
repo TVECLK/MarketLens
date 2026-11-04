@@ -7,25 +7,16 @@ import { IndustryListResponse,
   IndustrySubclassChildrenResponse,
   IndustryAnalysisResponse,
 } from "@/types/industry";
-import { getApiErrorMessage } from "@/lib/errors";
+import { fetchJson } from "@/lib/fetch-json";
 
 const BASE = ENV.NEXT_PUBLIC_API_BASE_URL;
-
-async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(url, { signal });
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(getApiErrorMessage(body, `Request failed: ${url}`));
-  }
-  return res.json();
-}
 
 export function useIndustrySectors(fromDate: string, toDate: string) {
   return useQuery<IndustryListResponse>({
     queryKey: ["industry", "sectors", fromDate, toDate],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/industry/industry-sectors?${params.toString()}`, signal);
+      return fetchJson(`${BASE}/industry/industry-sectors?${params.toString()}`, { signal });
     },
     enabled: Boolean(fromDate) && Boolean(toDate),
   });
@@ -36,7 +27,7 @@ export function useIndustryDivisions(industrySectorId: number | null, fromDate: 
     queryKey: ["industry", "industry-divisions", industrySectorId, fromDate, toDate],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/industry/industry-sectors/${industrySectorId}/industry-divisions?${params.toString()}`, signal);
+      return fetchJson(`${BASE}/industry/industry-sectors/${industrySectorId}/industry-divisions?${params.toString()}`, { signal });
     },
     enabled: industrySectorId !== null && Boolean(fromDate) && Boolean(toDate),
   });
@@ -47,7 +38,7 @@ export function useIndustryGroups(industryDivisionId: number | null, fromDate: s
     queryKey: ["industry", "industry-groups", industryDivisionId, fromDate, toDate],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/industry/industry-divisions/${industryDivisionId}/industry-groups?${params.toString()}`, signal);
+      return fetchJson(`${BASE}/industry/industry-divisions/${industryDivisionId}/industry-groups?${params.toString()}`, { signal });
     },
     enabled: industryDivisionId !== null && Boolean(fromDate) && Boolean(toDate),
   });
@@ -58,7 +49,7 @@ export function useIndustryClasses(industryGroupId: number | null, fromDate: str
     queryKey: ["industry", "industry-classes", industryGroupId, fromDate, toDate],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/industry/industry-groups/${industryGroupId}/industry-classes?${params.toString()}`, signal);
+      return fetchJson(`${BASE}/industry/industry-groups/${industryGroupId}/industry-classes?${params.toString()}`, { signal });
     },
     enabled: industryGroupId !== null && Boolean(fromDate) && Boolean(toDate),
   });
@@ -69,7 +60,7 @@ export function useIndustrySubclasses(industryClassId: number | null, fromDate: 
     queryKey: ["industry", "industry-subclasses", industryClassId, fromDate, toDate],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/industry/industry-classes/${industryClassId}/industry-subclasses?${params.toString()}`, signal);
+      return fetchJson(`${BASE}/industry/industry-classes/${industryClassId}/industry-subclasses?${params.toString()}`, { signal });
     },
     enabled: industryClassId !== null && Boolean(fromDate) && Boolean(toDate),
   });
@@ -83,12 +74,7 @@ async function fetchIndustryAnalysis(
   signal?: AbortSignal,
 ): Promise<IndustryAnalysisResponse> {
   const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-  const res = await fetch(`${BASE}/analysis/industry/${level}/${id}?${params.toString()}`, { signal });
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(getApiErrorMessage(body, "Failed to fetch industry analysis"));
-  }
-  return res.json();
+  return fetchJson<IndustryAnalysisResponse>(`${BASE}/analysis/industry/${level}/${id}?${params.toString()}`, { signal, errorMessage: "Failed to fetch industry analysis" });
 }
 
 export function useIndustryAnalysis(
