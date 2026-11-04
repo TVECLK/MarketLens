@@ -15,26 +15,15 @@ export interface VacancyTotalResponse {
   total_vacancies: number;
 }
 
-export interface OccupationDateRangeStat {
+export interface RootJobCountStat {
   id: number;
   name: string;
   open_job_count: number;
 }
 
-export interface OccupationsByDateRangeResponse {
+export interface VacancySummaryResponse {
   count: number;
-  data: OccupationDateRangeStat[];
-}
-
-export interface IndustryDateRangeStat {
-  id: number;
-  name: string;
-  open_job_count: number;
-}
-
-export interface IndustriesByDateRangeResponse {
-  count: number;
-  data: IndustryDateRangeStat[];
+  data: RootJobCountStat[];
 }
 
 export type DashboardSection =
@@ -49,7 +38,7 @@ export interface DashboardOverview {
   to_date: string | null;
   vacancy_trend: VacancyTrendResponse | null;
   vacancy_total: VacancyTotalResponse | null;
-  by_occupation: OccupationsByDateRangeResponse | null;
-  by_industry: IndustriesByDateRangeResponse | null;
+  by_occupation: VacancySummaryResponse | null;
+  by_industry: VacancySummaryResponse | null;
   errors: Partial<Record<DashboardSection, SectionError>>;
 }
