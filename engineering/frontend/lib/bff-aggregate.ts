@@ -3,18 +3,19 @@ import type { SectionError } from "@/types/bff";
 /** How long each section's backend call may take before it is aborted. */
 const SECTION_TIMEOUT_MS = 3000;
 
+/** The status an optional section is expected to fail with (e.g. `children` on a leaf level). */
+const EXPECTED_OPTIONAL_STATUS = 400;
+
 export interface SectionRequest {
-  /** Key the section's data is returned under. */
   key: string;
   url: string;
-  /** A failure is expected and silent (e.g. `children` on a leaf level): no error is recorded. */
   optional?: boolean;
 }
 
 export interface AggregateResult {
   /** Parsed JSON per key, or `null` when that section failed. */
   data: Record<string, unknown>;
-  /** One entry per failed required section. */
+  /** One entry per failed section, except an optional section's expected 400. */
   errors: Record<string, SectionError>;
   /** True when every required section failed. */
   allFailed: boolean;
@@ -39,10 +40,10 @@ export async function fetchSections(
 
   const fail = (key: string, optional: boolean | undefined, status: number, body: unknown, message: string) => {
     data[key] = null;
-    if (optional) return;
+    if (optional && status === EXPECTED_OPTIONAL_STATUS) return;
     console.error(`[bff] ${key} failed (${status}): ${message}`);
     errors[key] = { status, message };
-    firstError ??= { status, body };
+    if (!optional) firstError ??= { status, body };
   };
 
   for (let i = 0; i < requests.length; i++) {
@@ -75,8 +76,9 @@ export async function fetchSections(
     }
   }
 
-  const requiredCount = requests.filter((r) => !r.optional).length;
-  const allFailed = requiredCount > 0 && Object.keys(errors).length === requiredCount;
+  const requiredKeys = requests.filter((r) => !r.optional).map((r) => r.key);
+  const requiredFailedCount = requiredKeys.filter((key) => key in errors).length;
+  const allFailed = requiredKeys.length > 0 && requiredFailedCount === requiredKeys.length;
 
   return { data, errors, allFailed, firstError };
 }

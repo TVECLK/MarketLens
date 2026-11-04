@@ -112,13 +112,41 @@ describe("fetchSections", () => {
     expect(result.data.a).toBeNull();
   });
 
-  it("ignores an optional section's failure: null data, no error, not counted", async () => {
+  it("records an optional section's unexpected failure but doesn't count it toward allFailed", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await fetchSections(
       [
         { key: "a", url: "/a" },
         { key: "children", url: "/children", optional: true },
       ],
-      fakeFetch({ "/a": () => json({ n: 1 }), "/children": () => json({ error: "leaf" }, 404) }),
+      fakeFetch({ "/a": () => json({ n: 1 }), "/children": () => json({ error: "boom" }, 500) }),
+    );
+    expect(result.data).toEqual({ a: { n: 1 }, children: null });
+    expect(result.errors.children).toEqual({ status: 500, message: "boom" });
+    expect(result.allFailed).toBe(false);
+    expect(result.firstError).toBeNull();
+  });
+
+  it("is allFailed when every required section fails, even if an optional one also fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await fetchSections(
+      [
+        { key: "a", url: "/a" },
+        { key: "children", url: "/children", optional: true },
+      ],
+      fakeFetch({ "/a": () => json({ error: "bad" }, 503), "/children": () => json({ error: "boom" }, 500) }),
+    );
+    expect(result.allFailed).toBe(true);
+    expect(result.firstError).toEqual({ status: 503, body: { error: "bad" } });
+  });
+
+  it("ignores an optional section's expected 400: null data, no error, not counted", async () => {
+    const result = await fetchSections(
+      [
+        { key: "a", url: "/a" },
+        { key: "children", url: "/children", optional: true },
+      ],
+      fakeFetch({ "/a": () => json({ n: 1 }), "/children": () => json({ error: "leaf" }, 400) }),
     );
     expect(result.data).toEqual({ a: { n: 1 }, children: null });
     expect(result.errors).toEqual({});

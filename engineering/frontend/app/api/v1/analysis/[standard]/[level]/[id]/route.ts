@@ -21,9 +21,10 @@ const ANALYSIS_TYPES = [
 // Fans out to all 11 backend analysis endpoints for the given standard/level/id,
 // in parallel, and returns one combined JSON response. A section that fails
 // comes back as `null` with its reason under `errors`, so the sections that
-// worked can still be shown. `children` is allowed to fail silently: leaf
-// levels have none. Only when every other section fails is the backend error
-// (status and body) forwarded as-is.
+// worked can still be shown. `children` answers 400 on leaf levels, which
+// is expected and not reported; any other `children` failure is. Only when
+// every other section fails is the backend error (status and body) forwarded
+// as-is.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ standard: string; level: string; id: string }> }
