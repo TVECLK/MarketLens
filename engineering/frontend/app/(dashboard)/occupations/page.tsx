@@ -26,28 +26,12 @@ import {
   useOccupationSkills,
 } from "@/hooks/use-occupation";
 import { CHART_COLORS } from "@/lib/chart-theme";
+import {
+  OCCUPATION_LEVELS as LEVELS,
+  OCCUPATION_LEVEL_LABELS as LEVEL_LABELS,
+  type OccupationLevel,
+} from "@/lib/kpi-config";
 
-type OccupationLevel =
-  | "major-group"
-  | "sub-major-group"
-  | "minor-group"
-  | "unit-group"
-  | "occupation-group";
-
-const LEVELS: OccupationLevel[] = [
-  "major-group",
-  "sub-major-group",
-  "minor-group",
-  "unit-group",
-  "occupation-group",
-];
-const LEVEL_LABELS: Record<OccupationLevel, string> = {
-  "major-group": "Major Group",
-  "sub-major-group": "Sub Major Group",
-  "minor-group": "Minor Group",
-  "unit-group": "Unit Group",
-  "occupation-group": "Occupation Group",
-};
 const MAX_LEVELS = LEVELS.length;
 
 const OCCUPATION_TABS = ["analytics", "skills"] as const;

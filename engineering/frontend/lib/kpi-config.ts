@@ -63,7 +63,12 @@ export const CATEGORY_ORDER = Object.keys(KPI_CATEGORIES) as KPICategoryKey[];
 
 export interface HierarchyLevelDef {
   key: string;
+  /** Slug of the KPI admin route: /kpis/<hierarchyId>/<slug>. */
   slug: string;
+  /** Level name used by the analysis pages (URL param) and the backend analysis endpoints. */
+  analysisLevel: string;
+  /** Name of the level's list in the react-query cache. */
+  queryKey: string;
   title: string;
   itemLabel: string;
 }
@@ -71,39 +76,58 @@ export interface HierarchyLevelDef {
 export interface HierarchyDef {
   label: string;
   accent: string;
-  levels: HierarchyLevelDef[];
+  levels: readonly HierarchyLevelDef[];
 }
 
 // As with KPI_CATEGORIES, the keys are the hierarchy ids and their order is
-// the nav order.
+// the nav order. This is the single place that names the levels of each
+// hierarchy; the analysis pages and the KPI hooks derive theirs from here.
 export const HIERARCHIES = {
   occupation: {
     label: "Occupation",
     accent: "rose",
     levels: [
-      { key: "majorGroup", slug: "major-group", title: "Major Group", itemLabel: "Major Group" },
-      { key: "subMajorGroup", slug: "sub-major-group", title: "Sub Major Group", itemLabel: "Sub Major Group" },
-      { key: "minorGroup", slug: "minor-group", title: "Minor Group", itemLabel: "Minor Group" },
-      { key: "unitGroup", slug: "unit-group", title: "Unit Group", itemLabel: "Unit Group" },
-      { key: "occupationGroup", slug: "occupation-group", title: "Occupation Group", itemLabel: "Occupation Group" },
+      { key: "majorGroup", slug: "major-group", analysisLevel: "major-group", queryKey: "major-groups", title: "Major Group", itemLabel: "Major Group" },
+      { key: "subMajorGroup", slug: "sub-major-group", analysisLevel: "sub-major-group", queryKey: "sub-major-groups", title: "Sub Major Group", itemLabel: "Sub Major Group" },
+      { key: "minorGroup", slug: "minor-group", analysisLevel: "minor-group", queryKey: "minor-groups", title: "Minor Group", itemLabel: "Minor Group" },
+      { key: "unitGroup", slug: "unit-group", analysisLevel: "unit-group", queryKey: "unit-groups", title: "Unit Group", itemLabel: "Unit Group" },
+      { key: "occupationGroup", slug: "occupation-group", analysisLevel: "occupation-group", queryKey: "occupation-groups", title: "Occupation Group", itemLabel: "Occupation Group" },
     ],
   },
   industry: {
     label: "Industry",
     accent: "orange",
     levels: [
-      { key: "sector", slug: "sector", title: "Industry Sector", itemLabel: "Industry Sector" },
-      { key: "division", slug: "division", title: "Industry Division", itemLabel: "Industry Division" },
-      { key: "group", slug: "group", title: "Industry Group", itemLabel: "Industry Group" },
-      { key: "class", slug: "class", title: "Industry Class", itemLabel: "Industry Class" },
-      { key: "subClass", slug: "sub-class", title: "Industry Sub Class", itemLabel: "Industry Sub Class" },
+      { key: "sector", slug: "sector", analysisLevel: "industry-sector", queryKey: "industry-sectors", title: "Industry Sector", itemLabel: "Industry Sector" },
+      { key: "division", slug: "division", analysisLevel: "industry-division", queryKey: "industry-divisions", title: "Industry Division", itemLabel: "Industry Division" },
+      { key: "group", slug: "group", analysisLevel: "industry-group", queryKey: "industry-groups", title: "Industry Group", itemLabel: "Industry Group" },
+      { key: "class", slug: "class", analysisLevel: "industry-class", queryKey: "industry-classes", title: "Industry Class", itemLabel: "Industry Class" },
+      { key: "subClass", slug: "sub-class", analysisLevel: "industry-subclass", queryKey: "industry-subclasses", title: "Industry Sub Class", itemLabel: "Industry Sub Class" },
     ],
   },
-} satisfies Record<string, HierarchyDef>;
+} as const satisfies Record<string, HierarchyDef>;
 
 export type HierarchyId = keyof typeof HIERARCHIES;
 
 export const HIERARCHY_ORDER = Object.keys(HIERARCHIES) as HierarchyId[];
+
+export type OccupationLevel = (typeof HIERARCHIES.occupation.levels)[number]["analysisLevel"];
+export type IndustryLevel = (typeof HIERARCHIES.industry.levels)[number]["analysisLevel"];
+
+function levelLabels<L extends string>(
+  levels: readonly { analysisLevel: L; title: string }[],
+): Record<L, string> {
+  return Object.fromEntries(levels.map((level) => [level.analysisLevel, level.title])) as Record<L, string>;
+}
+
+// Derived from HIERARCHIES, in top-to-leaf order.
+export const OCCUPATION_LEVELS = HIERARCHIES.occupation.levels.map((level) => level.analysisLevel);
+export const OCCUPATION_LEVEL_LABELS = levelLabels(HIERARCHIES.occupation.levels);
+export const OCCUPATION_QUERY_KEYS = HIERARCHIES.occupation.levels.map((level) => level.queryKey);
+
+export const INDUSTRY_LEVELS = HIERARCHIES.industry.levels.map((level) => level.analysisLevel);
+export const INDUSTRY_LEVEL_LABELS = levelLabels(HIERARCHIES.industry.levels);
+export const INDUSTRY_QUERY_KEYS = HIERARCHIES.industry.levels.map((level) => level.queryKey);
 
 // ROUTING — each flat KPI lives at /kpis/<slug>, each hierarchy level at
 // /kpis/<hierarchyId>/<level slug>.

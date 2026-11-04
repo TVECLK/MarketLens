@@ -23,28 +23,12 @@ import {
 } from "@/hooks/use-industry";
 import type { HierarchyNode } from "@/types/analysis";
 import { CHART_COLORS } from "@/lib/chart-theme";
+import {
+  INDUSTRY_LEVELS as LEVELS,
+  INDUSTRY_LEVEL_LABELS as LEVEL_LABELS,
+  type IndustryLevel,
+} from "@/lib/kpi-config";
 
-type IndustryLevel =
-  | "industry-sector"
-  | "industry-division"
-  | "industry-group"
-  | "industry-class"
-  | "industry-subclass";
-
-const LEVELS: IndustryLevel[] = [
-  "industry-sector",
-  "industry-division",
-  "industry-group",
-  "industry-class",
-  "industry-subclass",
-];
-const LEVEL_LABELS: Record<IndustryLevel, string> = {
-  "industry-sector": "Industry Sector",
-  "industry-division": "Industry Division",
-  "industry-group": "Industry Group",
-  "industry-class": "Industry Class",
-  "industry-subclass": "Industry Subclass",
-};
 const MAX_LEVELS = LEVELS.length;
 
 const INDUSTRY_ACCENT = { primary: CHART_COLORS.teal, secondary: CHART_COLORS.indigo };

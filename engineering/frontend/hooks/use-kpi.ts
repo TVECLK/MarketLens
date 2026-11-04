@@ -20,6 +20,7 @@ import type {
   IndustrySubclass, IndustrySubclassListResponse, IndustrySubclassPayload,
 } from "@/types/kpi";
 import { getApiErrorMessage } from "@/lib/errors";
+import { OCCUPATION_QUERY_KEYS, INDUSTRY_QUERY_KEYS } from "@/lib/kpi-config";
 
 
 function useListQuery<TResponse>(
@@ -131,14 +132,6 @@ function useHierarchyDeleteMutation(key: string, endpoint: string, relatedKeys: 
     },
   });
 }
-
-export const OCCUPATION_HIERARCHY_KEYS = [
-  "major-groups", "sub-major-groups", "minor-groups", "unit-groups", "occupation-groups",
-];
-export const INDUSTRY_HIERARCHY_KEYS = [
-  "industry-sectors", "industry-divisions", "industry-groups", "industry-classes", "industry-subclasses",
-];
-
 
 // EMPLOYMENTSECTOR ("employment-sectors")
 
@@ -282,7 +275,7 @@ export function useUpdateMajorGroup() {
 }
 
 export function useDeleteMajorGroup() {
-  return useHierarchyDeleteMutation("major-groups", MAJORGROUPS_URL, OCCUPATION_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("major-groups", MAJORGROUPS_URL, OCCUPATION_QUERY_KEYS);
 }
 
 
@@ -303,7 +296,7 @@ export function useUpdateSubMajorGroup() {
 }
 
 export function useDeleteSubMajorGroup() {
-  return useHierarchyDeleteMutation("sub-major-groups", SUBMAJORGROUPS_URL, OCCUPATION_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("sub-major-groups", SUBMAJORGROUPS_URL, OCCUPATION_QUERY_KEYS);
 }
 
 
@@ -324,7 +317,7 @@ export function useUpdateMinorGroup() {
 }
 
 export function useDeleteMinorGroup() {
-  return useHierarchyDeleteMutation("minor-groups", MINORGROUPS_URL, OCCUPATION_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("minor-groups", MINORGROUPS_URL, OCCUPATION_QUERY_KEYS);
 }
 
 
@@ -345,7 +338,7 @@ export function useUpdateUnitGroup() {
 }
 
 export function useDeleteUnitGroup() {
-  return useHierarchyDeleteMutation("unit-groups", UNITGROUPS_URL, OCCUPATION_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("unit-groups", UNITGROUPS_URL, OCCUPATION_QUERY_KEYS);
 }
 
 
@@ -366,7 +359,7 @@ export function useUpdateOccupationGroup() {
 }
 
 export function useDeleteOccupationGroup() {
-  return useHierarchyDeleteMutation("occupation-groups", OCCUPATIONGROUPS_URL, OCCUPATION_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("occupation-groups", OCCUPATIONGROUPS_URL, OCCUPATION_QUERY_KEYS);
 }
 
 
@@ -387,7 +380,7 @@ export function useUpdateIndustrySector() {
 }
 
 export function useDeleteIndustrySector() {
-  return useHierarchyDeleteMutation("industry-sectors", INDUSTRYSECTORS_URL, INDUSTRY_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("industry-sectors", INDUSTRYSECTORS_URL, INDUSTRY_QUERY_KEYS);
 }
 
 
@@ -408,7 +401,7 @@ export function useUpdateIndustryDivision() {
 }
 
 export function useDeleteIndustryDivision() {
-  return useHierarchyDeleteMutation("industry-divisions", INDUSTRYDIVISIONS_URL, INDUSTRY_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("industry-divisions", INDUSTRYDIVISIONS_URL, INDUSTRY_QUERY_KEYS);
 }
 
 
@@ -429,7 +422,7 @@ export function useUpdateIndustryGroup() {
 }
 
 export function useDeleteIndustryGroup() {
-  return useHierarchyDeleteMutation("industry-groups", INDUSTRYGROUPS_URL, INDUSTRY_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("industry-groups", INDUSTRYGROUPS_URL, INDUSTRY_QUERY_KEYS);
 }
 
 
@@ -450,7 +443,7 @@ export function useUpdateIndustryClass() {
 }
 
 export function useDeleteIndustryClass() {
-  return useHierarchyDeleteMutation("industry-classes", INDUSTRYCLASSES_URL, INDUSTRY_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("industry-classes", INDUSTRYCLASSES_URL, INDUSTRY_QUERY_KEYS);
 }
 
 
@@ -471,5 +464,5 @@ export function useUpdateIndustrySubclass() {
 }
 
 export function useDeleteIndustrySubclass() {
-  return useHierarchyDeleteMutation("industry-subclasses", INDUSTRYSUBCLASSES_URL, INDUSTRY_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("industry-subclasses", INDUSTRYSUBCLASSES_URL, INDUSTRY_QUERY_KEYS);
 }
