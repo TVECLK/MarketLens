@@ -103,6 +103,7 @@ export default function VacancyTrendChart({
           <Area
             type="monotone"
             dataKey="open_job_count"
+            name="Job Count"
             stroke={CHART_COLORS.indigo}
             strokeWidth={2}
             fill="url(#trendFill)"

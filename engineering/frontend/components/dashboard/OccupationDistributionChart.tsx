@@ -84,7 +84,7 @@ export default function OccupationDistributionChart({
             labelStyle={CHART_TOOLTIP_LABEL_STYLE}
             cursor={CHART_BAR_CURSOR}
           />
-          <Bar dataKey="value" fill={CHART_COLORS.indigo} radius={[0, 4, 4, 0]} barSize={16} />
+          <Bar dataKey="value" name="Job Count" fill={CHART_COLORS.indigo} radius={[0, 4, 4, 0]} barSize={16} />
         </BarChart>
       </ResponsiveContainer>
     </ChartCard>

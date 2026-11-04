@@ -83,7 +83,7 @@ export default function IndustryDistributionChart({
             labelStyle={CHART_TOOLTIP_LABEL_STYLE}
             cursor={CHART_BAR_CURSOR}
           />
-          <Bar dataKey="value" fill={CHART_COLORS.teal} radius={[4, 4, 0, 0]} barSize={22} />
+          <Bar dataKey="value" name="Job Count" fill={CHART_COLORS.teal} radius={[4, 4, 0, 0]} barSize={22} />
         </BarChart>
       </ResponsiveContainer>
     </ChartCard>
