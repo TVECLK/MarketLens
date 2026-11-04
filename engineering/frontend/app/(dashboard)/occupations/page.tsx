@@ -12,6 +12,7 @@ import { useUrlEnumParam } from "@/hooks/use-url-enum-param";
 import { URL_PARAMS } from "@/lib/url-params";
 import {
   useHierarchyPath,
+  selectedIdAt,
   useHierarchyDrilldown,
   type HierarchyLevelState,
 } from "@/hooks/use-hierarchy-drilldown";
@@ -48,10 +49,10 @@ export default function OccupationAnalysisPage() {
   const majorGroupQuery = useMajorGroup(fromDate, toDate);
   const majorGroups = useMemo(() => majorGroupQuery.data?.major_groups ?? [], [majorGroupQuery.data]);
 
-  const subMajorGroupsQuery = useSubMajorGroups(ids[0] ?? null, fromDate, toDate);
-  const minorGroupsQuery = useMinorGroups(ids[1] ?? null, fromDate, toDate);
-  const unitGroupsQuery = useUnitGroups(ids[2] ?? null, fromDate, toDate);
-  const occupationGroupsQuery = useOccupationGroups(ids[3] ?? null, fromDate, toDate);
+  const subMajorGroupsQuery = useSubMajorGroups(selectedIdAt(ids, LEVELS, "major-group"), fromDate, toDate);
+  const minorGroupsQuery = useMinorGroups(selectedIdAt(ids, LEVELS, "sub-major-group"), fromDate, toDate);
+  const unitGroupsQuery = useUnitGroups(selectedIdAt(ids, LEVELS, "minor-group"), fromDate, toDate);
+  const occupationGroupsQuery = useOccupationGroups(selectedIdAt(ids, LEVELS, "unit-group"), fromDate, toDate);
 
   const levels: HierarchyLevelState<OccupationLevel>[] = [
     {

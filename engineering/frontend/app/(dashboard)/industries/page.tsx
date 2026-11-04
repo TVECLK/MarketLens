@@ -9,6 +9,7 @@ import { useDateRange } from "@/providers/date-range-provider";
 import { useAnalysisViewMode } from "@/hooks/use-analysis-view-mode";
 import {
   useHierarchyPath,
+  selectedIdAt,
   useHierarchyDrilldown,
   type HierarchyLevelState,
 } from "@/hooks/use-hierarchy-drilldown";
@@ -50,10 +51,10 @@ export default function IndustryAnalysisPage() {
     [industrySectorsQuery.data],
   );
 
-  const industryDivisionsQuery = useIndustryDivisions(ids[0] ?? null, fromDate, toDate);
-  const industryGroupsQuery = useIndustryGroups(ids[1] ?? null, fromDate, toDate);
-  const industryClassesQuery = useIndustryClasses(ids[2] ?? null, fromDate, toDate);
-  const industrySubclassesQuery = useIndustrySubclasses(ids[3] ?? null, fromDate, toDate);
+  const industryDivisionsQuery = useIndustryDivisions(selectedIdAt(ids, LEVELS, "industry-sector"), fromDate, toDate);
+  const industryGroupsQuery = useIndustryGroups(selectedIdAt(ids, LEVELS, "industry-division"), fromDate, toDate);
+  const industryClassesQuery = useIndustryClasses(selectedIdAt(ids, LEVELS, "industry-group"), fromDate, toDate);
+  const industrySubclassesQuery = useIndustrySubclasses(selectedIdAt(ids, LEVELS, "industry-class"), fromDate, toDate);
 
   const levels: HierarchyLevelState<IndustryLevel>[] = [
     {
