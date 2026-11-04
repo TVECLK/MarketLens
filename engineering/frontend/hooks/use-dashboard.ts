@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ENV } from "@/config/env";
+import { STALE_TIME } from "@/config/query";
 import {
   DashboardOverview,
 } from "@/types/dashboard";
@@ -22,6 +23,6 @@ export function useDashboardOverview(fromDate: string, toDate: string) {
     queryKey: ["dashboard", "overview", fromDate, toDate],
     queryFn: () => fetchDashboardOverview(fromDate, toDate),
     enabled: Boolean(fromDate) && Boolean(toDate) && fromDate <= toDate,
-    staleTime: 1000 * 60 * 5,
+    staleTime: STALE_TIME,
   });
 }
