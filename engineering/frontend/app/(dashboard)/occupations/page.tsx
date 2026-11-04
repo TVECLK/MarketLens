@@ -16,13 +16,13 @@ import {
   type HierarchyLevelState,
 } from "@/hooks/use-hierarchy-drilldown";
 import { useAnalysisBreakdown } from "@/hooks/use-analysis-breakdown";
+import { useHierarchyAnalysis } from "@/hooks/use-hierarchy-queries";
 import {
   useMajorGroup,
   useSubMajorGroups,
   useMinorGroups,
   useUnitGroups,
   useOccupationGroups,
-  useOccupationAnalysis,
   useOccupationSkills,
 } from "@/hooks/use-occupation";
 import { CHART_COLORS } from "@/lib/chart-theme";
@@ -103,7 +103,7 @@ export default function OccupationAnalysisPage() {
     isLoading: analysisLoading,
     isError: analysisError,
     error: analysisErrorObj,
-  } = useOccupationAnalysis(deepest?.level ?? null, deepest?.id ?? null, fromDate, toDate);
+  } = useHierarchyAnalysis("occupation", deepest?.level ?? null, deepest?.id ?? null, fromDate, toDate);
 
   const breakdown = useAnalysisBreakdown(analysis);
 

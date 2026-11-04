@@ -13,13 +13,13 @@ import {
   type HierarchyLevelState,
 } from "@/hooks/use-hierarchy-drilldown";
 import { useAnalysisBreakdown } from "@/hooks/use-analysis-breakdown";
+import { useHierarchyAnalysis } from "@/hooks/use-hierarchy-queries";
 import {
   useIndustrySectors,
   useIndustryDivisions,
   useIndustryGroups,
   useIndustryClasses,
   useIndustrySubclasses,
-  useIndustryAnalysis,
 } from "@/hooks/use-industry";
 import type { HierarchyNode } from "@/types/analysis";
 import { CHART_COLORS } from "@/lib/chart-theme";
@@ -105,7 +105,7 @@ export default function IndustryAnalysisPage() {
     isLoading: analysisLoading,
     isError: analysisError,
     error: analysisErrorObj,
-  } = useIndustryAnalysis(deepest?.level ?? null, deepest?.id ?? null, fromDate, toDate);
+  } = useHierarchyAnalysis("industry", deepest?.level ?? null, deepest?.id ?? null, fromDate, toDate);
 
   const breakdown = useAnalysisBreakdown(analysis);
 

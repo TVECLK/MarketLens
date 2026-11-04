@@ -6,12 +6,15 @@ import {
   MinorGroupChildrenResponse,
   UnitGroupChildrenResponse,
   OccupationGroupChildrenResponse,
-  OccupationAnalysisResponse,
   OccupationSkillsResponse
 } from "@/types/occupation";
 import { fetchJson } from "@/lib/fetch-json";
+import { OCCUPATION_QUERY_KEYS } from "@/lib/kpi-config";
+import { useHierarchyRoot, useHierarchyChildren } from "@/hooks/use-hierarchy-queries";
 
 const BASE = ENV.NEXT_PUBLIC_API_BASE_URL;
+
+const [MAJOR_GROUPS, SUB_MAJOR_GROUPS, MINOR_GROUPS, UNIT_GROUPS, OCCUPATION_GROUPS] = OCCUPATION_QUERY_KEYS;
 
 async function fetchOccupationSkills(
   level: string,
@@ -38,81 +41,22 @@ export function useOccupationSkills(
   });
 }
 
-async function fetchOccupationAnalysis(
-  level: string,
-  id: number,
-  fromDate: string,
-  toDate: string,
-  signal?: AbortSignal,
-): Promise<OccupationAnalysisResponse> {
-  const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-  return fetchJson<OccupationAnalysisResponse>(`${BASE}/analysis/occupation/${level}/${id}?${params.toString()}`, { signal, errorMessage: "Failed to fetch occupation analysis" });
-}
-
-export function useOccupationAnalysis(
-  level: string | null,
-  id: number | null,
-  fromDate: string,
-  toDate: string,
-) {
-  return useQuery<OccupationAnalysisResponse>({
-    queryKey: ["occupation-analysis", level, id, fromDate, toDate],
-    queryFn: ({ signal }) => fetchOccupationAnalysis(level as string, id as number, fromDate, toDate, signal),
-    enabled: level !== null && id !== null && Boolean(fromDate) && Boolean(toDate) && fromDate <= toDate,
-  });
-}
-
 export function useMajorGroup(fromDate: string, toDate: string) {
-  return useQuery<MajorGroupListResponse>({
-    queryKey: ["occupation", "major-groups", fromDate, toDate],
-    queryFn: ({ signal }) => {
-      const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/occupation/major-groups?${params.toString()}`, { signal });
-    },
-    enabled: Boolean(fromDate) && Boolean(toDate),
-  });
+  return useHierarchyRoot<MajorGroupListResponse>("occupation", MAJOR_GROUPS, fromDate, toDate);
 }
 
 export function useSubMajorGroups(majorGroupId: number | null, fromDate: string, toDate: string) {
-  return useQuery<SubMajorGroupChildrenResponse>({
-    queryKey: ["occupation", "sub-major-groups", majorGroupId, fromDate, toDate],
-    queryFn: ({ signal }) => {
-      const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/occupation/major-groups/${majorGroupId}/sub-major-groups?${params.toString()}`, { signal });
-    },
-    enabled: majorGroupId !== null && Boolean(fromDate) && Boolean(toDate),
-  });
+  return useHierarchyChildren<SubMajorGroupChildrenResponse>("occupation", MAJOR_GROUPS, SUB_MAJOR_GROUPS, majorGroupId, fromDate, toDate);
 }
 
 export function useMinorGroups(subMajorGroupId: number | null, fromDate: string, toDate: string) {
-  return useQuery<MinorGroupChildrenResponse>({
-    queryKey: ["occupation", "minor-groups", subMajorGroupId, fromDate, toDate],
-    queryFn: ({ signal }) => {
-      const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/occupation/sub-major-groups/${subMajorGroupId}/minor-groups?${params.toString()}`, { signal });
-    },
-    enabled: subMajorGroupId !== null && Boolean(fromDate) && Boolean(toDate),
-  });
+  return useHierarchyChildren<MinorGroupChildrenResponse>("occupation", SUB_MAJOR_GROUPS, MINOR_GROUPS, subMajorGroupId, fromDate, toDate);
 }
 
 export function useUnitGroups(minorGroupId: number | null, fromDate: string, toDate: string) {
-  return useQuery<UnitGroupChildrenResponse>({
-    queryKey: ["occupation", "unit-groups", minorGroupId, fromDate, toDate],
-    queryFn: ({ signal }) => {
-      const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/occupation/minor-groups/${minorGroupId}/unit-groups?${params.toString()}`, { signal });
-    },
-    enabled: minorGroupId !== null && Boolean(fromDate) && Boolean(toDate),
-  });
+  return useHierarchyChildren<UnitGroupChildrenResponse>("occupation", MINOR_GROUPS, UNIT_GROUPS, minorGroupId, fromDate, toDate);
 }
 
 export function useOccupationGroups(unitGroupId: number | null, fromDate: string, toDate: string) {
-  return useQuery<OccupationGroupChildrenResponse>({
-    queryKey: ["occupation", "occupation-groups", unitGroupId, fromDate, toDate],
-    queryFn: ({ signal }) => {
-      const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate });
-      return fetchJson(`${BASE}/occupation/unit-groups/${unitGroupId}/occupation-groups?${params.toString()}`, { signal });
-    },
-    enabled: unitGroupId !== null && Boolean(fromDate) && Boolean(toDate),
-  });
+  return useHierarchyChildren<OccupationGroupChildrenResponse>("occupation", UNIT_GROUPS, OCCUPATION_GROUPS, unitGroupId, fromDate, toDate);
 }
