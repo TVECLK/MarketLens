@@ -6,6 +6,11 @@ const SECTION_TIMEOUT_MS = 3000;
 /** The status an optional section is expected to fail with (e.g. `children` on a leaf level). */
 const EXPECTED_OPTIONAL_STATUS = 400;
 
+/** True for the error `AbortSignal.timeout` raises, whether it hits the request or the body read. */
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.name === "TimeoutError";
+}
+
 export interface SectionRequest {
   key: string;
   url: string;
@@ -52,7 +57,7 @@ export async function fetchSections(
 
     if (result.status === "rejected") {
       const details = result.reason instanceof Error ? result.reason.message : String(result.reason);
-      if (result.reason instanceof Error && result.reason.name === "TimeoutError") {
+      if (isTimeoutError(result.reason)) {
         fail(key, optional, 504, { error: `Timed out waiting for the backend for ${key}`, details }, details);
       } else {
         fail(key, optional, 502, { error: `Failed to reach the backend for ${key}`, details }, details);
@@ -70,9 +75,16 @@ export async function fetchSections(
 
     try {
       data[key] = await res.json();
-    } catch {
-      const message = `Invalid response from ${key}`;
-      fail(key, optional, 502, { error: message }, message);
+    } catch (error) {
+      // The timeout also covers reading the body: a backend that sends headers
+      // in time but stalls on the JSON aborts here, after fetch has settled.
+      if (isTimeoutError(error)) {
+        const message = `Timed out reading the backend response for ${key}`;
+        fail(key, optional, 504, { error: message }, message);
+      } else {
+        const message = `Invalid response from ${key}`;
+        fail(key, optional, 502, { error: message }, message);
+      }
     }
   }
 

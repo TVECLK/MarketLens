@@ -102,6 +102,25 @@ describe("fetchSections", () => {
     expect(result.errors.a).toEqual({ status: 503, message: "Backend returned an error from a" });
   });
 
+  it("reports a body that times out after the headers as a 504 and keeps the others", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const stalledBody = () =>
+      new Response(
+        new ReadableStream({
+          pull(controller) {
+            controller.error(new DOMException("The operation timed out", "TimeoutError"));
+          },
+        }),
+        { status: 200 },
+      );
+    const result = await fetchSections(
+      requests,
+      fakeFetch({ "/a": () => json({ n: 1 }), "/b": stalledBody, "/c": () => json({ n: 3 }) }),
+    );
+    expect(result.errors.b).toEqual({ status: 504, message: "Timed out reading the backend response for b" });
+    expect(result.data).toMatchObject({ a: { n: 1 }, b: null, c: { n: 3 } });
+  });
+
   it("treats an unparseable success body as a failed section", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await fetchSections(
