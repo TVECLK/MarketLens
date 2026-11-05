@@ -24,12 +24,7 @@ export interface IndustrySubclassChildrenResponse {
 }
 
 
-export interface Industry {
-  id:   number;
-  name: string;
-}
-
 export interface IndustryListResponse {
   count:      number;
-  industry_sectors: Industry[];
+  industry_sectors: HierarchyNode[];
 }

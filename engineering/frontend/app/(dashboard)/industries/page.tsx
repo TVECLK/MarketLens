@@ -22,7 +22,6 @@ import {
   useIndustryClasses,
   useIndustrySubclasses,
 } from "@/hooks/use-industry";
-import type { HierarchyNode } from "@/types/analysis";
 import { CHART_COLORS } from "@/lib/chart-theme";
 import {
   INDUSTRY_LEVELS as LEVELS,
@@ -41,13 +40,8 @@ export default function IndustryAnalysisPage() {
   const [ids, setIds] = useHierarchyPath(LEVELS);
 
   const industrySectorsQuery = useIndustrySectors(fromDate, toDate);
-  const industrySectors = useMemo<HierarchyNode[]>(
-    () =>
-      (industrySectorsQuery.data?.industry_sectors ?? []).map((s) => ({
-        id: s.id,
-        name: s.name,
-        code: "",
-      })),
+  const industrySectors = useMemo(
+    () => industrySectorsQuery.data?.industry_sectors ?? [],
     [industrySectorsQuery.data],
   );
 
