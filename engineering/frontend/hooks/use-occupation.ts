@@ -22,9 +22,11 @@ async function fetchOccupationSkills(
   id: number,
   fromDate: string,
   toDate: string,
+  limit: number,
+  offset: number,
   signal?: AbortSignal,
 ): Promise<OccupationSkillsResponse> {
-  const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate, limit: "50", offset: "0" });
+  const params = new URLSearchParams({ "from-date": fromDate, "to-date": toDate, limit: String(limit), offset: String(offset) });
   return fetchJson<OccupationSkillsResponse>(`${BASE}/occupation/skills/${level}/${id}?${params.toString()}`, { signal, errorMessage: "Failed to fetch occupation skills" });
 }
 
@@ -33,11 +35,22 @@ export function useOccupationSkills(
   id: number | null,
   fromDate: string,
   toDate: string,
+  page: number,
+  pageSize: number,
   enabled: boolean,
 ) {
+  const limit = pageSize;
+  const offset = (page - 1) * pageSize;
   return useQuery<OccupationSkillsResponse>({
-    queryKey: ["occupation-skills", level, id, fromDate, toDate],
-    queryFn: ({ signal }) => fetchOccupationSkills(level as string, id as number, fromDate, toDate, signal),
+    queryKey: ["occupation-skills", level, id, fromDate, toDate, limit, offset],
+    queryFn: ({ signal }) => fetchOccupationSkills(level as string, id as number, fromDate, toDate, limit, offset, signal),
+    // Keep the previous page on screen while the next one loads, but only for
+    // the same occupation node and dates: another node's skills must not show
+    // under this node's header.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery && previousQuery.queryKey.slice(1, 5).join("|") === [level, id, fromDate, toDate].join("|")
+        ? previous
+        : undefined,
     enabled: enabled && level !== null && id !== null && isValidDateRange(fromDate, toDate),
   });
 }

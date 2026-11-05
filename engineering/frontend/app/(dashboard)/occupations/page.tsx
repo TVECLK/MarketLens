@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import BackLink from "@/components/shared/BackLink";
 import ClassificationHierarchyPicker from "@/components/analysis/ClassificationHierarchyPicker";
 import AnalysisHeaderBar from "@/components/analysis/AnalysisHeaderBar";
@@ -10,6 +10,7 @@ import { useDateRange } from "@/providers/date-range-provider";
 import { useAnalysisViewMode } from "@/hooks/use-analysis-view-mode";
 import { useUrlEnumParam } from "@/hooks/use-url-enum-param";
 import { URL_PARAMS } from "@/lib/url-params";
+import { clampPage } from "@/lib/pagination";
 import {
   useHierarchyPath,
   selectedIdAt,
@@ -36,6 +37,8 @@ import {
 const MAX_LEVELS = LEVELS.length;
 
 const OCCUPATION_TABS = ["analytics", "skills"] as const;
+
+const SKILLS_PAGE_SIZE = 20;
 
 const OCCUPATION_ACCENT = { primary: CHART_COLORS.indigo, secondary: CHART_COLORS.teal };
 
@@ -108,17 +111,33 @@ export default function OccupationAnalysisPage() {
 
   const breakdown = useAnalysisBreakdown(analysis);
 
+  // The skills table is paged; go back to page 1 when the node or dates change.
+  const skillsResetKey = `${deepest?.level}:${deepest?.id}|${fromDate}|${toDate}`;
+  const [skillsPage, setSkillsPage] = useState(1);
+  const [pageResetKey, setPageResetKey] = useState(skillsResetKey);
+  if (pageResetKey !== skillsResetKey) {
+    setPageResetKey(skillsResetKey);
+    setSkillsPage(1);
+  }
+
   const {
     data: skillsData,
     isLoading: skillsLoading,
+    isFetching: skillsFetching,
     isError: skillsError,
   } = useOccupationSkills(
     deepest?.level ?? null,
     deepest?.id ?? null,
     fromDate,
     toDate,
+    skillsPage,
+    SKILLS_PAGE_SIZE,
     activeTab === "skills",
   );
+
+  // If the list shrinks under the current page, step back to the last page.
+  const clampedSkillsPage = clampPage(skillsPage, skillsData?.all_skills?.total, SKILLS_PAGE_SIZE);
+  if (clampedSkillsPage !== skillsPage) setSkillsPage(clampedSkillsPage);
 
   const topSkills = useMemo(
     () =>
@@ -129,10 +148,6 @@ export default function OccupationAnalysisPage() {
     [skillsData],
   );
   const allSkills = useMemo(() => skillsData?.all_skills?.skills ?? [], [skillsData]);
-  const totalSkillMentions = useMemo(
-    () => allSkills.reduce((sum, s) => sum + s.open_job_count, 0) || 1,
-    [allSkills],
-  );
   const topEmployers = useMemo(() => skillsData?.top_hiring_employers?.employers ?? [], [skillsData]);
 
   const nextLevelLabel =
@@ -224,11 +239,15 @@ export default function OccupationAnalysisPage() {
           {activeTab === "skills" && (
             <SkillAnalysisPanel
               isLoading={skillsLoading}
+              isFetching={skillsFetching}
               isError={skillsError}
               topSkills={topSkills}
               allSkills={allSkills}
               totalSkillsCount={skillsData?.all_skills?.total ?? 0}
-              totalSkillMentions={totalSkillMentions}
+              totalVacancies={breakdown.nodeTotal}
+              page={skillsPage}
+              pageSize={SKILLS_PAGE_SIZE}
+              onPageChange={setSkillsPage}
               topEmployers={topEmployers}
               sectionErrors={skillsData?.errors ?? {}}
             />
