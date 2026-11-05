@@ -33,7 +33,7 @@ jobs:
       - name: Set up node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
           cache-dependency-path: engineering/frontend/package-lock.json
 
@@ -90,23 +90,29 @@ jobs:
           fi
 
       - name: Verify container health
+        timeout-minutes: 3
         run: |
           sleep 5
           docker ps | grep frontend | grep -q "Up" || (echo "Container is not healthy" && docker logs frontend && exit 1)
 
           # check that the Next.js server answers HTTP requests
           for i in $(seq 1 10); do
-            STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)
-            if [ "$STATUS" != "000" ] && [ "$STATUS" -lt 500 ]; then
+            CURL_EXIT=0
+            STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+              --connect-timeout 2 --max-time 5 \
+              http://localhost:3000/) || CURL_EXIT=$?
+
+            # "/" is a public route, so only 2xx counts; 3xx/4xx/5xx mean a broken homepage
+            if [ "$CURL_EXIT" -eq 0 ] && [[ "$STATUS" =~ ^2[0-9]{2}$ ]]; then
               echo "Server responded with HTTP $STATUS"
               echo "Container is running successfully"
               exit 0
             fi
-            echo "Waiting for server... (attempt $i, status $STATUS)"
+            echo "Waiting for server... (attempt $i, status $STATUS, curl exit $CURL_EXIT)"
             sleep 2
           done
 
-          echo "Error: Server did not respond. Showing logs below:"
+          echo "Error: Homepage did not return a 2xx status (last status $STATUS, curl exit $CURL_EXIT). Showing logs below:"
           docker logs frontend
           exit 1
 
