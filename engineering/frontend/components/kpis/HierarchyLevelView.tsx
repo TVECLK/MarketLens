@@ -157,13 +157,9 @@ export default function HierarchyLevelView({
     });
   }
 
-  function countDescendants(index: number, targetId: number): number {
-    if (index === levels.length - 1) return 0;
-    const childItems = levels[index + 1].items.filter((c) => c.parentId === targetId);
-    return childItems.reduce((sum, child) => sum + 1 + countDescendants(index + 1, child.id), 0);
-  }
-
-  const deleteDescendantCount = deleteTarget ? countDescendants(levelIndex, deleteTarget.id) : 0;
+  // Rows nested below this one are deleted with it. They can't be counted
+  // reliably here: the last level is paginated, so only one page is loaded.
+  const hasLowerLevels = levelIndex < levels.length - 1;
   const levelCounts = levels.map((lvl) => lvl.total ?? lvl.items.length);
 
   return (
@@ -211,12 +207,11 @@ export default function HierarchyLevelView({
             <span className="font-bold text-gray-800">
               &quot;{deleteTarget.code} — {deleteTarget.name}&quot;
             </span>
-            . This action can&apos;t be undone.
+            .
           </p>
-          {deleteDescendantCount > 0 && (
+          {hasLowerLevels && (
             <p className="font-bold text-red-500 mt-2">
-              It also has {deleteDescendantCount} item{deleteDescendantCount === 1 ? "" : "s"} nested
-              underneath it across the lower levels — those will be deleted too.
+              It also permanently removes every item nested underneath it in the lower levels.
             </p>
           )}
         </ConfirmDeleteModal>
