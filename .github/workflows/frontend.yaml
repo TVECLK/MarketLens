@@ -1,61 +1,151 @@
 name: Frontend Test
 
 on:
-    push:
-        branches: ["main", "fix/frontend-workflow"]
-        paths:
-            - "engineering/frontend/**"
-            - ".github/workflows/frontend.yaml"
-    pull_request:
-        branches: ["main", "fix/frontend-workflow"]
-        paths:
-            - "engineering/frontend/**"
-            - ".github/workflows/frontend.yaml"
+  push:
+    branches: ["main", "fix/frontend-workflow"]
+    paths:
+      - "engineering/frontend/**"
+      - ".github/workflows/frontend.yaml"
+  pull_request:
+    branches: ["main", "fix/frontend-workflow"]
+    paths:
+      - "engineering/frontend/**"
+      - ".github/workflows/frontend.yaml"
 
 concurrency:
-    group: ${{github.workflow}}-${{github.ref}}
-    cancel-in-progress: true
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: true
 
 permissions:
-    contents: read
+  contents: read
 
 jobs:
-    frontend-test:
-        runs-on: ubuntu-latest
-        defaults:
-            run:
-                working-directory: engineering/frontend
+  frontend-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engineering/frontend
 
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-            - name: Set up node
-              uses: actions/setup-node@v4
-              with:
-                  node-version: "20"
-                  cache: "npm"
-                  cache-dependency-path: engineering/frontend/package-lock.json
+      - name: Set up node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: engineering/frontend/package-lock.json
 
-            - name: Install dependencies
-              run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-            - name: Run linter
-              run: npm run lint
+      - name: Run linter
+        run: npm run lint
 
-            - name: Run tests
-              run: npm test
+      - name: Run tests
+        run: npm test
 
-            - name: Set up docker buildx
-              uses: docker/setup-buildx-action@v3
+      - name: Set up docker buildx
+        uses: docker/setup-buildx-action@v3
 
-            - name: Build frontend image
-              uses: docker/build-push-action@v6
-              with:
-                  context: ./engineering/frontend
-                  file: ./engineering/frontend/Dockerfile.frontend
-                  push: false
-                  load: true
-                  tags: frontend:latest
-                  cache-from: type=gha
-                  cache-to: type=gha,mode=max
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./engineering/frontend
+          file: ./engineering/frontend/Dockerfile.frontend
+          push: false
+          load: true
+          tags: frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify docker image
+        run: |
+          docker images | grep frontend || (echo "Image build failed" && exit 1)
+
+      - name: Run docker container
+        run: |
+          # run the container with dummy (non-secret) values for CI only
+          docker run -d --name frontend \
+            -p 3000:3000 \
+            -e NEXT_PUBLIC_API_BASE_URL="/api/v1" \
+            -e BACKEND_API_URL="http://localhost:8080" \
+            -e NEXT_PUBLIC_THUNDERID_BASE_URL="https://localhost:8090" \
+            -e NEXT_PUBLIC_THUNDERID_APPLICATION_ID="ci-application-id" \
+            -e NEXT_PUBLIC_THUNDERID_CLIENT_ID="ci-client-id" \
+            -e THUNDERID_CLIENT_SECRET="ci-client-secret" \
+            -e THUNDERID_SECRET="$(openssl rand -base64 32)" \
+            frontend:latest
+
+          # wait for 3 seconds
+          sleep 3
+
+          if [ "$(docker inspect -f '{{.State.Running}}' frontend)" == "true" ]; then
+            echo "Success: Container is running."
+          else
+            echo "Error: Container crashed. Showing logs below:"
+            docker logs frontend
+            exit 1
+          fi
+
+      - name: Verify container health
+        run: |
+          sleep 5
+          docker ps | grep frontend | grep -q "Up" || (echo "Container is not healthy" && docker logs frontend && exit 1)
+
+          # check that the Next.js server answers HTTP requests
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)
+            if [ "$STATUS" != "000" ] && [ "$STATUS" -lt 500 ]; then
+              echo "Server responded with HTTP $STATUS"
+              echo "Container is running successfully"
+              exit 0
+            fi
+            echo "Waiting for server... (attempt $i, status $STATUS)"
+            sleep 2
+          done
+
+          echo "Error: Server did not respond. Showing logs below:"
+          docker logs frontend
+          exit 1
+
+      - name: Stop docker container
+        run: |
+          docker stop frontend
+
+          # check the status
+          if [ "$(docker inspect -f '{{.State.Status}}' frontend)" == "exited" ]; then
+            echo "Success: Container stopped."
+          else
+            echo "Error: Container stop failed. Showing logs below:"
+            docker logs frontend
+            exit 1
+          fi
+
+      - name: Remove docker container
+        if: always()
+        run: |
+          docker rm -f frontend || true
+
+          # Check if the container ID still exists
+          if [ -z "$(docker ps -aq -f name=^frontend$)" ]; then
+            echo "Container removed successfully"
+          else
+            echo "Container removal failed"
+            exit 1
+          fi
+
+      - name: Remove docker image
+        if: always()
+        run: |
+          docker rmi -f frontend:latest || true
+
+          # Check if the image still exists
+          if [ -z "$(docker images -q --filter "reference=frontend:latest")" ]; then
+            echo "Image removed successfully"
+          else
+            echo "Image removal failed"
+            docker images
+            exit 1
+          fi
