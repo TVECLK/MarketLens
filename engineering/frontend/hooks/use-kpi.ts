@@ -22,6 +22,7 @@ import type {
 import { ENV } from "@/config/env";
 import { getApiErrorMessage } from "@/lib/errors";
 import { OCCUPATION_QUERY_KEYS, INDUSTRY_QUERY_KEYS } from "@/lib/kpi-config";
+import { invalidateAfterKpiChange, relatedListKeys } from "@/lib/query-invalidation";
 
 const BASE = ENV.NEXT_PUBLIC_API_BASE_URL;
 
@@ -67,9 +68,7 @@ function useCreateMutation<TPayload, TResult>(key: string, endpoint: string) {
       }
       return data as TResult;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [key, "list"] });
-    },
+    onSuccess: () => invalidateAfterKpiChange(queryClient, relatedListKeys(key)),
   });
 }
 
@@ -88,14 +87,12 @@ function useUpdateMutation<TPayload, TResult>(key: string, endpoint: string) {
       }
       return data as TResult;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [key, "list"] });
-    },
+    onSuccess: () => invalidateAfterKpiChange(queryClient, relatedListKeys(key)),
   });
 }
 
-/** Plain delete: invalidates only this entity's own list. Used for flat KPIs
- * (no children, so no cascade concern). */
+/** Plain delete: invalidates only this entity's own admin list (plus the
+ * dashboard queries). Used for flat KPIs (no children, so no cascade concern). */
 function useDeleteMutation(key: string, endpoint: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -107,9 +104,7 @@ function useDeleteMutation(key: string, endpoint: string) {
       }
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [key, "list"] });
-    },
+    onSuccess: () => invalidateAfterKpiChange(queryClient, [key]),
   });
 }
 
@@ -130,9 +125,7 @@ function useHierarchyDeleteMutation(key: string, endpoint: string, relatedKeys: 
       }
       return data;
     },
-    onSuccess: () => {
-      relatedKeys.forEach((k) => queryClient.invalidateQueries({ queryKey: [k, "list"] }));
-    },
+    onSuccess: () => invalidateAfterKpiChange(queryClient, relatedKeys),
   });
 }
 
