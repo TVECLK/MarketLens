@@ -21,6 +21,10 @@ describe("hierarchyRootRequest", () => {
     expect(hierarchyRootRequest("industry", "industry-sectors", "", TO).enabled).toBe(false);
     expect(hierarchyRootRequest("industry", "industry-sectors", FROM, "").enabled).toBe(false);
   });
+
+  it("is disabled for a reversed date range", () => {
+    expect(hierarchyRootRequest("industry", "industry-sectors", TO, FROM).enabled).toBe(false);
+  });
 });
 
 describe("hierarchyChildrenRequest", () => {
@@ -37,6 +41,7 @@ describe("hierarchyChildrenRequest", () => {
     expect(enabled(null)).toBe(false);
     expect(enabled(3, "")).toBe(false);
     expect(enabled(3, FROM, "")).toBe(false);
+    expect(enabled(3, TO, FROM)).toBe(false);
   });
 });
 

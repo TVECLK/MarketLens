@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ENV } from "@/config/env";
+import { isValidDateRange } from "@/lib/date-range";
 import { fetchJson } from "@/lib/fetch-json";
 import type { AnalysisResponse } from "@/types/analysis";
 
@@ -27,7 +28,7 @@ export function hierarchyRootRequest(
   return {
     queryKey: [standard, path, fromDate, toDate],
     url: `${BASE}/${standard}/${path}?${dateQuery(fromDate, toDate)}`,
-    enabled: Boolean(fromDate) && Boolean(toDate),
+    enabled: isValidDateRange(fromDate, toDate),
   };
 }
 
@@ -43,7 +44,7 @@ export function hierarchyChildrenRequest(
   return {
     queryKey: [standard, childPath, parentId, fromDate, toDate],
     url: `${BASE}/${standard}/${parentPath}/${parentId}/${childPath}?${dateQuery(fromDate, toDate)}`,
-    enabled: parentId !== null && Boolean(fromDate) && Boolean(toDate),
+    enabled: parentId !== null && isValidDateRange(fromDate, toDate),
   };
 }
 
@@ -58,7 +59,7 @@ export function hierarchyAnalysisRequest(
   return {
     queryKey: ["analysis", standard, level, id, fromDate, toDate],
     url: `${BASE}/analysis/${standard}/${level}/${id}?${dateQuery(fromDate, toDate)}`,
-    enabled: level !== null && id !== null && Boolean(fromDate) && Boolean(toDate) && fromDate <= toDate,
+    enabled: level !== null && id !== null && isValidDateRange(fromDate, toDate),
   };
 }
 

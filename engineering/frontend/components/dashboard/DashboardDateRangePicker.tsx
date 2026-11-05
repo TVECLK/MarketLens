@@ -2,7 +2,7 @@
 
 import DateRangePicker from "@/components/shared/DateRangePicker";
 import { useScrolled } from "@/hooks/use-scrolled";
-import { getMaxSelectableDate, getMinSelectableDate } from "@/lib/date-range";
+import { getMaxSelectableDate, getMinSelectableDate, isValidDateRange } from "@/lib/date-range";
 import { useDateRange } from "@/providers/date-range-provider";
 
 /** The date range picker wired to the shared date range, for the dashboard pages. */
@@ -19,6 +19,7 @@ export default function DashboardDateRangePicker() {
       minDate={getMinSelectableDate()}
       maxDate={getMaxSelectableDate()}
       scrolled={scrolled}
+      error={isValidDateRange(fromDate, toDate) ? undefined : "Select both a start and an end date, with the start on or before the end."}
     />
   );
 }

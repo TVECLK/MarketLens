@@ -18,3 +18,8 @@ export function getMinSelectableDate(): Date {
   const end = getMaxSelectableDate();
   return new Date(end.getFullYear() - 3, 0, 1);
 }
+
+/** True when both dates are set and `from` is not after `to` (ISO dates compare as strings). */
+export function isValidDateRange(fromDate: string, toDate: string): boolean {
+  return Boolean(fromDate) && Boolean(toDate) && fromDate <= toDate;
+}

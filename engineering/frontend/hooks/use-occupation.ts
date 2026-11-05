@@ -8,6 +8,7 @@ import {
   OccupationGroupChildrenResponse,
   OccupationSkillsResponse
 } from "@/types/occupation";
+import { isValidDateRange } from "@/lib/date-range";
 import { fetchJson } from "@/lib/fetch-json";
 import { OCCUPATION_QUERY_KEYS } from "@/lib/kpi-config";
 import { useHierarchyRoot, useHierarchyChildren } from "@/hooks/use-hierarchy-queries";
@@ -37,7 +38,7 @@ export function useOccupationSkills(
   return useQuery<OccupationSkillsResponse>({
     queryKey: ["occupation-skills", level, id, fromDate, toDate],
     queryFn: ({ signal }) => fetchOccupationSkills(level as string, id as number, fromDate, toDate, signal),
-    enabled: enabled && level !== null && id !== null && Boolean(fromDate) && Boolean(toDate) && fromDate <= toDate,
+    enabled: enabled && level !== null && id !== null && isValidDateRange(fromDate, toDate),
   });
 }
 

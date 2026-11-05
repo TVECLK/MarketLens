@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { toISODate, getMinSelectableDate, getMaxSelectableDate } from "@/lib/date-range";
+import { toISODate, getMinSelectableDate, getMaxSelectableDate, isValidDateRange } from "@/lib/date-range";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -47,5 +47,21 @@ describe("getMinSelectableDate", () => {
     expect(start.getFullYear()).toBe(2023);
     expect(start.getMonth()).toBe(0);
     expect(start.getDate()).toBe(1);
+  });
+});
+
+describe("isValidDateRange", () => {
+  it("accepts a range where from is before or equal to to", () => {
+    expect(isValidDateRange("2026-01-01", "2026-01-31")).toBe(true);
+    expect(isValidDateRange("2026-01-01", "2026-01-01")).toBe(true);
+  });
+
+  it("rejects a cleared date", () => {
+    expect(isValidDateRange("", "2026-01-31")).toBe(false);
+    expect(isValidDateRange("2026-01-01", "")).toBe(false);
+  });
+
+  it("rejects a reversed range", () => {
+    expect(isValidDateRange("2026-02-01", "2026-01-31")).toBe(false);
   });
 });
