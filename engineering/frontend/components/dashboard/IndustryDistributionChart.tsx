@@ -27,10 +27,13 @@ export default function IndustryDistributionChart({
   isError,
   linkHref,
 }: IndustryDistributionChartProps) {
+  // The number of industries comes from the data: admins can add or remove them.
+  const subtitle = data.length > 0 ? `All ${data.length} standard industries` : "Standard industries";
+
   return (
     <ChartCard
       title="Job Distribution by Industry (SLSIC)"
-      subtitle="All 21 standard industries"
+      subtitle={subtitle}
       heightClassName="h-[480px] md:h-[640px]"
       bodyClassName="pb-10"
       isLoading={isLoading}
