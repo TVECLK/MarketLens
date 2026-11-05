@@ -108,12 +108,12 @@ function useDeleteMutation(key: string, endpoint: string) {
   });
 }
 
-/** Cascade-aware delete for hierarchy levels: the DB already has
- * ON DELETE CASCADE on every parent_id foreign key, so deleting a row at any
- * level removes all its descendants server-side automatically. The client
- * just needs to invalidate every level's cache in that hierarchy (not only
- * the level that was deleted), since we don't track which lower-level rows
- * silently vanished as a result. */
+/** Cascade-aware delete for hierarchy levels: the backend soft-deletes the
+ * row (sets deleted_at) and, in the same transaction, soft-deletes all its
+ * descendants itself, since soft delete doesn't trigger any DB-level cascade.
+ * The client just needs to invalidate every level's cache in that hierarchy
+ * (not only the level that was deleted), since we don't track which
+ * lower-level rows were hidden as a result. */
 function useHierarchyDeleteMutation(key: string, endpoint: string, relatedKeys: string[]) {
   const queryClient = useQueryClient();
   return useMutation({
