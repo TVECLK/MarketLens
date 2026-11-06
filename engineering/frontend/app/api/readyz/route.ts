@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
-const GO_API = process.env.GO_BACKEND_URL;
+const BACKEND_API = process.env.BACKEND_API_URL;
 
 export async function GET() {
-  console.log("[readyz] checking backend health:", `${GO_API}/healthz`);
+  console.log("[readyz] checking backend health:", `${BACKEND_API}/healthz`);
 
   try {
-    const response = await fetch(`${GO_API}/healthz`, {
+    const response = await fetch(`${BACKEND_API}/healthz`, {
       signal: AbortSignal.timeout(2000),
     });
 

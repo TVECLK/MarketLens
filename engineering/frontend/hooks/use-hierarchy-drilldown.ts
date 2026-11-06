@@ -19,6 +19,21 @@ export interface PathNode<TLevelKey extends string> extends HierarchyNode {
 }
 
 /**
+ * The id selected at `level`, or null when that level isn't selected yet (or
+ * isn't one of `levels`). Looks the level up by name instead of by position,
+ * so a query's parent id keeps pointing at the right level if `levels` is
+ * ever reordered or shortened.
+ */
+export function selectedIdAt<TLevel extends string>(
+  ids: readonly number[],
+  levels: readonly TLevel[],
+  level: TLevel,
+): number | null {
+  const index = levels.indexOf(level);
+  return index >= 0 && index < ids.length ? ids[index] : null;
+}
+
+/**
  * Owns the drilldown selection, stored in the URL as one param per level
  * (`?major-group=2&sub-major-group=11`) so a drilldown can be shared as a
  * link. Returns the selected ids in level order. Call this first, before any

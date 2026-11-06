@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAccessToken } from "@/lib/token";
 
-const GO_API = `${process.env.GO_BACKEND_URL}/api/v1`;
+const BACKEND_API = `${process.env.BACKEND_API_URL}/api/v1`;
 
 // Get industry sub classes with pagination
 export async function GET(request: NextRequest) {
@@ -9,23 +9,23 @@ export async function GET(request: NextRequest) {
   const limit = searchParams.get("limit");
   const offset = searchParams.get("offset");
 
-  const goParams = new URLSearchParams();
-  if (limit) goParams.set("limit", limit);
-  if (offset) goParams.set("offset", offset);
+  const backendParams = new URLSearchParams();
+  if (limit) backendParams.set("limit", limit);
+  if (offset) backendParams.set("offset", offset);
 
-  const queryString = goParams.toString();
-  const goUrl = `${GO_API}/industry-subclasses${queryString ? `?${queryString}` : ""}`;
+  const queryString = backendParams.toString();
+  const backendUrl = `${BACKEND_API}/industry-sub-classes${queryString ? `?${queryString}` : ""}`;
 
-  console.log("[industry-subclasses] fetching from Go:", goUrl);
+  console.log("[industry-subclasses] fetching from backend:", backendUrl);
 
   try {
-    const response = await fetch(goUrl);
+    const response = await fetch(backendUrl);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[industry-subclasses] Go error body:", errorText);
+      console.error("[industry-subclasses] backend error body:", errorText);
       return NextResponse.json(
-        { error: "Go backend returned an error", details: errorText },
+        { error: "Backend returned an error", details: errorText },
         { status: response.status }
       );
     }
@@ -51,26 +51,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Please sign in first' }, { status: 401 })
   }
 
-  const goUrl = `${GO_API}/industry-subclasses`;
+  const backendUrl = `${BACKEND_API}/industry-sub-classes`;
 
   try {
     const body = await request.json();
 
-    const response = await fetch(goUrl, {
+    const response = await fetch(backendUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
       body: JSON.stringify(body),
     });
 
-    const data = await response.json();
-
     if (!response.ok) {
-      console.error("[industry-subclasses] Go error body:", data);
+      const errorBody = await response.json().catch(() => null);
+      console.error("[industry-subclasses] backend error body:", errorBody);
       return NextResponse.json(
-        { error: "Go backend returned an error", details: data },
+        { error: "Backend returned an error", details: errorBody },
         { status: response.status }
       );
     }
+
+    const data = await response.json();
 
     return NextResponse.json(data, { status: 201 });
   } catch (error) {

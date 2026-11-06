@@ -73,13 +73,52 @@ describe("fetchSections", () => {
     expect(result.data.b).toBeNull();
   });
 
+  it("aborts each section's request after a timeout", async () => {
+    const fetchFn = fakeFetch({ "/a": () => json({ n: 1 }) });
+    await fetchSections([{ key: "a", url: "/a" }], fetchFn);
+    expect(fetchFn).toHaveBeenCalledWith("/a", { signal: expect.any(AbortSignal) });
+  });
+
+  it("reports a timed-out section as a 504 and keeps the others", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await fetchSections(
+      requests,
+      fakeFetch({
+        "/a": () => json({ n: 1 }),
+        "/b": () => Promise.reject(new DOMException("The operation timed out", "TimeoutError")),
+        "/c": () => json({ n: 3 }),
+      }),
+    );
+    expect(result.errors.b).toEqual({ status: 504, message: "The operation timed out" });
+    expect(result.data).toMatchObject({ a: { n: 1 }, b: null, c: { n: 3 } });
+  });
+
   it("falls back to a generic message when the error body isn't JSON", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await fetchSections(
       [{ key: "a", url: "/a" }],
       fakeFetch({ "/a": () => new Response("oops", { status: 503 }) }),
     );
-    expect(result.errors.a).toEqual({ status: 503, message: "Go backend returned an error from a" });
+    expect(result.errors.a).toEqual({ status: 503, message: "Backend returned an error from a" });
+  });
+
+  it("reports a body that times out after the headers as a 504 and keeps the others", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const stalledBody = () =>
+      new Response(
+        new ReadableStream({
+          pull(controller) {
+            controller.error(new DOMException("The operation timed out", "TimeoutError"));
+          },
+        }),
+        { status: 200 },
+      );
+    const result = await fetchSections(
+      requests,
+      fakeFetch({ "/a": () => json({ n: 1 }), "/b": stalledBody, "/c": () => json({ n: 3 }) }),
+    );
+    expect(result.errors.b).toEqual({ status: 504, message: "Timed out reading the backend response for b" });
+    expect(result.data).toMatchObject({ a: { n: 1 }, b: null, c: { n: 3 } });
   });
 
   it("treats an unparseable success body as a failed section", async () => {
@@ -92,13 +131,41 @@ describe("fetchSections", () => {
     expect(result.data.a).toBeNull();
   });
 
-  it("ignores an optional section's failure: null data, no error, not counted", async () => {
+  it("records an optional section's unexpected failure but doesn't count it toward allFailed", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await fetchSections(
       [
         { key: "a", url: "/a" },
         { key: "children", url: "/children", optional: true },
       ],
-      fakeFetch({ "/a": () => json({ n: 1 }), "/children": () => json({ error: "leaf" }, 404) }),
+      fakeFetch({ "/a": () => json({ n: 1 }), "/children": () => json({ error: "boom" }, 500) }),
+    );
+    expect(result.data).toEqual({ a: { n: 1 }, children: null });
+    expect(result.errors.children).toEqual({ status: 500, message: "boom" });
+    expect(result.allFailed).toBe(false);
+    expect(result.firstError).toBeNull();
+  });
+
+  it("is allFailed when every required section fails, even if an optional one also fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await fetchSections(
+      [
+        { key: "a", url: "/a" },
+        { key: "children", url: "/children", optional: true },
+      ],
+      fakeFetch({ "/a": () => json({ error: "bad" }, 503), "/children": () => json({ error: "boom" }, 500) }),
+    );
+    expect(result.allFailed).toBe(true);
+    expect(result.firstError).toEqual({ status: 503, body: { error: "bad" } });
+  });
+
+  it("ignores an optional section's expected 400: null data, no error, not counted", async () => {
+    const result = await fetchSections(
+      [
+        { key: "a", url: "/a" },
+        { key: "children", url: "/children", optional: true },
+      ],
+      fakeFetch({ "/a": () => json({ n: 1 }), "/children": () => json({ error: "leaf" }, 400) }),
     );
     expect(result.data).toEqual({ a: { n: 1 }, children: null });
     expect(result.errors).toEqual({});

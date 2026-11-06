@@ -95,7 +95,7 @@ export default function AnalysisBreakdownCharts({
                   labelStyle={CHART_TOOLTIP_LABEL_STYLE}
                   cursor={CHART_BAR_CURSOR}
                 />
-                <Bar dataKey="value" fill={accent.primary} radius={[0, 4, 4, 0]} barSize={18} />
+                <Bar dataKey="value" name="Job Count" fill={accent.primary} radius={[0, 4, 4, 0]} barSize={18} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -121,7 +121,7 @@ export default function AnalysisBreakdownCharts({
                     labelStyle={CHART_TOOLTIP_LABEL_STYLE}
                     cursor={CHART_BAR_CURSOR}
                   />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={36}>
+                  <Bar dataKey="value" name="Job Count" radius={[4, 4, 0, 0]} barSize={36}>
                     {sectorData.map((_, i) => (
                       <Cell key={i} fill={SECTOR_COLORS[i % SECTOR_COLORS.length]} />
                     ))}
@@ -150,7 +150,7 @@ export default function AnalysisBreakdownCharts({
                     labelStyle={CHART_TOOLTIP_LABEL_STYLE}
                     cursor={CHART_BAR_CURSOR}
                   />
-                  <Bar dataKey="value" fill={CHART_COLORS.sky} radius={[4, 4, 0, 0]} barSize={30} />
+                  <Bar dataKey="value" name="Job Count" fill={CHART_COLORS.sky} radius={[4, 4, 0, 0]} barSize={30} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -340,7 +340,7 @@ export default function AnalysisBreakdownCharts({
                   labelStyle={CHART_TOOLTIP_LABEL_STYLE}
                   cursor={CHART_BAR_CURSOR}
                 />
-                <Bar dataKey="value" fill={CHART_COLORS.violet} radius={[4, 4, 0, 0]} barSize={28} />
+                <Bar dataKey="value" name="Job Count" fill={CHART_COLORS.violet} radius={[4, 4, 0, 0]} barSize={28} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -353,7 +353,7 @@ export default function AnalysisBreakdownCharts({
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: accent.primary }} />
             Remote / On-Site / Hybrid
           </h3>
-          {sectionErrors.remote_onsite_hybrid ? (
+          {sectionErrors.work_modes ? (
             <SectionMessage />
           ) : (
             <div className="space-y-4">

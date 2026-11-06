@@ -6,43 +6,24 @@ export interface VacancyTrendPoint {
 }
 
 export interface VacancyTrendResponse {
-  from_date: string;
-  to_date: string;
-  granularity: "weekly" | "monthly";
+  granularity: "daily" | "monthly";
   count: number;
   data: VacancyTrendPoint[];
 }
 
 export interface VacancyTotalResponse {
-  from_date: string;
-  to_date: string;
   total_vacancies: number;
 }
 
-export interface OccupationDateRangeStat {
+export interface RootJobCountStat {
   id: number;
   name: string;
   open_job_count: number;
 }
 
-export interface OccupationsByDateRangeResponse {
-  from_date: string;
-  to_date: string;
+export interface VacancySummaryResponse {
   count: number;
-  occupations: OccupationDateRangeStat[];
-}
-
-export interface IndustryDateRangeStat {
-  id: number;
-  name: string;
-  open_job_count: number;
-}
-
-export interface IndustriesByDateRangeResponse {
-  from_date: string;
-  to_date: string;
-  count: number;
-  industries: IndustryDateRangeStat[];
+  data: RootJobCountStat[];
 }
 
 export type DashboardSection =
@@ -53,9 +34,11 @@ export type DashboardSection =
 
 // A section is `null` when its backend call failed; the reason is in `errors`.
 export interface DashboardOverview {
+  from_date: string | null;
+  to_date: string | null;
   vacancy_trend: VacancyTrendResponse | null;
   vacancy_total: VacancyTotalResponse | null;
-  by_occupation: OccupationsByDateRangeResponse | null;
-  by_industry: IndustriesByDateRangeResponse | null;
+  by_occupation: VacancySummaryResponse | null;
+  by_industry: VacancySummaryResponse | null;
   errors: Partial<Record<DashboardSection, SectionError>>;
 }

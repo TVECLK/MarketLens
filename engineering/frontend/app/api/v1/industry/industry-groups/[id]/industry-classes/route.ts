@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const GO_API = `${process.env.GO_BACKEND_URL}/api/v1`;
+const BACKEND_API = `${process.env.BACKEND_API_URL}/api/v1`;
 
 // GET /api/industry/industry-groups/:id/industry-classes
 export async function GET(
@@ -13,23 +13,24 @@ export async function GET(
   const fromDate = searchParams.get("from-date");
   const toDate = searchParams.get("to-date");
 
-  const goParams = new URLSearchParams();
-  if (fromDate) goParams.set("from-date", fromDate);
-  if (toDate) goParams.set("to-date", toDate);
-  const queryString = goParams.toString();
+  const backendParams = new URLSearchParams();
+  if (fromDate) backendParams.set("from-date", fromDate);
+  if (toDate) backendParams.set("to-date", toDate);
+  const queryString = backendParams.toString();
 
-  const goUrl = `${GO_API}/industry-groups/${id}/industry-classes${queryString ? `?${queryString}` : ""}`;
+  const backendUrl = `${BACKEND_API}/industry-groups/${id}/industry-classes${queryString ? `?${queryString}` : ""}`;
 
-  console.log("[industry-groups-industry-classes] fetching from Go:", goUrl);
+  console.log("[industry-groups-industry-classes] fetching from backend:", backendUrl);
 
   try {
-    const response = await fetch(goUrl);
-    const data = await response.json();
-
+    const response = await fetch(backendUrl);
     if (!response.ok) {
-      console.error("[industry-groups-industry-classes] Go error body:", data);
-      return NextResponse.json(data, { status: response.status });
+      const errorBody = await response.json().catch(() => null);
+      console.error("[industry-groups-industry-classes] backend error body:", errorBody);
+      return NextResponse.json(errorBody ?? { error: "Backend returned an error" }, { status: response.status });
     }
+
+    const data = await response.json();
 
     return NextResponse.json(data);
   } catch (error) {

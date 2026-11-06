@@ -29,10 +29,13 @@ export default function OccupationDistributionChart({
   isError,
   linkHref,
 }: OccupationDistributionChartProps) {
+  // The number of occupations comes from the data: admins can add or remove them.
+  const subtitle = data.length > 0 ? `All ${data.length} standard occupations` : "Standard occupations";
+
   return (
     <ChartCard
       title="Job Distribution by Occupation (SLSO)"
-      subtitle="All 10 standard occupations"
+      subtitle={subtitle}
       heightClassName="h-[420px] md:h-[540px]"
       isLoading={isLoading}
       isError={isError}
@@ -84,7 +87,7 @@ export default function OccupationDistributionChart({
             labelStyle={CHART_TOOLTIP_LABEL_STYLE}
             cursor={CHART_BAR_CURSOR}
           />
-          <Bar dataKey="value" fill={CHART_COLORS.indigo} radius={[0, 4, 4, 0]} barSize={16} />
+          <Bar dataKey="value" name="Job Count" fill={CHART_COLORS.indigo} radius={[0, 4, 4, 0]} barSize={16} />
         </BarChart>
       </ResponsiveContainer>
     </ChartCard>

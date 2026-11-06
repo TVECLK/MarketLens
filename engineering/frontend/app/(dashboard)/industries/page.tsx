@@ -9,42 +9,26 @@ import { useDateRange } from "@/providers/date-range-provider";
 import { useAnalysisViewMode } from "@/hooks/use-analysis-view-mode";
 import {
   useHierarchyPath,
+  selectedIdAt,
   useHierarchyDrilldown,
   type HierarchyLevelState,
 } from "@/hooks/use-hierarchy-drilldown";
 import { useAnalysisBreakdown } from "@/hooks/use-analysis-breakdown";
+import { useHierarchyAnalysis } from "@/hooks/use-hierarchy-queries";
 import {
   useIndustrySectors,
   useIndustryDivisions,
   useIndustryGroups,
   useIndustryClasses,
   useIndustrySubclasses,
-  useIndustryAnalysis,
 } from "@/hooks/use-industry";
-import type { HierarchyNode } from "@/types/analysis";
 import { CHART_COLORS } from "@/lib/chart-theme";
+import {
+  INDUSTRY_LEVELS as LEVELS,
+  INDUSTRY_LEVEL_LABELS as LEVEL_LABELS,
+  type IndustryLevel,
+} from "@/lib/kpi-config";
 
-type IndustryLevel =
-  | "industry-sector"
-  | "industry-division"
-  | "industry-group"
-  | "industry-class"
-  | "industry-subclass";
-
-const LEVELS: IndustryLevel[] = [
-  "industry-sector",
-  "industry-division",
-  "industry-group",
-  "industry-class",
-  "industry-subclass",
-];
-const LEVEL_LABELS: Record<IndustryLevel, string> = {
-  "industry-sector": "Industry Sector",
-  "industry-division": "Industry Division",
-  "industry-group": "Industry Group",
-  "industry-class": "Industry Class",
-  "industry-subclass": "Industry Subclass",
-};
 const MAX_LEVELS = LEVELS.length;
 
 const INDUSTRY_ACCENT = { primary: CHART_COLORS.teal, secondary: CHART_COLORS.indigo };
@@ -56,20 +40,15 @@ export default function IndustryAnalysisPage() {
   const [ids, setIds] = useHierarchyPath(LEVELS);
 
   const industrySectorsQuery = useIndustrySectors(fromDate, toDate);
-  const industrySectors = useMemo<HierarchyNode[]>(
-    () =>
-      (industrySectorsQuery.data?.industry_sectors ?? []).map((s) => ({
-        id: s.id,
-        name: s.name,
-        code: "",
-      })),
+  const industrySectors = useMemo(
+    () => industrySectorsQuery.data?.industry_sectors ?? [],
     [industrySectorsQuery.data],
   );
 
-  const industryDivisionsQuery = useIndustryDivisions(ids[0] ?? null, fromDate, toDate);
-  const industryGroupsQuery = useIndustryGroups(ids[1] ?? null, fromDate, toDate);
-  const industryClassesQuery = useIndustryClasses(ids[2] ?? null, fromDate, toDate);
-  const industrySubclassesQuery = useIndustrySubclasses(ids[3] ?? null, fromDate, toDate);
+  const industryDivisionsQuery = useIndustryDivisions(selectedIdAt(ids, LEVELS, "industry-sector"), fromDate, toDate);
+  const industryGroupsQuery = useIndustryGroups(selectedIdAt(ids, LEVELS, "industry-division"), fromDate, toDate);
+  const industryClassesQuery = useIndustryClasses(selectedIdAt(ids, LEVELS, "industry-group"), fromDate, toDate);
+  const industrySubclassesQuery = useIndustrySubclasses(selectedIdAt(ids, LEVELS, "industry-class"), fromDate, toDate);
 
   const levels: HierarchyLevelState<IndustryLevel>[] = [
     {
@@ -121,7 +100,7 @@ export default function IndustryAnalysisPage() {
     isLoading: analysisLoading,
     isError: analysisError,
     error: analysisErrorObj,
-  } = useIndustryAnalysis(deepest?.level ?? null, deepest?.id ?? null, fromDate, toDate);
+  } = useHierarchyAnalysis("industry", deepest?.level ?? null, deepest?.id ?? null, fromDate, toDate);
 
   const breakdown = useAnalysisBreakdown(analysis);
 

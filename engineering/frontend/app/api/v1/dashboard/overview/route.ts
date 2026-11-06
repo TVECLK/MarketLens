@@ -1,36 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchSections } from "@/lib/bff-aggregate";
 
-const GO_API = `${process.env.GO_BACKEND_URL}/api/v1`;
+const BACKEND_API = `${process.env.BACKEND_API_URL}/api/v1`;
 
 // GET /api/v1/dashboard/overview?from-date=YYYY-MM-DD&to-date=YYYY-MM-DD
-// Fans out to the Go dashboard endpoints and returns one combined response.
+// Fans out to the backend dashboard endpoints and returns one combined response.
 // A section that fails comes back as `null` with its reason under `errors`, so
 // the sections that worked can still be shown. Only when every section fails
-// is the Go error (status and body) forwarded as-is, e.g. 400 for bad dates.
+// is the backend error (status and body) forwarded as-is, e.g. 400 for bad dates.
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
   const fromDate = searchParams.get("from-date");
   const toDate = searchParams.get("to-date");
 
-  const goParams = new URLSearchParams();
-  if (fromDate) goParams.set("from-date", fromDate);
-  if (toDate) goParams.set("to-date", toDate);
-  const queryString = goParams.toString();
+  const backendParams = new URLSearchParams();
+  if (fromDate) backendParams.set("from-date", fromDate);
+  if (toDate) backendParams.set("to-date", toDate);
+  const queryString = backendParams.toString();
 
-  console.log("[dashboard-overview] fetching from Go:", { fromDate, toDate });
+  console.log("[dashboard-overview] fetching from backend:", { fromDate, toDate });
 
   const { data, errors, allFailed, firstError } = await fetchSections([
-    { key: "vacancy_trend", url: `${GO_API}/vacancy-trend?${queryString}` },
-    { key: "vacancy_total", url: `${GO_API}/vacancy-total?${queryString}` },
-    { key: "by_occupation", url: `${GO_API}/occupations/by-date-range?${queryString}` },
-    { key: "by_industry", url: `${GO_API}/industries/by-date-range?${queryString}` },
+    { key: "vacancy_trend", url: `${BACKEND_API}/vacancy-trend?${queryString}` },
+    { key: "vacancy_total", url: `${BACKEND_API}/total-vacancy?${queryString}` },
+    { key: "by_occupation", url: `${BACKEND_API}/analytics/occupation/vacancy-summary?${queryString}` },
+    { key: "by_industry", url: `${BACKEND_API}/analytics/industry/vacancy-summary?${queryString}` },
   ]);
 
   if (allFailed && firstError) {
     return NextResponse.json(firstError.body, { status: firstError.status });
   }
 
-  return NextResponse.json({ ...data, errors });
+  return NextResponse.json({ from_date: fromDate, to_date: toDate, ...data, errors });
 }

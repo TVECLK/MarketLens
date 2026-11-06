@@ -1,5 +1,5 @@
 import type { SectionError } from "@/types/bff";
-import type { AnalysisResponse, HierarchyNode } from "./analysis";
+import type { HierarchyNode } from "./analysis";
 
 export type { HierarchyNode } from "./analysis";
 
@@ -28,7 +28,6 @@ export interface OccupationGroupChildrenResponse {
   occupation_groups: HierarchyNode[];
 }
 
-export type OccupationAnalysisResponse = AnalysisResponse;
 
 export interface SkillStat { id: number; skill: string; open_job_count: number; }
 export interface EmployerStat { id: number; name: string; open_job_count: number; }

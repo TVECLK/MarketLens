@@ -1,17 +1,26 @@
 import type { SectionError } from "@/types/bff";
 
+/** How long each section's backend call may take before it is aborted. */
+const SECTION_TIMEOUT_MS = 3000;
+
+/** The status an optional section is expected to fail with (e.g. `children` on a leaf level). */
+const EXPECTED_OPTIONAL_STATUS = 400;
+
+/** True for the error `AbortSignal.timeout` raises, whether it hits the request or the body read. */
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.name === "TimeoutError";
+}
+
 export interface SectionRequest {
-  /** Key the section's data is returned under. */
   key: string;
   url: string;
-  /** A failure is expected and silent (e.g. `children` on a leaf level): no error is recorded. */
   optional?: boolean;
 }
 
 export interface AggregateResult {
   /** Parsed JSON per key, or `null` when that section failed. */
   data: Record<string, unknown>;
-  /** One entry per failed required section. */
+  /** One entry per failed section, except an optional section's expected 400. */
   errors: Record<string, SectionError>;
   /** True when every required section failed. */
   allFailed: boolean;
@@ -28,7 +37,7 @@ export async function fetchSections(
   requests: SectionRequest[],
   fetchFn: typeof fetch = fetch,
 ): Promise<AggregateResult> {
-  const settled = await Promise.allSettled(requests.map(({ url }) => fetchFn(url)));
+  const settled = await Promise.allSettled(requests.map(({ url }) => fetchFn(url, { signal: AbortSignal.timeout(SECTION_TIMEOUT_MS) })));
 
   const data: Record<string, unknown> = {};
   const errors: Record<string, SectionError> = {};
@@ -36,10 +45,10 @@ export async function fetchSections(
 
   const fail = (key: string, optional: boolean | undefined, status: number, body: unknown, message: string) => {
     data[key] = null;
-    if (optional) return;
+    if (optional && status === EXPECTED_OPTIONAL_STATUS) return;
     console.error(`[bff] ${key} failed (${status}): ${message}`);
     errors[key] = { status, message };
-    firstError ??= { status, body };
+    if (!optional) firstError ??= { status, body };
   };
 
   for (let i = 0; i < requests.length; i++) {
@@ -48,28 +57,40 @@ export async function fetchSections(
 
     if (result.status === "rejected") {
       const details = result.reason instanceof Error ? result.reason.message : String(result.reason);
-      fail(key, optional, 502, { error: `Failed to reach the backend for ${key}`, details }, details);
+      if (isTimeoutError(result.reason)) {
+        fail(key, optional, 504, { error: `Timed out waiting for the backend for ${key}`, details }, details);
+      } else {
+        fail(key, optional, 502, { error: `Failed to reach the backend for ${key}`, details }, details);
+      }
       continue;
     }
 
     const res = result.value;
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      const message = body?.error ?? body?.details ?? `Go backend returned an error from ${key}`;
+      const message = body?.error ?? body?.details ?? `Backend returned an error from ${key}`;
       fail(key, optional, res.status, body ?? { error: message }, message);
       continue;
     }
 
     try {
       data[key] = await res.json();
-    } catch {
-      const message = `Invalid response from ${key}`;
-      fail(key, optional, 502, { error: message }, message);
+    } catch (error) {
+      // The timeout also covers reading the body: a backend that sends headers
+      // in time but stalls on the JSON aborts here, after fetch has settled.
+      if (isTimeoutError(error)) {
+        const message = `Timed out reading the backend response for ${key}`;
+        fail(key, optional, 504, { error: message }, message);
+      } else {
+        const message = `Invalid response from ${key}`;
+        fail(key, optional, 502, { error: message }, message);
+      }
     }
   }
 
-  const requiredCount = requests.filter((r) => !r.optional).length;
-  const allFailed = requiredCount > 0 && Object.keys(errors).length === requiredCount;
+  const requiredKeys = requests.filter((r) => !r.optional).map((r) => r.key);
+  const requiredFailedCount = requiredKeys.filter((key) => key in errors).length;
+  const allFailed = requiredKeys.length > 0 && requiredFailedCount === requiredKeys.length;
 
   return { data, errors, allFailed, firstError };
 }

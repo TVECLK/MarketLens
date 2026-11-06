@@ -19,7 +19,12 @@ import type {
   IndustryClass, IndustryClassListResponse, IndustryClassPayload,
   IndustrySubclass, IndustrySubclassListResponse, IndustrySubclassPayload,
 } from "@/types/kpi";
+import { ENV } from "@/config/env";
 import { getApiErrorMessage } from "@/lib/errors";
+import { OCCUPATION_QUERY_KEYS, INDUSTRY_QUERY_KEYS } from "@/lib/kpi-config";
+import { invalidateAfterKpiChange, relatedListKeys } from "@/lib/query-invalidation";
+
+const BASE = ENV.NEXT_PUBLIC_API_BASE_URL;
 
 
 function useListQuery<TResponse>(
@@ -37,15 +42,14 @@ function useListQuery<TResponse>(
    const url = qs ? `${endpoint}?${qs}` : endpoint;
   return useQuery<TResponse>({
     queryKey: [key, "list", params ?? {}],
-    queryFn: async () => {
-      const res = await fetch(url);
+    queryFn: async ({ signal }) => {
+      const res = await fetch(url, { signal });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         throw new Error(getApiErrorMessage(data, `Failed to fetch ${key}`));
       }
       return data as TResponse;
     },
-    staleTime: 1000 * 60, // 1 minute
   });
 }
 
@@ -64,9 +68,7 @@ function useCreateMutation<TPayload, TResult>(key: string, endpoint: string) {
       }
       return data as TResult;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [key, "list"] });
-    },
+    onSuccess: () => invalidateAfterKpiChange(queryClient, relatedListKeys(key)),
   });
 }
 
@@ -85,14 +87,12 @@ function useUpdateMutation<TPayload, TResult>(key: string, endpoint: string) {
       }
       return data as TResult;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [key, "list"] });
-    },
+    onSuccess: () => invalidateAfterKpiChange(queryClient, relatedListKeys(key)),
   });
 }
 
-/** Plain delete: invalidates only this entity's own list. Used for flat KPIs
- * (no children, so no cascade concern). */
+/** Plain delete: invalidates only this entity's own admin list (plus the
+ * dashboard queries). Used for flat KPIs (no children, so no cascade concern). */
 function useDeleteMutation(key: string, endpoint: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -104,18 +104,16 @@ function useDeleteMutation(key: string, endpoint: string) {
       }
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [key, "list"] });
-    },
+    onSuccess: () => invalidateAfterKpiChange(queryClient, [key]),
   });
 }
 
-/** Cascade-aware delete for hierarchy levels: the DB already has
- * ON DELETE CASCADE on every parent_id foreign key, so deleting a row at any
- * level removes all its descendants server-side automatically. The client
- * just needs to invalidate every level's cache in that hierarchy (not only
- * the level that was deleted), since we don't track which lower-level rows
- * silently vanished as a result. */
+/** Cascade-aware delete for hierarchy levels: the backend soft-deletes the
+ * row (sets deleted_at) and, in the same transaction, soft-deletes all its
+ * descendants itself, since soft delete doesn't trigger any DB-level cascade.
+ * The client just needs to invalidate every level's cache in that hierarchy
+ * (not only the level that was deleted), since we don't track which
+ * lower-level rows were hidden as a result. */
 function useHierarchyDeleteMutation(key: string, endpoint: string, relatedKeys: string[]) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -127,23 +125,13 @@ function useHierarchyDeleteMutation(key: string, endpoint: string, relatedKeys: 
       }
       return data;
     },
-    onSuccess: () => {
-      relatedKeys.forEach((k) => queryClient.invalidateQueries({ queryKey: [k, "list"] }));
-    },
+    onSuccess: () => invalidateAfterKpiChange(queryClient, relatedKeys),
   });
 }
 
-export const OCCUPATION_HIERARCHY_KEYS = [
-  "major-groups", "sub-major-groups", "minor-groups", "unit-groups", "occupation-groups",
-];
-export const INDUSTRY_HIERARCHY_KEYS = [
-  "industry-sectors", "industry-divisions", "industry-groups", "industry-classes", "industry-subclasses",
-];
-
-
 // EMPLOYMENTSECTOR ("employment-sectors")
 
-const EMPLOYMENTSECTORS_URL = "/api/v1/employment-sectors";
+const EMPLOYMENTSECTORS_URL = `${BASE}/employment-sectors`;
 
 export function useEmploymentSectors() {
   return useListQuery<EmploymentSectorListResponse>("employment-sectors", EMPLOYMENTSECTORS_URL);
@@ -164,7 +152,7 @@ export function useDeleteEmploymentSector() {
 
 // EXPERIENCE ("experiences")
 
-const EXPERIENCES_URL = "/api/v1/experiences";
+const EXPERIENCES_URL = `${BASE}/experiences`;
 
 export function useExperiences() {
   return useListQuery<ExperienceListResponse>("experiences", EXPERIENCES_URL);
@@ -185,7 +173,7 @@ export function useDeleteExperience() {
 
 // EDUCATIONLEVEL ("education-levels")
 
-const EDUCATIONLEVELS_URL = "/api/v1/education-levels";
+const EDUCATIONLEVELS_URL = `${BASE}/education-levels`;
 
 export function useEducationLevels() {
   return useListQuery<EducationLevelListResponse>("education-levels", EDUCATIONLEVELS_URL);
@@ -205,7 +193,7 @@ export function useDeleteEducationLevel() {
 
 
 // FORMALITY ("formalities")
-const FORMALITIES_URL = "/api/v1/formalities";
+const FORMALITIES_URL = `${BASE}/formalities`;
 
 export function useFormalities() {
   return useListQuery<FormalityListResponse>("formalities", FORMALITIES_URL);
@@ -226,7 +214,7 @@ export function useDeleteFormality() {
 
 // GENDER ("genders")
 
-const GENDERS_URL = "/api/v1/genders";
+const GENDERS_URL = `${BASE}/genders`;
 
 export function useGenders() {
   return useListQuery<GenderListResponse>("genders", GENDERS_URL);
@@ -247,7 +235,7 @@ export function useDeleteGender() {
 
 // VOCATIONALEDUCATION ("vocational-educations")
 
-const VOCATIONALEDUCATIONS_URL = "/api/v1/vocational-educations";
+const VOCATIONALEDUCATIONS_URL = `${BASE}/vocational-educations`;
 
 export function useVocationalEducations() {
   return useListQuery<VocationalEducationListResponse>("vocational-educations", VOCATIONALEDUCATIONS_URL);
@@ -268,7 +256,7 @@ export function useDeleteVocationalEducation() {
 
 // MAJORGROUP ("major-groups") - occupation hierarchy level
 
-const MAJORGROUPS_URL = "/api/v1/occupation/major-groups";
+const MAJORGROUPS_URL = `${BASE}/occupation/major-groups`;
 
 export function useMajorGroups() {
   return useListQuery<MajorGroupListResponse>("major-groups", MAJORGROUPS_URL);
@@ -283,13 +271,13 @@ export function useUpdateMajorGroup() {
 }
 
 export function useDeleteMajorGroup() {
-  return useHierarchyDeleteMutation("major-groups", MAJORGROUPS_URL, OCCUPATION_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("major-groups", MAJORGROUPS_URL, OCCUPATION_QUERY_KEYS);
 }
 
 
 // SUBMAJORGROUP ("sub-major-groups") - occupation hierarchy level
 
-const SUBMAJORGROUPS_URL = "/api/v1/occupation/sub-major-groups";
+const SUBMAJORGROUPS_URL = `${BASE}/occupation/sub-major-groups`;
 
 export function useSubMajorGroups() {
   return useListQuery<SubMajorGroupListResponse>("sub-major-groups", SUBMAJORGROUPS_URL);
@@ -304,13 +292,13 @@ export function useUpdateSubMajorGroup() {
 }
 
 export function useDeleteSubMajorGroup() {
-  return useHierarchyDeleteMutation("sub-major-groups", SUBMAJORGROUPS_URL, OCCUPATION_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("sub-major-groups", SUBMAJORGROUPS_URL, OCCUPATION_QUERY_KEYS);
 }
 
 
 // MINORGROUP ("minor-groups") - occupation hierarchy level
 
-const MINORGROUPS_URL = "/api/v1/occupation/minor-groups";
+const MINORGROUPS_URL = `${BASE}/occupation/minor-groups`;
 
 export function useMinorGroups() {
   return useListQuery<MinorGroupListResponse>("minor-groups", MINORGROUPS_URL);
@@ -325,13 +313,13 @@ export function useUpdateMinorGroup() {
 }
 
 export function useDeleteMinorGroup() {
-  return useHierarchyDeleteMutation("minor-groups", MINORGROUPS_URL, OCCUPATION_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("minor-groups", MINORGROUPS_URL, OCCUPATION_QUERY_KEYS);
 }
 
 
 // UNITGROUP ("unit-groups") - occupation hierarchy level
 
-const UNITGROUPS_URL = "/api/v1/occupation/unit-groups";
+const UNITGROUPS_URL = `${BASE}/occupation/unit-groups`;
 
 export function useUnitGroups() {
   return useListQuery<UnitGroupListResponse>("unit-groups", UNITGROUPS_URL);
@@ -346,13 +334,13 @@ export function useUpdateUnitGroup() {
 }
 
 export function useDeleteUnitGroup() {
-  return useHierarchyDeleteMutation("unit-groups", UNITGROUPS_URL, OCCUPATION_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("unit-groups", UNITGROUPS_URL, OCCUPATION_QUERY_KEYS);
 }
 
 
 // OCCUPATIONGROUP ("occupation-groups") - occupation hierarchy level
 
-const OCCUPATIONGROUPS_URL = "/api/v1/occupation/occupation-groups";
+const OCCUPATIONGROUPS_URL = `${BASE}/occupation/occupation-groups`;
 
 export function useOccupationGroups(limit?: number, offset?: number) {
    return useListQuery<OccupationGroupListResponse>("occupation-groups", OCCUPATIONGROUPS_URL, { limit, offset });
@@ -367,13 +355,13 @@ export function useUpdateOccupationGroup() {
 }
 
 export function useDeleteOccupationGroup() {
-  return useHierarchyDeleteMutation("occupation-groups", OCCUPATIONGROUPS_URL, OCCUPATION_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("occupation-groups", OCCUPATIONGROUPS_URL, OCCUPATION_QUERY_KEYS);
 }
 
 
 // INDUSTRYSECTOR ("industry-sectors") - industry hierarchy level
 
-const INDUSTRYSECTORS_URL = "/api/v1/industry/industry-sectors";
+const INDUSTRYSECTORS_URL = `${BASE}/industry/industry-sectors`;
 
 export function useIndustrySectors() {
   return useListQuery<IndustrySectorListResponse>("industry-sectors", INDUSTRYSECTORS_URL);
@@ -388,13 +376,13 @@ export function useUpdateIndustrySector() {
 }
 
 export function useDeleteIndustrySector() {
-  return useHierarchyDeleteMutation("industry-sectors", INDUSTRYSECTORS_URL, INDUSTRY_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("industry-sectors", INDUSTRYSECTORS_URL, INDUSTRY_QUERY_KEYS);
 }
 
 
 // INDUSTRYDIVISION ("industry-divisions") - industry hierarchy level
 
-const INDUSTRYDIVISIONS_URL = "/api/v1/industry/industry-divisions";
+const INDUSTRYDIVISIONS_URL = `${BASE}/industry/industry-divisions`;
 
 export function useIndustryDivisions() {
   return useListQuery<IndustryDivisionListResponse>("industry-divisions", INDUSTRYDIVISIONS_URL);
@@ -409,13 +397,13 @@ export function useUpdateIndustryDivision() {
 }
 
 export function useDeleteIndustryDivision() {
-  return useHierarchyDeleteMutation("industry-divisions", INDUSTRYDIVISIONS_URL, INDUSTRY_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("industry-divisions", INDUSTRYDIVISIONS_URL, INDUSTRY_QUERY_KEYS);
 }
 
 
 // INDUSTRYGROUP ("industry-groups") - industry hierarchy level
 
-const INDUSTRYGROUPS_URL = "/api/v1/industry/industry-groups";
+const INDUSTRYGROUPS_URL = `${BASE}/industry/industry-groups`;
 
 export function useIndustryGroups() {
   return useListQuery<IndustryGroupListResponse>("industry-groups", INDUSTRYGROUPS_URL);
@@ -430,13 +418,13 @@ export function useUpdateIndustryGroup() {
 }
 
 export function useDeleteIndustryGroup() {
-  return useHierarchyDeleteMutation("industry-groups", INDUSTRYGROUPS_URL, INDUSTRY_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("industry-groups", INDUSTRYGROUPS_URL, INDUSTRY_QUERY_KEYS);
 }
 
 
 // INDUSTRYCLASS ("industry-classes") - industry hierarchy level
 
-const INDUSTRYCLASSES_URL = "/api/v1/industry/industry-classes";
+const INDUSTRYCLASSES_URL = `${BASE}/industry/industry-classes`;
 
 export function useIndustryClasses() {
   return useListQuery<IndustryClassListResponse>("industry-classes", INDUSTRYCLASSES_URL);
@@ -451,13 +439,13 @@ export function useUpdateIndustryClass() {
 }
 
 export function useDeleteIndustryClass() {
-  return useHierarchyDeleteMutation("industry-classes", INDUSTRYCLASSES_URL, INDUSTRY_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("industry-classes", INDUSTRYCLASSES_URL, INDUSTRY_QUERY_KEYS);
 }
 
 
 // INDUSTRYSUBCLASS ("industry-subclasses") - industry hierarchy level
 
-const INDUSTRYSUBCLASSES_URL = "/api/v1/industry/industry-subclasses";
+const INDUSTRYSUBCLASSES_URL = `${BASE}/industry/industry-subclasses`;
 
 export function useIndustrySubclasses(limit?: number, offset?: number) {
    return useListQuery<IndustrySubclassListResponse>("industry-subclasses", INDUSTRYSUBCLASSES_URL, { limit, offset });
@@ -472,5 +460,5 @@ export function useUpdateIndustrySubclass() {
 }
 
 export function useDeleteIndustrySubclass() {
-  return useHierarchyDeleteMutation("industry-subclasses", INDUSTRYSUBCLASSES_URL, INDUSTRY_HIERARCHY_KEYS);
+  return useHierarchyDeleteMutation("industry-subclasses", INDUSTRYSUBCLASSES_URL, INDUSTRY_QUERY_KEYS);
 }

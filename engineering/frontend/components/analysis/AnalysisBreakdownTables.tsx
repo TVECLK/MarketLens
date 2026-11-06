@@ -74,7 +74,7 @@ export default function AnalysisBreakdownTables({
       <DataTable
         title="Remote / On-Site"
         rows={remoteData}
-        isError={Boolean(sectionErrors.remote_onsite_hybrid)}
+        isError={Boolean(sectionErrors.work_modes)}
       />
       <DataTable
         title="Contract Type"

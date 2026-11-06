@@ -17,7 +17,7 @@ describe("getApiErrorMessage", () => {
 
   it("unwraps the backend's error from the route envelope", () => {
     const body = {
-      error: "Go backend returned an error",
+      error: "Backend returned an error",
       details: { error: "missing required scope: genders:create" },
     };
     expect(getApiErrorMessage(body, FALLBACK)).toBe("missing required scope: genders:create");
@@ -25,7 +25,7 @@ describe("getApiErrorMessage", () => {
 
   it("does not expose the backend's raw details", () => {
     const body = {
-      error: "Go backend returned an error",
+      error: "Backend returned an error",
       details: { error: "Failed to create gender", details: "pq: duplicate key value" },
     };
     expect(getApiErrorMessage(body, FALLBACK)).toBe("Failed to create gender");
@@ -33,7 +33,7 @@ describe("getApiErrorMessage", () => {
 
   it("parses backend bodies forwarded as JSON text", () => {
     const body = {
-      error: "Go backend returned an error",
+      error: "Backend returned an error",
       details: '{"error":"Failed to fetch genders"}',
     };
     expect(getApiErrorMessage(body, FALLBACK)).toBe("Failed to fetch genders");

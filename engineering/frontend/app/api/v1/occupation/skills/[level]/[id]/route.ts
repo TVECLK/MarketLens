@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchSections } from "@/lib/bff-aggregate";
 
-const GO_API = `${process.env.GO_BACKEND_URL}/api/v1`;
+const BACKEND_API = `${process.env.BACKEND_API_URL}/api/v1`;
 
 // GET /api/v1/occupation/skills/:level/:id?from-date=&to-date=&limit=&offset=
-// Fans out to top-15-skills, all-skills (paginated), and top-hiring-employers
+// Fans out to the skills (top 15 and paginated all-skills) and employers endpoints
 // for the given occupation level/id, and returns one combined JSON response.
 // A section that fails comes back as `null` with its reason under `errors`, so
 // the sections that worked can still be shown. Only when every section fails
-// is the Go error (status and body) forwarded as-is.
+// is the backend error (status and body) forwarded as-is.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ level: string; id: string }> }
@@ -26,17 +26,20 @@ export async function GET(
   if (toDate) dateParams.set("to-date", toDate);
   const dateQueryString = dateParams.toString();
 
+  const top15Params = new URLSearchParams(dateParams);
+  top15Params.set("limit", "15");
+
   const allSkillsParams = new URLSearchParams(dateParams);
   if (limit) allSkillsParams.set("limit", limit);
   if (offset) allSkillsParams.set("offset", offset);
   const allSkillsQueryString = allSkillsParams.toString();
 
-  console.log("[occupation-skills] fetching from Go:", { level, id, fromDate, toDate, limit, offset });
+  console.log("[occupation-skills] fetching from backend:", { level, id, fromDate, toDate, limit, offset });
 
   const { data, errors, allFailed, firstError } = await fetchSections([
-    { key: "top_15_skills", url: `${GO_API}/occupation/${level}/${id}/top-15-skills?${dateQueryString}` },
-    { key: "all_skills", url: `${GO_API}/occupation/${level}/${id}/all-skills?${allSkillsQueryString}` },
-    { key: "top_hiring_employers", url: `${GO_API}/occupation/${level}/${id}/top-hiring-employers?${dateQueryString}` },
+    { key: "top_15_skills", url: `${BACKEND_API}/occupation/${level}/${id}/skills?${top15Params.toString()}` },
+    { key: "all_skills", url: `${BACKEND_API}/occupation/${level}/${id}/skills?${allSkillsQueryString}` },
+    { key: "top_hiring_employers", url: `${BACKEND_API}/occupation/${level}/${id}/employers?${dateQueryString}` },
   ]);
 
   if (allFailed && firstError) {

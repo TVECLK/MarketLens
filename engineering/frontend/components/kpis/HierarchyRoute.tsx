@@ -16,6 +16,7 @@ import {
 } from "@/hooks/use-kpi";
 import type { HierarchyId } from "@/lib/kpi-config";
 import { normTop, normChild } from "@/lib/kpi-normalizers";
+import { clampPage } from "@/lib/pagination";
 import type { HierarchyLevelBundle } from "@/types/kpi-admin";
 import HierarchyLevelView from "@/components/kpis/HierarchyLevelView";
 
@@ -49,6 +50,9 @@ function OccupationRoute({ levelIndex }: { levelIndex: number }) {
   const deleteUnitGroup = useDeleteUnitGroup();
 
   const occupationGroupsQ = useOccupationGroups(PAGE_SIZE, (occGroupPage - 1) * PAGE_SIZE);
+  // After a delete empties the last page, step back to the new last page.
+  const clampedOccGroupPage = clampPage(occGroupPage, occupationGroupsQ.data?.total, PAGE_SIZE);
+  if (clampedOccGroupPage !== occGroupPage) setOccGroupPage(clampedOccGroupPage);
   const createOccupationGroup = useCreateOccupationGroup();
   const updateOccupationGroup = useUpdateOccupationGroup();
   const deleteOccupationGroup = useDeleteOccupationGroup();
@@ -133,6 +137,9 @@ function IndustryRoute({ levelIndex }: { levelIndex: number }) {
   const deleteIndustryClass = useDeleteIndustryClass();
 
   const industrySubclassesQ = useIndustrySubclasses(PAGE_SIZE, (indSubclassPage - 1) * PAGE_SIZE);
+  // After a delete empties the last page, step back to the new last page.
+  const clampedIndSubclassPage = clampPage(indSubclassPage, industrySubclassesQ.data?.total, PAGE_SIZE);
+  if (clampedIndSubclassPage !== indSubclassPage) setIndSubclassPage(clampedIndSubclassPage);
   const createIndustrySubclass = useCreateIndustrySubclass();
   const updateIndustrySubclass = useUpdateIndustrySubclass();
   const deleteIndustrySubclass = useDeleteIndustrySubclass();

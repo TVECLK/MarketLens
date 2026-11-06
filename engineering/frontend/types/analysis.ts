@@ -42,11 +42,12 @@ export interface FormalityStat { id: number; formality_type: string; open_job_co
 export interface GenderStat { id: number; gender_type: string; open_job_count: number; }
 export interface VocationalEducationStat { id: number; level: string; open_job_count: number; }
 export interface JobTypeStat { id: number; type: string; open_job_count: number; }
-export interface RemoteOnSiteHybridStat { remote_count: number; on_site_count: number; hybrid_count: number; }
+export interface WorkModesStat { remote_count: number; on_site_count: number; hybrid_count: number; }
 
-// Sections that can fail on their own. `children` is absent: it legitimately
-// fails on leaf levels, so the backend never reports it as an error.
+// Sections that can fail on their own. `children` fails with an expected 400
+// on leaf levels, which is not reported; any other `children` failure is.
 export type AnalysisSection =
+  | "children"
   | "total_job_count"
   | "employment_sector"
   | "experience"
@@ -55,7 +56,7 @@ export type AnalysisSection =
   | "formality"
   | "gender"
   | "vocational_education"
-  | "remote_onsite_hybrid"
+  | "work_modes"
   | "job_type";
 
 export type AnalysisSectionErrors = Partial<Record<AnalysisSection, SectionError>>;
@@ -76,7 +77,7 @@ export interface AnalysisResponse {
   formality: { formalities: FormalityStat[] } | null;
   gender: { genders: GenderStat[] } | null;
   vocational_education: { vocational_educations: VocationalEducationStat[] } | null;
-  remote_onsite_hybrid: { remote_vs_onsite_vs_hybrid: RemoteOnSiteHybridStat } | null;
+  work_modes: { remote_vs_onsite_vs_hybrid: WorkModesStat } | null;
   job_type: { job_types: JobTypeStat[] } | null;
   errors: AnalysisSectionErrors;
 }

@@ -1,4 +1,4 @@
-import type { AnalysisResponse, HierarchyNode } from "./analysis";
+import type { HierarchyNode } from "./analysis";
 
 export type { HierarchyNode } from "./analysis";
 
@@ -23,14 +23,8 @@ export interface IndustrySubclassChildrenResponse {
   industry_subclasses: HierarchyNode[];
 }
 
-export type IndustryAnalysisResponse = AnalysisResponse;
-
-export interface Industry {
-  id:   number;
-  name: string;
-}
 
 export interface IndustryListResponse {
   count:      number;
-  industry_sectors: Industry[];
+  industry_sectors: HierarchyNode[];
 }
