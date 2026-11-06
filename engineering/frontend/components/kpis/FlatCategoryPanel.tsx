@@ -1,5 +1,7 @@
-import type { FormEvent } from "react";
+import { useId, type FormEvent } from "react";
+import { disabledReason, permissionsHint, PERMISSION_STATUS } from "@/lib/action-permissions";
 import type { KPICategoryConfig, AccentClasses } from "@/lib/kpi-config";
+import { CRUD_ACTIONS, type CrudAction } from "@/lib/scopes";
 import type { FlatBundle, FlatItem } from "@/types/kpi-admin";
 
 interface FlatCategoryPanelProps {
@@ -38,6 +40,13 @@ export default function FlatCategoryPanel({
   onRequestDelete,
 }: FlatCategoryPanelProps) {
   const items = bundle.items;
+  const { permissions } = bundle;
+  const { canCreate, canUpdate, canDelete } = permissions;
+  const reason = (allowed: boolean, action: CrudAction) =>
+    disabledReason(permissions, allowed, action, config.itemLabel);
+  const hint = permissionsHint(permissions, config.itemLabel);
+  const hintId = useId();
+  const describedBy = (allowed: boolean) => (!allowed && hint ? hintId : undefined);
 
   return (
     <main className="flex-1 p-4 mx-auto space-y-4">
@@ -58,6 +67,16 @@ export default function FlatCategoryPanel({
         </p>
       )}
 
+      {hint && (
+        <p
+          id={hintId}
+          className={`text-xs font-semibold rounded-md px-3 py-2 ${permissions.status === PERMISSION_STATUS.unavailable ? "text-red-600 bg-red-50" : "text-gray-500 bg-gray-100"
+            }`}
+        >
+          {hint}
+        </p>
+      )}
+
       <form
         onSubmit={onSubmit}
         className="bg-white p-3 rounded-md shadow-sm flex flex-col sm:flex-row gap-3 sm:items-end"
@@ -70,13 +89,17 @@ export default function FlatCategoryPanel({
             value={newName}
             onChange={(e) => onNewNameChange(e.target.value)}
             placeholder={`e.g. New ${config.itemLabel}`}
-            className="w-full bg-gray-50 rounded-lg p-2.5 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0"
+            disabled={!canCreate}
+            aria-describedby={describedBy(canCreate)}
+            className="w-full bg-gray-50 rounded-lg p-2.5 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
         <button
           type="submit"
-          disabled={bundle.createMut.isPending}
-          className={`${accent.bg} ${accent.solidText} text-xs font-bold px-5 py-2.5 rounded-lg hover:opacity-90 transition-all shrink-0 disabled:opacity-50`}
+          disabled={!canCreate || bundle.createMut.isPending}
+          title={reason(canCreate, CRUD_ACTIONS.create)}
+          aria-describedby={describedBy(canCreate)}
+          className={`${accent.bg} ${accent.solidText} text-xs font-bold px-5 py-2.5 rounded-lg hover:opacity-90 transition-all shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {bundle.createMut.isPending ? "Adding..." : `+ Add ${config.itemLabel}`}
         </button>
@@ -102,7 +125,9 @@ export default function FlatCategoryPanel({
             {!bundle.isLoading && items.length === 0 && (
               <tr>
                 <td colSpan={2} className="px-5 py-10 text-center text-gray-400 font-medium">
-                  No items yet — add the first {config.itemLabel.toLowerCase()} above.
+                  {canCreate
+                    ? `No items yet — add the first ${config.itemLabel.toLowerCase()} above.`
+                    : "No items yet."}
                 </td>
               </tr>
             )}
@@ -131,8 +156,10 @@ export default function FlatCategoryPanel({
                         <>
                           <button
                             onClick={() => onSaveEdit(item.id)}
-                            disabled={bundle.updateMut.isPending}
-                            className="text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg transition-all disabled:opacity-50"
+                            disabled={!canUpdate || bundle.updateMut.isPending}
+                            title={reason(canUpdate, CRUD_ACTIONS.update)}
+                            aria-describedby={describedBy(canUpdate)}
+                            className="text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {bundle.updateMut.isPending ? "Saving..." : "Save"}
                           </button>
@@ -147,13 +174,19 @@ export default function FlatCategoryPanel({
                         <>
                           <button
                             onClick={() => onStartEdit(item)}
-                            className={`text-[11px] font-bold ${accent.text} ${accent.lightBg} hover:opacity-80 px-3 py-1.5 rounded-lg transition-all`}
+                            disabled={!canUpdate}
+                            title={reason(canUpdate, CRUD_ACTIONS.update)}
+                            aria-describedby={describedBy(canUpdate)}
+                            className={`text-[11px] font-bold ${accent.text} ${accent.lightBg} hover:opacity-80 px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed`}
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => onRequestDelete(item)}
-                            className="text-[11px] font-bold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-all"
+                            disabled={!canDelete}
+                            title={reason(canDelete, CRUD_ACTIONS.delete)}
+                            aria-describedby={describedBy(canDelete)}
+                            className="text-[11px] font-bold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             Delete
                           </button>
