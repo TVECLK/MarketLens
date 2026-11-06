@@ -70,9 +70,7 @@ jobs:
           # main.py runs one crawl pass and exits (no long-running server),
           # so this only has to prove the image boots into application code.
           docker run -d --name crawler \
-            -e DEEPSEEK_API_KEY=test_deepseek_api_key \
             -e BACKEND_URL=http://backend:8080/api/v1/crawler \
-            -e BACKEND_URL_FOR_FETCHING=http://backend:8080/api/v1 \
             -e THUNDER_BASE_URL=https://thunder:8090 \
             -e THUNDER_CLIENT_ID=test_client_id \
             -e THUNDER_CLIENT_SECRET=test_client_secret \
