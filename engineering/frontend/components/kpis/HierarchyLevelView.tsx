@@ -8,6 +8,8 @@ import {
   type HierarchyId,
 } from "@/lib/kpi-config";
 import { getErrorMessage } from "@/lib/errors";
+import { permissionGuards } from "@/lib/action-permissions";
+import { CRUD_ACTIONS } from "@/lib/scopes";
 import { useFlashToast } from "@/hooks/use-flash-toast";
 import type { HierarchyRow } from "@/types/kpi";
 import type { HierarchyLevelBundle } from "@/types/kpi-admin";
@@ -50,10 +52,12 @@ export default function HierarchyLevelView({
 
   const [deleteTarget, setDeleteTarget] = useState<HierarchyRow | null>(null);
   const { toast, flashToast } = useFlashToast();
+  const guards = permissionGuards<HierarchyRow>(levelBundle.permissions, levelDef.itemLabel, { setEditError, setDeleteTarget, flashToast });
 
   // CREATE
   function handleAdd(e: FormEvent) {
     e.preventDefault();
+    if (!guards.canStart(CRUD_ACTIONS.create)) return;
 
     const trimmedName = newName.trim();
     const trimmedCode = newCode.trim();
@@ -90,6 +94,7 @@ export default function HierarchyLevelView({
 
   // UPDATE
   function startEdit(item: HierarchyRow) {
+    if (!guards.canStart(CRUD_ACTIONS.update)) return;
     setEditingId(item.id);
     setEditName(item.name);
     setEditCode(item.code);
@@ -103,6 +108,7 @@ export default function HierarchyLevelView({
   }
 
   function saveEdit(id: number) {
+    if (!guards.canSave()) return;
     const trimmedName = editName.trim();
     const trimmedCode = editCode.trim();
 
@@ -144,6 +150,7 @@ export default function HierarchyLevelView({
   // invalidate every level's cache for this hierarchy as a result.
   function handleDelete() {
     if (!deleteTarget) return;
+    if (!guards.canConfirmDelete()) return;
     const target = deleteTarget;
     levelBundle.deleteMut.mutate(target.id, {
       onSuccess: () => {
@@ -192,7 +199,7 @@ export default function HierarchyLevelView({
         onStartEdit={startEdit}
         onCancelEdit={cancelEdit}
         onSaveEdit={saveEdit}
-        onRequestDelete={setDeleteTarget}
+        onRequestDelete={guards.requestDelete}
       />
 
       {deleteTarget && (

@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { KPI_CATEGORIES, ACCENT_CLASSES, type KPICategoryKey } from "@/lib/kpi-config";
 import { getErrorMessage } from "@/lib/errors";
-import { permissionDeniedMessage } from "@/lib/action-permissions";
+import { permissionGuards } from "@/lib/action-permissions";
 import { CRUD_ACTIONS } from "@/lib/scopes";
 import { useFlashToast } from "@/hooks/use-flash-toast";
 import type { FlatBundle, FlatItem } from "@/types/kpi-admin";
@@ -29,11 +29,12 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
 
   const [deleteTarget, setDeleteTarget] = useState<FlatItem | null>(null);
   const { toast, flashToast } = useFlashToast();
+  const guards = permissionGuards<FlatItem>(bundle.permissions, config.itemLabel, { setEditError, setDeleteTarget, flashToast });
 
   // CREATE
   function handleAdd(e: FormEvent) {
     e.preventDefault();
-    if (!bundle.permissions.canCreate) return;
+    if (!guards.canStart(CRUD_ACTIONS.create)) return;
     const trimmed = newName.trim();
     if (!trimmed) {
       setFormError(`${config.itemLabel} name is required.`);
@@ -54,7 +55,7 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
 
   // UPDATE
   function startEdit(item: FlatItem) {
-    if (!bundle.permissions.canUpdate) return;
+    if (!guards.canStart(CRUD_ACTIONS.update)) return;
     setEditingId(item.id);
     setEditName(item.label);
     setEditError(null);
@@ -66,10 +67,7 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
   }
 
   function saveEdit(id: number) {
-    if (!bundle.permissions.canUpdate) {
-      setEditError(permissionDeniedMessage([CRUD_ACTIONS.update], config.itemLabel));
-      return;
-    }
+    if (!guards.canSave()) return;
     const trimmed = editName.trim();
     if (!trimmed) {
       setEditError(`${config.itemLabel} name is required.`);
@@ -89,19 +87,9 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
   }
 
   // DELETE
-  function requestDelete(item: FlatItem) {
-    if (!bundle.permissions.canDelete) return;
-    setDeleteTarget(item);
-  }
-
   function handleDelete() {
     if (!deleteTarget) return;
-    if (!bundle.permissions.canDelete) {
-      // Permissions changed while the dialog was open: close it and say why, instead of doing nothing.
-      setDeleteTarget(null);
-      flashToast(permissionDeniedMessage([CRUD_ACTIONS.delete], config.itemLabel));
-      return;
-    }
+    if (!guards.canConfirmDelete()) return;
     const target = deleteTarget;
     bundle.deleteMut.mutate(target.id, {
       onSuccess: () => {
@@ -132,7 +120,7 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
         onStartEdit={startEdit}
         onCancelEdit={cancelEdit}
         onSaveEdit={saveEdit}
-        onRequestDelete={requestDelete}
+        onRequestDelete={guards.requestDelete}
       />
 
       {deleteTarget && (

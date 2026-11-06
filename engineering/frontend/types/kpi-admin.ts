@@ -34,6 +34,7 @@ export interface HierarchyLevelBundle {
   updateMut: MutationLike<{ id: number; payload: any }>;
   deleteMut: MutationLike<number>;
   parentField: string | null; // e.g. "major_group_id", null for the top level
+  permissions: ActionPermissions;
   total?: number;
   page?: number;
   setPage?: (p: number) => void;

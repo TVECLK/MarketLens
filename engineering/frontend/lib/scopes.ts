@@ -33,6 +33,9 @@ export const CRUD_ACTIONS = {
 
 export type CrudAction = (typeof CRUD_ACTIONS)[keyof typeof CRUD_ACTIONS]
 
+/** Every action, in order: create, update, delete. */
+export const ALL_CRUD_ACTIONS: readonly CrudAction[] = Object.values(CRUD_ACTIONS)
+
 /** How each action is worded to users, matching the UI's "+ Add", "Edit" and "Delete" buttons. */
 export const CRUD_ACTION_LABELS: Record<CrudAction, string> = {
   create: 'add',
@@ -46,9 +49,7 @@ export const scopeFor = (resource: ResourceScope, action: CrudAction) => `${reso
 export const appScopes = [
   'openid',
   'profile',
-  ...Object.values(RESOURCE_SCOPES).flatMap((resource) =>
-    Object.values(CRUD_ACTIONS).map((action) => scopeFor(resource, action)),
-  ),
+  ...Object.values(RESOURCE_SCOPES).flatMap((resource) => ALL_CRUD_ACTIONS.map((action) => scopeFor(resource, action))),
 ]
 
 export const scopeString = appScopes.join(' ')

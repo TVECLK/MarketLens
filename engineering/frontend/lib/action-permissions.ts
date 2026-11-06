@@ -1,4 +1,11 @@
-import { CRUD_ACTION_LABELS, CRUD_ACTIONS, scopeFor, type CrudAction, type ResourceScope } from "@/lib/scopes";
+import {
+  ALL_CRUD_ACTIONS,
+  CRUD_ACTION_LABELS,
+  CRUD_ACTIONS,
+  scopeFor,
+  type CrudAction,
+  type ResourceScope,
+} from "@/lib/scopes";
 
 /** Where the signed-in user's granted permissions stand. */
 export const PERMISSION_STATUS = {
@@ -21,9 +28,8 @@ export interface GrantedPermissions {
 /** Which CRUD actions the signed-in user may perform on a resource. Drives the UI only. */
 export interface ActionPermissions {
   status: PermissionStatus;
-  canCreate: boolean;
-  canUpdate: boolean;
-  canDelete: boolean;
+  /** Keyed by action, e.g. `allowed[CRUD_ACTIONS.update]`. */
+  allowed: Record<CrudAction, boolean>;
 }
 
 /**
@@ -51,12 +57,10 @@ export function resolvePermissionStatus(
  */
 export function resolveActionPermissions(scope: ResourceScope, granted: GrantedPermissions): ActionPermissions {
   const ready = granted.status === PERMISSION_STATUS.ready;
-  return {
-    status: granted.status,
-    canCreate: ready && granted.can(scopeFor(scope, CRUD_ACTIONS.create)),
-    canUpdate: ready && granted.can(scopeFor(scope, CRUD_ACTIONS.update)),
-    canDelete: ready && granted.can(scopeFor(scope, CRUD_ACTIONS.delete)),
-  };
+  const allowed = Object.fromEntries(
+    ALL_CRUD_ACTIONS.map((action) => [action, ready && granted.can(scopeFor(scope, action))]),
+  ) as Record<CrudAction, boolean>;
+  return { status: granted.status, allowed };
 }
 
 /** Every user-facing permission message, in one place so the wording stays consistent. */
@@ -92,10 +96,46 @@ export function disabledReason(
 export function permissionsHint(permissions: ActionPermissions, itemLabel: string): string | null {
   if (permissions.status === PERMISSION_STATUS.loading) return null;
   if (permissions.status === PERMISSION_STATUS.unavailable) return PERMISSION_MESSAGES.unavailable;
-  const missing = [
-    !permissions.canCreate && CRUD_ACTIONS.create,
-    !permissions.canUpdate && CRUD_ACTIONS.update,
-    !permissions.canDelete && CRUD_ACTIONS.delete,
-  ].filter((action): action is CrudAction => Boolean(action));
+  const missing = ALL_CRUD_ACTIONS.filter((action) => !permissions.allowed[action]);
   return missing.length === 0 ? null : permissionDeniedMessage(missing, itemLabel);
+}
+
+/**
+ * The permission checks a KPI view runs before acting, shared by the flat and hierarchy views.
+ * The UI already disables these actions; the checks are a backstop, and say why when they refuse.
+ */
+export function permissionGuards<TItem>(
+  permissions: ActionPermissions,
+  itemLabel: string,
+  ui: {
+    setEditError: (message: string) => void;
+    setDeleteTarget: (item: TItem | null) => void;
+    flashToast: (message: string) => void;
+  },
+) {
+  const { allowed } = permissions;
+  return {
+    /** Whether to start adding (`create`) or editing (`update`). */
+    canStart: (action: CrudAction) => allowed[action],
+    /** Before saving an edit: false, with the reason shown inline, when editing isn't allowed. */
+    canSave: () => {
+      if (allowed[CRUD_ACTIONS.update]) return true;
+      ui.setEditError(permissionDeniedMessage([CRUD_ACTIONS.update], itemLabel));
+      return false;
+    },
+    /** Opens the delete confirmation, only when deleting is allowed. */
+    requestDelete: (item: TItem) => {
+      if (allowed[CRUD_ACTIONS.delete]) ui.setDeleteTarget(item);
+    },
+    /**
+     * Before confirming a delete: false when deleting isn't allowed (e.g. permissions changed while
+     * the dialog was open), closing the dialog and saying why instead of doing nothing.
+     */
+    canConfirmDelete: () => {
+      if (allowed[CRUD_ACTIONS.delete]) return true;
+      ui.setDeleteTarget(null);
+      ui.flashToast(permissionDeniedMessage([CRUD_ACTIONS.delete], itemLabel));
+      return false;
+    },
+  };
 }
