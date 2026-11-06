@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 class TopJobsCrawler(BaseJobCrawler):
     def __init__(self):
+        super().__init__()
         self._parser = TopJobsParser()
 
     async def _get_total_pages(self, html: str) -> int:
@@ -43,6 +44,7 @@ class TopJobsCrawler(BaseJobCrawler):
             if match:
                 return int(match.group(1))
 
+        self._mark_page_failure("TopJobs: Could not find the pagination text.")
         return 1
 
     async def _parse_listing_html(self, html: str) -> list[dict]:
@@ -80,8 +82,15 @@ class TopJobsCrawler(BaseJobCrawler):
             context = await browser.new_context(user_agent=USER_AGENT)
             page = await context.new_page()
 
-            await page.goto(f"{LISTING_URL}&pageNo=1", wait_until="networkidle")
-            total_pages = await self._get_total_pages(await page.content())
+            try:
+                await page.goto(f"{LISTING_URL}&pageNo=1", wait_until="networkidle")
+                total_pages = await self._get_total_pages(await page.content())
+            except Exception as e:
+                self._mark_page_failure(
+                    f"TopJobs: Failed to load the first listing page: {e}"
+                )
+                await browser.close()
+                return []
 
             logger.info(f"TopJobs: Total pages detected: {total_pages}")
 
@@ -89,13 +98,25 @@ class TopJobsCrawler(BaseJobCrawler):
 
             for page_num in range(1, total_pages + 1):
                 logger.info(f"TopJobs: Scraping page {page_num} of {total_pages}...")
-                if page_num > 1:
-                    await page.goto(
-                        f"{LISTING_URL}&pageNo={page_num}", wait_until="networkidle"
+                try:
+                    if page_num > 1:
+                        await page.goto(
+                            f"{LISTING_URL}&pageNo={page_num}",
+                            wait_until="networkidle",
+                        )
+                    content = await page.content()
+                except Exception as e:
+                    self._mark_page_failure(
+                        f"TopJobs: Failed to load listing page {page_num}: {e}"
                     )
+                    continue
 
-                content = await page.content()
                 jobs = await self._parse_listing_html(content)
+                if not jobs:
+                    self._mark_page_failure(
+                        f"TopJobs: No jobs found on listing page {page_num}"
+                    )
+                    continue
                 logger.info(
                     f"TopJobs: Found {len(jobs)} jobs. Starting popup processing..."
                 )
@@ -129,6 +150,7 @@ class TopJobsCrawler(BaseJobCrawler):
                                 "TopJobs: Could not find a large advertisement image."
                             )
                             await popup.close()
+                            self._count_jobs(failed=1)
                             continue
 
                         await img_locator.wait_for(
@@ -153,9 +175,11 @@ class TopJobsCrawler(BaseJobCrawler):
                         )
 
                         all_jobs.append(job)
+                        self._count_jobs()
 
                     except Exception as e:
                         logger.error(f"TopJobs: Failed to process {job['row_id']}: {e}")
+                        self._count_jobs(failed=1)
                         job["error"] = str(e)
 
             await browser.close()
@@ -174,6 +198,7 @@ class TopJobsCrawler(BaseJobCrawler):
         job_data_list = await self._extract_complete_jobs_details()
 
         job_batch: List[RawJobInput] = []
+        usable_jobs = 0
 
         for result in job_data_list:
             try:
@@ -182,6 +207,7 @@ class TopJobsCrawler(BaseJobCrawler):
                 logger.warning(f"TopJobs: Skipping malformed job: {e}")
                 continue
 
+            usable_jobs += self._is_usable(job_input)
             job_batch.append(job_input)
 
             if len(job_batch) >= BATCH_SIZE:
@@ -196,4 +222,5 @@ class TopJobsCrawler(BaseJobCrawler):
             )
             await self._flush_batch(async_client, thunder_auth, job_batch)
 
+        self._raise_if_incomplete(usable_jobs)
         logger.info("TopJobs: Top jobs crawl pass concluded.")

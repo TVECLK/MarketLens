@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class XpressJobsCrawler(BaseJobCrawler):
     def __init__(self):
+        super().__init__()
         self._parser = XpressJobsParser()
 
     def _clean_html(self, html_content):
@@ -76,7 +77,7 @@ class XpressJobsCrawler(BaseJobCrawler):
                 response = await async_client.get(list_url, timeout=10)
                 jobs_list = response.json()
             except Exception as e:
-                logger.error(f"XpressJobs: Error fetching page {page}: {e}")
+                self._mark_page_failure(f"XpressJobs: Error fetching page {page}: {e}")
                 break
 
             # Break the loop if the list is empty
@@ -94,6 +95,9 @@ class XpressJobsCrawler(BaseJobCrawler):
                 details = await self._fetch_job_details(async_client, job_id)
                 if details:
                     final_data.append(details)
+                    self._count_jobs()
+                else:
+                    self._count_jobs(failed=1)
 
                 await asyncio.sleep(10)
 
@@ -116,6 +120,7 @@ class XpressJobsCrawler(BaseJobCrawler):
         job_data_list = await self._process_all_jobs(async_client)
 
         job_batch: List[RawJobInput] = []
+        usable_jobs = 0
 
         for result in job_data_list:
             try:
@@ -124,6 +129,7 @@ class XpressJobsCrawler(BaseJobCrawler):
                 logger.warning(f"XpressJobs: Skipping malformed job: {e}")
                 continue
 
+            usable_jobs += self._is_usable(job_input)
             job_batch.append(job_input)
 
             if len(job_batch) >= BATCH_SIZE:
@@ -138,4 +144,5 @@ class XpressJobsCrawler(BaseJobCrawler):
             )
             await self._flush_batch(async_client, thunder_auth, job_batch)
 
+        self._raise_if_incomplete(usable_jobs)
         logger.info("XpressJobs: Xpress jobs crawl pass concluded.")

@@ -27,6 +27,6 @@ func (s *JobPostService) UpdateDuplicateJob(ctx context.Context, jobPostID, craw
 	return s.store.UpdateDuplicateJob(ctx, jobPostID, crawlerRunID)
 }
 
-func (s *JobPostService) ReconcileStaleVacancies(ctx context.Context, currentRunID uint) (int64, error) {
-	return s.store.ReconcileStaleVacancies(ctx, currentRunID)
+func (s *JobPostService) ReconcileStaleVacancies(ctx context.Context, currentRunID uint, sources []string) (int64, error) {
+	return s.store.ReconcileStaleVacancies(ctx, currentRunID, sources)
 }

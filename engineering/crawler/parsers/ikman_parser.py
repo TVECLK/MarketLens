@@ -5,6 +5,8 @@ from models import RawJobInput
 
 
 class IkmanParser(BaseJobParser):
+    SOURCE_NAME = "Ikman"
+
     # This list includes the values that we need to remove in _clean_noise method
     __NOISE_MARKERS = [
         "Show more",
@@ -119,5 +121,5 @@ class IkmanParser(BaseJobParser):
             location=location,
             description=description,
             crawler_run_id=crawler_run_id,
-            source="Ikman",
+            source=self.SOURCE_NAME,
         )

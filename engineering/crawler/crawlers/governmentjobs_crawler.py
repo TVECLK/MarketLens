@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 class GovernmentJobsCrawler(BaseJobCrawler):
     def __init__(self):
+        super().__init__()
         self._parser = GovernmentJobsParser()
 
     def _remove_sinhala_control_chars(self, text):
@@ -55,14 +56,24 @@ class GovernmentJobsCrawler(BaseJobCrawler):
             )
             soup = BeautifulSoup(result.html, "html.parser")
 
-            pagination_text = soup.select_one(".category-results .paginate").text
-            total_pages = int(pagination_text.split()[-1])
+            pagination = soup.select_one(".category-results .paginate")
+            if pagination is None:
+                self._mark_page_failure(
+                    "GovernmentJobs: Could not find the pagination element."
+                )
+                return jobs_data
+            total_pages = int(pagination.text.split()[-1])
 
             for page_num in range(1, total_pages + 1):
                 current_url = base_url.format(page_num)
 
                 # Fetch the specific page
                 page_result = await crawler.arun(url=current_url)
+                if not page_result.success:
+                    self._mark_page_failure(
+                        f"GovernmentJobs: Failed to fetch listing page {page_num}"
+                    )
+                    continue
                 page_soup = BeautifulSoup(page_result.html, "html.parser")
 
                 # Iterate through each job
@@ -104,9 +115,11 @@ class GovernmentJobsCrawler(BaseJobCrawler):
                                 "description": description.strip(),
                             }
                         )
+                        self._count_jobs()
 
                     except Exception as e:
                         logger.error(f"GovernmentJobs: Error parsing job: {e}")
+                        self._count_jobs(failed=1)
                         continue
 
         return jobs_data
@@ -123,6 +136,7 @@ class GovernmentJobsCrawler(BaseJobCrawler):
         job_data_list = await self._fetch_job_details(async_client)
 
         job_batch: List[RawJobInput] = []
+        usable_jobs = 0
 
         for result in job_data_list:
             try:
@@ -131,6 +145,7 @@ class GovernmentJobsCrawler(BaseJobCrawler):
                 logger.warning(f"GovernmentJobs: Skipping malformed job: {e}")
                 continue
 
+            usable_jobs += self._is_usable(job_input)
             job_batch.append(job_input)
 
             if len(job_batch) >= BATCH_SIZE:
@@ -145,4 +160,5 @@ class GovernmentJobsCrawler(BaseJobCrawler):
             )
             await self._flush_batch(async_client, thunder_auth, job_batch)
 
+        self._raise_if_incomplete(usable_jobs)
         logger.info("GovernmentJobs: Government jobs crawl pass concluded.")

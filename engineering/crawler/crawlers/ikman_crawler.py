@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 class IkmanCrawler(BaseJobCrawler):
     def __init__(self):
+        super().__init__()
         self._parser = IkmanParser()
 
     # This function returns the last page number from the site
@@ -41,7 +42,9 @@ class IkmanCrawler(BaseJobCrawler):
                 )
                 return last_page
             else:
-                logger.warning("Ikman: Could not find the total ad count text.")
+                self._mark_page_failure(
+                    "Ikman: Could not find the total ad count text."
+                )
                 return 1
 
     async def crawl_jobs(
@@ -56,6 +59,7 @@ class IkmanCrawler(BaseJobCrawler):
         max_pages = await self._get_last_page_from_text()
 
         job_batch: List[RawJobInput] = []
+        usable_jobs = 0
 
         browser_config = BrowserConfig(
             headless=True, extra_args=["--disable-gpu", "--no-sandbox"]
@@ -81,6 +85,10 @@ class IkmanCrawler(BaseJobCrawler):
                         if "/en/ad/" in link["href"]
                     ]
                     all_detail_urls.extend(links)
+                else:
+                    self._mark_page_failure(
+                        f"Ikman: Failed to fetch listing page {page}"
+                    )
 
             unique_urls = list(set(all_detail_urls))
             logger.info(
@@ -94,6 +102,7 @@ class IkmanCrawler(BaseJobCrawler):
 
             async for result in results_generator:
                 if not result.success or not result.markdown:
+                    self._count_jobs(failed=1)
                     continue
 
                 try:
@@ -107,6 +116,8 @@ class IkmanCrawler(BaseJobCrawler):
                     )
                     continue
 
+                self._count_jobs()
+                usable_jobs += self._is_usable(job_input)
                 job_batch.append(job_input)
 
                 if len(job_batch) >= BATCH_SIZE:
@@ -115,4 +126,5 @@ class IkmanCrawler(BaseJobCrawler):
             if job_batch:
                 await self._flush_batch(async_client, thunder_auth, job_batch)
 
+        self._raise_if_incomplete(usable_jobs)
         logger.info("Ikman: Ikman crawl pass concluded.")

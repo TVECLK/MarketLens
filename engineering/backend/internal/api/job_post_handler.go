@@ -69,7 +69,8 @@ func (h *Handler) BatchSaveJobsHandler(c *gin.Context) {
 }
 
 type reconcileStaleVacanciesInput struct {
-	CrawlerRunID uint `json:"crawler_run_id" binding:"required"`
+	CrawlerRunID uint     `json:"crawler_run_id" binding:"required"`
+	Sources      []string `json:"sources"        binding:"required,min=1"`
 }
 
 type reconcileStaleVacanciesResponse struct {
@@ -80,11 +81,11 @@ type reconcileStaleVacanciesResponse struct {
 func (h *Handler) ReconcileStaleVacanciesHandler(c *gin.Context) {
 	var in reconcileStaleVacanciesInput
 	if err := c.ShouldBindJSON(&in); err != nil {
-		respondError(c, http.StatusBadRequest, "Missing active execution tracking sequence identifier criteria", err)
+		respondError(c, http.StatusBadRequest, "crawler_run_id and a non-empty sources list are required", err)
 		return
 	}
 
-	closedCount, err := h.JobPosts.ReconcileStaleVacancies(c.Request.Context(), in.CrawlerRunID)
+	closedCount, err := h.JobPosts.ReconcileStaleVacancies(c.Request.Context(), in.CrawlerRunID, in.Sources)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "Global snapshot reconciliation sweeping routine failed", err)
 		return
