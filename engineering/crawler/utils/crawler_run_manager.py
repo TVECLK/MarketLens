@@ -62,20 +62,32 @@ class CrawlerManager:
             logger.warning(f"Crawler: Could not connect to tracking backend: {e}")
             raise
 
-    # This function sets the status of the current crawling session to "COMPLETED"
-    # and sets the end date of the jobs that are not equal to current crawler run id
+    # This function reconciles stale jobs of the sources that crawled successfully
+    # and sets the status of the current crawling session to "COMPLETED"
     async def _finalize_run(
-        self, client: httpx.AsyncClient, crawler_run_id: int
+        self,
+        client: httpx.AsyncClient,
+        crawler_run_id: int,
+        succeeded_sources: List[str],
     ) -> None:
         try:
-            logger.info("Crawler: Executing pipeline reconciliation.")
-
-            reconcile_res = await client.post(
-                f"{BACKEND_BASE_URL}/jobs/reconcile",
-                json={"crawler_run_id": crawler_run_id},
-                auth=self._thunder_auth,
-            )
-            reconcile_res.raise_for_status()
+            if succeeded_sources:
+                logger.info(
+                    f"Crawler: Executing pipeline reconciliation for sources: {succeeded_sources}"
+                )
+                reconcile_res = await client.post(
+                    f"{BACKEND_BASE_URL}/jobs/reconcile",
+                    json={
+                        "crawler_run_id": crawler_run_id,
+                        "sources": succeeded_sources,
+                    },
+                    auth=self._thunder_auth,
+                )
+                reconcile_res.raise_for_status()
+            else:
+                logger.warning(
+                    "Crawler: No crawler completed successfully, skipping reconciliation."
+                )
 
             complete_res = await client.post(
                 f"{BACKEND_BASE_URL}/runs/{crawler_run_id}/complete",
@@ -87,18 +99,20 @@ class CrawlerManager:
             logger.error(
                 f"Crawler: Failed to finalize crawler run {crawler_run_id}: {e}"
             )
+            raise
 
-    # This function calls the relevant crawlers
+    # This function calls the relevant crawlers and returns the source name of the
+    # crawler if it finished without raising, otherwise None
     async def _run_crawler(
         self,
         name: str,
         crawler_run_id: int,
         client: httpx.AsyncClient,
-    ) -> None:
+    ) -> Optional[str]:
         crawler_class = self._registry.get(name)
         if not crawler_class:
             logger.warning(f"Crawler '{name}' not found in registry.")
-            return
+            return None
 
         try:
             logger.info(f"--- Starting crawler: {name} ---")
@@ -109,8 +123,10 @@ class CrawlerManager:
                 thunder_auth=self._thunder_auth,
             )
             logger.info(f"--- Finished crawler: {name} ---")
+            return crawler_instance.source_name
         except Exception as e:
             logger.error(f"Crawler '{name}' failed: {e}", exc_info=True)
+            return None
 
     # This function calls the all crawlers one by one and send it to _run_crawler function
     async def run_all_crawlers(
@@ -128,10 +144,11 @@ class CrawlerManager:
             ]
 
             if concurrent:
-                await asyncio.gather(*tasks, return_exceptions=True)
+                results = await asyncio.gather(*tasks, return_exceptions=True)
             else:
-                for task in tasks:
-                    await task
+                results = [await task for task in tasks]
 
-            await self._finalize_run(client, crawler_run_id)
+            succeeded_sources = [r for r in results if isinstance(r, str)]
+
+            await self._finalize_run(client, crawler_run_id, succeeded_sources)
             logger.info("Scraper execution pipeline concluded.")
