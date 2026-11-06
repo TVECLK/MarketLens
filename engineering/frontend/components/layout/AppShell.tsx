@@ -9,7 +9,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {isSignedIn && <Sidebar />}
       <main
         id="main-content"
-        className={isSignedIn ? "flex-1 min-h-screen ml-64" : "flex-1 min-h-screen"}
+        className={isSignedIn ? "flex-1 min-h-screen ml-56" : "flex-1 min-h-screen"}
       >
         {children}
       </main>
