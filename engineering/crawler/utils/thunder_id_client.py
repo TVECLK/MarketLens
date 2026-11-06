@@ -72,7 +72,7 @@ class ThunderIDClient:
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 data={
                     "grant_type": "client_credentials",
-                    "scope": "crawler:runs crawler:complete crawler:lookup crawler:batch-save crawler:batch-update crawler:reconcile",
+                    "scope": "crawler:runs crawler:complete crawler:batch-save crawler:reconcile",
                     "resource": THUNDER_RESOURCE,
                 },
             )
