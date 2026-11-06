@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAccessToken } from "@/lib/token";
+import { withAuth } from "@/lib/with-auth";
 
 const BACKEND_API = `${process.env.BACKEND_API_URL}/api/v1`;
 
@@ -47,12 +47,7 @@ export async function GET(request: NextRequest) {
 }
 
 // Create new major group
-export async function POST(request: NextRequest) {
-  const token = await getAccessToken()
-  if (!token) {
-    return NextResponse.json({ error: 'Please sign in first' }, { status: 401 })
-  }
-
+export const POST = withAuth(async (request, { token }) => {
   const backendUrl = `${BACKEND_API}/major-groups`;
 
   try {
@@ -86,4 +81,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

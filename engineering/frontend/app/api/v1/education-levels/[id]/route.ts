@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAccessToken } from '@/lib/token'
+import { withAuth } from '@/lib/with-auth'
 
 const BACKEND_API = `${process.env.BACKEND_API_URL}/api/v1`;
 
 // Get education level by id
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
@@ -38,15 +38,7 @@ export async function GET(
 }
 
 // Update education level by id
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const token = await getAccessToken()
-  if (!token) {
-    return NextResponse.json({ error: 'Please sign in first' }, { status: 401 })
-  }
-
+export const PUT = withAuth<{ params: Promise<{ id: string }> }>(async (request, { params, token }) => {
   const { id } = await params;
   const backendUrl = `${BACKEND_API}/education-levels/${id}`;
 
@@ -81,23 +73,15 @@ export async function PUT(
       { status: 500 }
     );
   }
-}
+});
 
 // Delete education level by id
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const token = await getAccessToken()
-  if (!token) {
-    return NextResponse.json({ error: 'Please sign in first' }, { status: 401 })
-  }
-
+export const DELETE = withAuth<{ params: Promise<{ id: string }> }>(async (_request, { params, token }) => {
   const { id } = await params;
   const backendUrl = `${BACKEND_API}/education-levels/${id}`;
 
   try {
-    const response = await fetch(backendUrl, { 
+    const response = await fetch(backendUrl, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -123,4 +107,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-}
+});
