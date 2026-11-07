@@ -2,10 +2,9 @@ import type { Metadata } from "next";
 import { ThunderIDProvider } from "@thunderid/nextjs/server";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/layout/Sidebar";
 import QueryProvider from "@/providers/query-provider";
 import { scopeString } from "../lib/scopes";
-import { SignedIn, SignedOut } from "@thunderid/nextjs";
+import AppShell from "@/components/layout/AppShell";
 
 export const dynamic = "force-dynamic";
 
@@ -32,15 +31,7 @@ export default function RootLayout({
         >
           {/* Wrap your entire application structure with the query cache context provider */}
           <QueryProvider>
-            <div className="flex min-h-screen">
-              <SignedIn>
-                <Sidebar />
-                <main className="flex-1 ml-56 min-h-screen">{children}</main>
-              </SignedIn>
-              <SignedOut>
-                <main className="flex-1 min-h-screen">{children}</main>
-              </SignedOut>
-            </div>
+            <AppShell>{children}</AppShell>
           </QueryProvider>
         </ThunderIDProvider>
       </body>
