@@ -10,6 +10,9 @@ data:
   NEXT_PUBLIC_THUNDERID_BASE_URL: {{ .Values.config.thunderIdBaseUrl | quote }}
   NEXT_PUBLIC_THUNDERID_APPLICATION_ID: {{ .Values.config.thunderIdApplicationId | quote }}
   NEXT_PUBLIC_THUNDERID_CLIENT_ID: {{ .Values.config.thunderIdClientId | quote }}
+  {{- if .Values.config.thunderIdAfterSignInUrl }}
+  NEXT_PUBLIC_THUNDERID_AFTER_SIGN_IN_URL: {{ .Values.config.thunderIdAfterSignInUrl | quote }}
+  {{- end }}
   {{- if .Values.config.nodeTlsRejectUnauthorized }}
   NODE_TLS_REJECT_UNAUTHORIZED: {{ .Values.config.nodeTlsRejectUnauthorized | quote }}
   {{- end }}

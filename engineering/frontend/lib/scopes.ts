@@ -46,11 +46,21 @@ export const CRUD_ACTION_LABELS: Record<CrudAction, string> = {
 /** The permission string the backend checks for an action on a resource, e.g. `experiences:update`. */
 export const scopeFor = (resource: ResourceScope, action: CrudAction) => `${resource}:${action}`
 
+/**
+ * Permissions that grant access to a whole area of the app, rather than an action on one resource.
+ * Checked on the server (proxy and root layout), so a user without them never sees the area.
+ */
+export const PAGE_SCOPES = {
+  /** The KPI reference-data manager (`/kpis/*`) and the sidebar that links to it. */
+  kpis: 'kpis:access',
+} as const
+
 // build the appScopes string to send to the IDP
 export const appScopes = [
   'openid',
   'profile',
   ...Object.values(RESOURCE_SCOPES).flatMap((resource) => ALL_CRUD_ACTIONS.map((action) => scopeFor(resource, action))),
+  ...Object.values(PAGE_SCOPES),
 ]
 
 export const scopeString = appScopes.join(' ')

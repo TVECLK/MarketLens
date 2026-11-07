@@ -8,6 +8,7 @@ config:
   thunderIdBaseUrl: "https://auth.marketlens.tvec.gov.lk"
   thunderIdApplicationId: "<prod-app-id>"
   thunderIdClientId: "<prod-client-id>"
+  thunderIdAfterSignInUrl: "https://marketlens.tvec.gov.lk/auth"
 
 ingress:
   enabled: true
