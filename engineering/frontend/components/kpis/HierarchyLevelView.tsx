@@ -52,7 +52,7 @@ export default function HierarchyLevelView({
 
   const [deleteTarget, setDeleteTarget] = useState<HierarchyRow | null>(null);
   const { toast, flashToast } = useFlashToast();
-  const guards = permissionGuards<HierarchyRow>(levelBundle.permissions, levelDef.itemLabel, { setEditError, setDeleteTarget, flashToast });
+  const guards = permissionGuards<HierarchyRow>(levelBundle.permissions, levelDef.itemLabel, { setEditError, setDeleteTarget });
 
   // CREATE
   function handleAdd(e: FormEvent) {
@@ -144,13 +144,8 @@ export default function HierarchyLevelView({
   }
 
   // DELETE
-  // Note: the DB has ON DELETE CASCADE on every level's parent_id foreign
-  // key, so deleting a row here removes all its descendants server-side
-  // automatically — the delete hooks (see hooks/use-kpi.ts) already
-  // invalidate every level's cache for this hierarchy as a result.
   function handleDelete() {
     if (!deleteTarget) return;
-    if (!guards.canConfirmDelete()) return;
     const target = deleteTarget;
     levelBundle.deleteMut.mutate(target.id, {
       onSuccess: () => {

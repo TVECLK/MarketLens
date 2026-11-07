@@ -67,42 +67,36 @@ export function resolveActionPermissions(scope: ResourceScope, granted: GrantedP
 export const PERMISSION_MESSAGES = {
   checking: "Checking your permissions…",
   unavailable: "Couldn't load your permissions. Refresh the page to try again.",
+  denied: (actions: readonly CrudAction[], itemLabel: string) => {
+    const words = actions.map((action) => CRUD_ACTION_LABELS[action]);
+    const list = words.length === 1 ? words[0] : `${words.slice(0, -1).join(", ")} or ${words.at(-1)}`;
+    return `You don't have permission to ${list} ${itemLabel.toLowerCase()} items.`;
+  },
 } as const;
 
-/** "You don't have permission to add, edit or delete experience items." */
-export function permissionDeniedMessage(actions: readonly CrudAction[], itemLabel: string): string {
-  const words = actions.map((action) => CRUD_ACTION_LABELS[action]);
-  const list = words.length === 1 ? words[0] : `${words.slice(0, -1).join(", ")} or ${words.at(-1)}`;
-  return `You don't have permission to ${list} ${itemLabel.toLowerCase()} items.`;
-}
-
 /** Why an action is disabled, for its tooltip. Undefined when the action is allowed. */
-export function disabledReason(
-  permissions: ActionPermissions,
-  allowed: boolean,
-  action: CrudAction,
-  itemLabel: string,
-): string | undefined {
-  if (allowed) return undefined;
+export function disabledReason(permissions: ActionPermissions, action: CrudAction, itemLabel: string): string | undefined {
+  if (permissions.allowed[action]) return undefined;
   if (permissions.status === PERMISSION_STATUS.loading) return PERMISSION_MESSAGES.checking;
   if (permissions.status === PERMISSION_STATUS.unavailable) return PERMISSION_MESSAGES.unavailable;
-  return permissionDeniedMessage([action], itemLabel);
+  return PERMISSION_MESSAGES.denied([action], itemLabel);
 }
 
 /**
  * A visible, one-line explanation of what the user can't do, or null when nothing needs
  * explaining (everything allowed, or permissions still loading).
  */
-export function permissionsHint(permissions: ActionPermissions, itemLabel: string): string | null {
+export function permissionsHintText(permissions: ActionPermissions, itemLabel: string): string | null {
   if (permissions.status === PERMISSION_STATUS.loading) return null;
   if (permissions.status === PERMISSION_STATUS.unavailable) return PERMISSION_MESSAGES.unavailable;
   const missing = ALL_CRUD_ACTIONS.filter((action) => !permissions.allowed[action]);
-  return missing.length === 0 ? null : permissionDeniedMessage(missing, itemLabel);
+  return missing.length === 0 ? null : PERMISSION_MESSAGES.denied(missing, itemLabel);
 }
 
 /**
  * The permission checks a KPI view runs before acting, shared by the flat and hierarchy views.
- * The UI already disables these actions; the checks are a backstop, and say why when they refuse.
+ * The UI already disables these actions, so these are backstops: `canStart` and `requestDelete`
+ * refuse silently, `canSave` also shows why under the edited row.
  */
 export function permissionGuards<TItem>(
   permissions: ActionPermissions,
@@ -110,7 +104,6 @@ export function permissionGuards<TItem>(
   ui: {
     setEditError: (message: string) => void;
     setDeleteTarget: (item: TItem | null) => void;
-    flashToast: (message: string) => void;
   },
 ) {
   const { allowed } = permissions;
@@ -120,22 +113,15 @@ export function permissionGuards<TItem>(
     /** Before saving an edit: false, with the reason shown inline, when editing isn't allowed. */
     canSave: () => {
       if (allowed[CRUD_ACTIONS.update]) return true;
-      ui.setEditError(permissionDeniedMessage([CRUD_ACTIONS.update], itemLabel));
+      ui.setEditError(PERMISSION_MESSAGES.denied([CRUD_ACTIONS.update], itemLabel));
       return false;
-    },
-    /** Opens the delete confirmation, only when deleting is allowed. */
-    requestDelete: (item: TItem) => {
-      if (allowed[CRUD_ACTIONS.delete]) ui.setDeleteTarget(item);
     },
     /**
-     * Before confirming a delete: false when deleting isn't allowed (e.g. permissions changed while
-     * the dialog was open), closing the dialog and saying why instead of doing nothing.
+     * Opens the delete confirmation, only when deleting is allowed. The Delete button is already
+     * disabled without permission; this is a backstop in case the handler is reached another way.
      */
-    canConfirmDelete: () => {
-      if (allowed[CRUD_ACTIONS.delete]) return true;
-      ui.setDeleteTarget(null);
-      ui.flashToast(permissionDeniedMessage([CRUD_ACTIONS.delete], itemLabel));
-      return false;
+    requestDelete: (item: TItem) => {
+      if (allowed[CRUD_ACTIONS.delete]) ui.setDeleteTarget(item);
     },
   };
 }

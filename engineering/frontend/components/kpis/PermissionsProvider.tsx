@@ -13,6 +13,8 @@ export const GrantedPermissionsContext = createContext<GrantedPermissions | null
  */
 export default function PermissionsProvider({ children }: { children: ReactNode }) {
   const { can, isLoading, permissions } = useGrantedPermissions();
+  // Computed by the server-side ThunderIDProvider from the session, so it is already correct on
+  // the first client render (no brief "signed out" state that would flash a "no permission" hint).
   const { isSignedIn } = useThunderID();
 
   const value = useMemo<GrantedPermissions>(

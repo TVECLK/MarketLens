@@ -3,9 +3,8 @@ import {
   disabledReason,
   PERMISSION_MESSAGES,
   PERMISSION_STATUS,
-  permissionDeniedMessage,
   permissionGuards,
-  permissionsHint,
+  permissionsHintText,
   resolveActionPermissions,
   resolvePermissionStatus,
   type ActionPermissions,
@@ -78,12 +77,12 @@ describe("resolveActionPermissions", () => {
 
 describe("disabledReason", () => {
   it("is undefined for an allowed action", () => {
-    expect(disabledReason(allowedExcept(), true, CRUD_ACTIONS.create, "Gender")).toBeUndefined();
+    expect(disabledReason(allowedExcept(), CRUD_ACTIONS.create, "Gender")).toBeUndefined();
   });
 
   it("distinguishes loading, unavailable and denied", () => {
     const reason = (status: PermissionStatus) =>
-      disabledReason(allowedExcept([CRUD_ACTIONS.create], status), false, CRUD_ACTIONS.create, "Gender");
+      disabledReason(allowedExcept([CRUD_ACTIONS.create], status), CRUD_ACTIONS.create, "Gender");
     expect(reason(PERMISSION_STATUS.loading)).toBe(PERMISSION_MESSAGES.checking);
     expect(reason(PERMISSION_STATUS.unavailable)).toBe(PERMISSION_MESSAGES.unavailable);
     expect(reason(PERMISSION_STATUS.ready)).toBe("You don't have permission to add gender items.");
@@ -91,42 +90,42 @@ describe("disabledReason", () => {
 
   it("uses the user-facing word for each action", () => {
     const none = allowedExcept(ALL);
-    expect(disabledReason(none, false, CRUD_ACTIONS.update, "Gender")).toBe("You don't have permission to edit gender items.");
-    expect(disabledReason(none, false, CRUD_ACTIONS.delete, "Gender")).toBe("You don't have permission to delete gender items.");
+    expect(disabledReason(none, CRUD_ACTIONS.update, "Gender")).toBe("You don't have permission to edit gender items.");
+    expect(disabledReason(none, CRUD_ACTIONS.delete, "Gender")).toBe("You don't have permission to delete gender items.");
   });
 });
 
-describe("permissionDeniedMessage", () => {
+describe("PERMISSION_MESSAGES.denied", () => {
   it("joins several actions into one sentence", () => {
-    expect(permissionDeniedMessage([CRUD_ACTIONS.update, CRUD_ACTIONS.delete], "Experience")).toBe(
+    expect(PERMISSION_MESSAGES.denied([CRUD_ACTIONS.update, CRUD_ACTIONS.delete], "Experience")).toBe(
       "You don't have permission to edit or delete experience items.",
     );
   });
 });
 
-describe("permissionsHint", () => {
+describe("permissionsHintText", () => {
   it("says nothing while loading or when everything is allowed", () => {
-    expect(permissionsHint(allowedExcept([CRUD_ACTIONS.create], PERMISSION_STATUS.loading), "Gender")).toBeNull();
-    expect(permissionsHint(allowedExcept(), "Gender")).toBeNull();
+    expect(permissionsHintText(allowedExcept([CRUD_ACTIONS.create], PERMISSION_STATUS.loading), "Gender")).toBeNull();
+    expect(permissionsHintText(allowedExcept(), "Gender")).toBeNull();
   });
 
   it("lists the missing actions", () => {
-    expect(permissionsHint(allowedExcept([CRUD_ACTIONS.create]), "Experience")).toBe(
+    expect(permissionsHintText(allowedExcept([CRUD_ACTIONS.create]), "Experience")).toBe(
       "You don't have permission to add experience items.",
     );
-    expect(permissionsHint(allowedExcept(ALL), "Experience")).toBe(
+    expect(permissionsHintText(allowedExcept(ALL), "Experience")).toBe(
       "You don't have permission to add, edit or delete experience items.",
     );
   });
 
   it("uses the same message as the tooltips when permissions couldn't be loaded", () => {
-    expect(permissionsHint(allowedExcept([], PERMISSION_STATUS.unavailable), "Gender")).toBe(PERMISSION_MESSAGES.unavailable);
+    expect(permissionsHintText(allowedExcept([], PERMISSION_STATUS.unavailable), "Gender")).toBe(PERMISSION_MESSAGES.unavailable);
   });
 });
 
 describe("permissionGuards", () => {
   const setup = (denied: CrudAction[]) => {
-    const ui = { setEditError: vi.fn(), setDeleteTarget: vi.fn(), flashToast: vi.fn() };
+    const ui = { setEditError: vi.fn(), setDeleteTarget: vi.fn() };
     return { ui, guards: permissionGuards<string>(allowedExcept(denied), "Gender", ui) };
   };
 
@@ -134,11 +133,9 @@ describe("permissionGuards", () => {
     const { ui, guards } = setup([]);
     expect(guards.canStart(CRUD_ACTIONS.create)).toBe(true);
     expect(guards.canSave()).toBe(true);
-    expect(guards.canConfirmDelete()).toBe(true);
     guards.requestDelete("row");
     expect(ui.setDeleteTarget).toHaveBeenCalledWith("row");
     expect(ui.setEditError).not.toHaveBeenCalled();
-    expect(ui.flashToast).not.toHaveBeenCalled();
   });
 
   it("refuses to start a denied action", () => {
@@ -155,12 +152,5 @@ describe("permissionGuards", () => {
     const { ui, guards } = setup([CRUD_ACTIONS.delete]);
     guards.requestDelete("row");
     expect(ui.setDeleteTarget).not.toHaveBeenCalled();
-  });
-
-  it("closes the dialog and explains when deleting is no longer allowed", () => {
-    const { ui, guards } = setup([CRUD_ACTIONS.delete]);
-    expect(guards.canConfirmDelete()).toBe(false);
-    expect(ui.setDeleteTarget).toHaveBeenCalledWith(null);
-    expect(ui.flashToast).toHaveBeenCalledWith("You don't have permission to delete gender items.");
   });
 });

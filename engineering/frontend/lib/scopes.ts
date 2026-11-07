@@ -46,6 +46,7 @@ export const CRUD_ACTION_LABELS: Record<CrudAction, string> = {
 /** The permission string the backend checks for an action on a resource, e.g. `experiences:update`. */
 export const scopeFor = (resource: ResourceScope, action: CrudAction) => `${resource}:${action}`
 
+// build the appScopes string to send to the IDP
 export const appScopes = [
   'openid',
   'profile',

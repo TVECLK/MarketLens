@@ -4,7 +4,7 @@ import { useId } from "react";
 import {
   disabledReason,
   PERMISSION_STATUS,
-  permissionsHint,
+  permissionsHintText,
   type ActionPermissions,
   type PermissionStatus,
 } from "@/lib/action-permissions";
@@ -26,15 +26,14 @@ export const DISABLED_ROW_ACTION_CLASS = "disabled:opacity-40 disabled:cursor-no
  */
 export function usePermissionUi(permissions: ActionPermissions, itemLabel: string) {
   const hintId = useId();
-  const hint = permissionsHint(permissions, itemLabel);
+  const hint = permissionsHintText(permissions, itemLabel);
   const { allowed } = permissions;
 
-  /** Links a disabled control to the visible hint, for screen readers. */
   const describedBy = (action: CrudAction) => (!allowed[action] && hint ? hintId : undefined);
 
   const actionProps = (action: CrudAction, isPending = false) => ({
     disabled: !allowed[action] || isPending,
-    title: disabledReason(permissions, allowed[action], action, itemLabel),
+    title: disabledReason(permissions, action, itemLabel),
     "aria-describedby": describedBy(action),
   });
 

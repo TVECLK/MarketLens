@@ -29,7 +29,7 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
 
   const [deleteTarget, setDeleteTarget] = useState<FlatItem | null>(null);
   const { toast, flashToast } = useFlashToast();
-  const guards = permissionGuards<FlatItem>(bundle.permissions, config.itemLabel, { setEditError, setDeleteTarget, flashToast });
+  const guards = permissionGuards<FlatItem>(bundle.permissions, config.itemLabel, { setEditError, setDeleteTarget });
 
   // CREATE
   function handleAdd(e: FormEvent) {
@@ -89,7 +89,6 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
   // DELETE
   function handleDelete() {
     if (!deleteTarget) return;
-    if (!guards.canConfirmDelete()) return;
     const target = deleteTarget;
     bundle.deleteMut.mutate(target.id, {
       onSuccess: () => {
