@@ -1,4 +1,5 @@
 import type { HierarchyRow } from "@/types/kpi";
+import type { ActionPermissions } from "@/lib/action-permissions";
 
 export interface MutationLike<TVars> {
   mutate: (vars: TVars, opts?: { onSuccess?: () => void; onError?: (err: unknown) => void }) => void;
@@ -20,6 +21,7 @@ export interface FlatBundle {
   updateMut: MutationLike<{ id: number; payload: any }>;
   deleteMut: MutationLike<number>;
   labelField: string;
+  permissions: ActionPermissions;
 }
 
 export interface HierarchyLevelBundle {
@@ -32,6 +34,7 @@ export interface HierarchyLevelBundle {
   updateMut: MutationLike<{ id: number; payload: any }>;
   deleteMut: MutationLike<number>;
   parentField: string | null; // e.g. "major_group_id", null for the top level
+  permissions: ActionPermissions;
   total?: number;
   page?: number;
   setPage?: (p: number) => void;

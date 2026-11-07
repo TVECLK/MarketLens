@@ -19,6 +19,8 @@ import { normTop, normChild } from "@/lib/kpi-normalizers";
 import { clampPage } from "@/lib/pagination";
 import type { HierarchyLevelBundle } from "@/types/kpi-admin";
 import HierarchyLevelView from "@/components/kpis/HierarchyLevelView";
+import { useActionPermissions } from "@/hooks/use-action-permissions";
+import { RESOURCE_SCOPES } from "@/lib/scopes";
 
 const PAGE_SIZE = 20;
 
@@ -33,21 +35,25 @@ function OccupationRoute({ levelIndex }: { levelIndex: number }) {
   const createMajorGroup = useCreateMajorGroup();
   const updateMajorGroup = useUpdateMajorGroup();
   const deleteMajorGroup = useDeleteMajorGroup();
+  const majorGroupsPerms = useActionPermissions(RESOURCE_SCOPES.majorGroups);
 
   const subMajorGroupsQ = useSubMajorGroups();
   const createSubMajorGroup = useCreateSubMajorGroup();
   const updateSubMajorGroup = useUpdateSubMajorGroup();
   const deleteSubMajorGroup = useDeleteSubMajorGroup();
+  const subMajorGroupsPerms = useActionPermissions(RESOURCE_SCOPES.subMajorGroups);
 
   const minorGroupsQ = useMinorGroups();
   const createMinorGroup = useCreateMinorGroup();
   const updateMinorGroup = useUpdateMinorGroup();
   const deleteMinorGroup = useDeleteMinorGroup();
+  const minorGroupsPerms = useActionPermissions(RESOURCE_SCOPES.minorGroups);
 
   const unitGroupsQ = useUnitGroups();
   const createUnitGroup = useCreateUnitGroup();
   const updateUnitGroup = useUpdateUnitGroup();
   const deleteUnitGroup = useDeleteUnitGroup();
+  const unitGroupsPerms = useActionPermissions(RESOURCE_SCOPES.unitGroups);
 
   const occupationGroupsQ = useOccupationGroups(PAGE_SIZE, (occGroupPage - 1) * PAGE_SIZE);
   // After a delete empties the last page, step back to the new last page.
@@ -56,6 +62,7 @@ function OccupationRoute({ levelIndex }: { levelIndex: number }) {
   const createOccupationGroup = useCreateOccupationGroup();
   const updateOccupationGroup = useUpdateOccupationGroup();
   const deleteOccupationGroup = useDeleteOccupationGroup();
+  const occupationGroupsPerms = useActionPermissions(RESOURCE_SCOPES.occupationGroups);
 
   const levels: HierarchyLevelBundle[] = [
     {
@@ -65,6 +72,7 @@ function OccupationRoute({ levelIndex }: { levelIndex: number }) {
       createMut: createMajorGroup,
       updateMut: updateMajorGroup,
       deleteMut: deleteMajorGroup,
+      permissions: majorGroupsPerms,
       parentField: null,
     },
     {
@@ -74,6 +82,7 @@ function OccupationRoute({ levelIndex }: { levelIndex: number }) {
       createMut: createSubMajorGroup,
       updateMut: updateSubMajorGroup,
       deleteMut: deleteSubMajorGroup,
+      permissions: subMajorGroupsPerms,
       parentField: "major_group_id",
     },
     {
@@ -83,6 +92,7 @@ function OccupationRoute({ levelIndex }: { levelIndex: number }) {
       createMut: createMinorGroup,
       updateMut: updateMinorGroup,
       deleteMut: deleteMinorGroup,
+      permissions: minorGroupsPerms,
       parentField: "sub_major_group_id",
     },
     {
@@ -92,6 +102,7 @@ function OccupationRoute({ levelIndex }: { levelIndex: number }) {
       createMut: createUnitGroup,
       updateMut: updateUnitGroup,
       deleteMut: deleteUnitGroup,
+      permissions: unitGroupsPerms,
       parentField: "minor_group_id",
     },
     {
@@ -101,6 +112,7 @@ function OccupationRoute({ levelIndex }: { levelIndex: number }) {
       createMut: createOccupationGroup,
       updateMut: updateOccupationGroup,
       deleteMut: deleteOccupationGroup,
+      permissions: occupationGroupsPerms,
       parentField: "unit_group_id",
       total: occupationGroupsQ.data?.total,
       page: occGroupPage,
@@ -120,21 +132,25 @@ function IndustryRoute({ levelIndex }: { levelIndex: number }) {
   const createIndustrySector = useCreateIndustrySector();
   const updateIndustrySector = useUpdateIndustrySector();
   const deleteIndustrySector = useDeleteIndustrySector();
+  const industrySectorsPerms = useActionPermissions(RESOURCE_SCOPES.industrySectors);
 
   const industryDivisionsQ = useIndustryDivisions();
   const createIndustryDivision = useCreateIndustryDivision();
   const updateIndustryDivision = useUpdateIndustryDivision();
   const deleteIndustryDivision = useDeleteIndustryDivision();
+  const industryDivisionsPerms = useActionPermissions(RESOURCE_SCOPES.industryDivisions);
 
   const industryGroupsQ = useIndustryGroups();
   const createIndustryGroup = useCreateIndustryGroup();
   const updateIndustryGroup = useUpdateIndustryGroup();
   const deleteIndustryGroup = useDeleteIndustryGroup();
+  const industryGroupsPerms = useActionPermissions(RESOURCE_SCOPES.industryGroups);
 
   const industryClassesQ = useIndustryClasses();
   const createIndustryClass = useCreateIndustryClass();
   const updateIndustryClass = useUpdateIndustryClass();
   const deleteIndustryClass = useDeleteIndustryClass();
+  const industryClassesPerms = useActionPermissions(RESOURCE_SCOPES.industryClasses);
 
   const industrySubclassesQ = useIndustrySubclasses(PAGE_SIZE, (indSubclassPage - 1) * PAGE_SIZE);
   // After a delete empties the last page, step back to the new last page.
@@ -143,6 +159,7 @@ function IndustryRoute({ levelIndex }: { levelIndex: number }) {
   const createIndustrySubclass = useCreateIndustrySubclass();
   const updateIndustrySubclass = useUpdateIndustrySubclass();
   const deleteIndustrySubclass = useDeleteIndustrySubclass();
+  const industrySubclassesPerms = useActionPermissions(RESOURCE_SCOPES.industrySubClasses);
 
   const levels: HierarchyLevelBundle[] = [
     {
@@ -152,6 +169,7 @@ function IndustryRoute({ levelIndex }: { levelIndex: number }) {
       createMut: createIndustrySector,
       updateMut: updateIndustrySector,
       deleteMut: deleteIndustrySector,
+      permissions: industrySectorsPerms,
       parentField: null,
     },
     {
@@ -161,6 +179,7 @@ function IndustryRoute({ levelIndex }: { levelIndex: number }) {
       createMut: createIndustryDivision,
       updateMut: updateIndustryDivision,
       deleteMut: deleteIndustryDivision,
+      permissions: industryDivisionsPerms,
       parentField: "industry_sector_id",
     },
     {
@@ -170,6 +189,7 @@ function IndustryRoute({ levelIndex }: { levelIndex: number }) {
       createMut: createIndustryGroup,
       updateMut: updateIndustryGroup,
       deleteMut: deleteIndustryGroup,
+      permissions: industryGroupsPerms,
       parentField: "industry_division_id",
     },
     {
@@ -179,6 +199,7 @@ function IndustryRoute({ levelIndex }: { levelIndex: number }) {
       createMut: createIndustryClass,
       updateMut: updateIndustryClass,
       deleteMut: deleteIndustryClass,
+      permissions: industryClassesPerms,
       parentField: "industry_group_id",
     },
     {
@@ -188,6 +209,7 @@ function IndustryRoute({ levelIndex }: { levelIndex: number }) {
       createMut: createIndustrySubclass,
       updateMut: updateIndustrySubclass,
       deleteMut: deleteIndustrySubclass,
+      permissions: industrySubclassesPerms,
       parentField: "industry_class_id",
       total: industrySubclassesQ.data?.total,
       page: indSubclassPage,

@@ -3,8 +3,9 @@ import { ThunderIDProvider } from "@thunderid/nextjs/server";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import QueryProvider from "@/providers/query-provider";
-import { scopeString } from "../lib/scopes";
 import AppShell from "@/components/layout/AppShell";
+import { PAGE_SCOPES, scopeString } from "../lib/scopes";
+import { hasServerPermission } from "@/lib/server-permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +17,14 @@ export const metadata: Metadata = {
     "Gen-AI–enabled National Labour Market Demand & Vacancy Intelligence Platform – Sri Lanka",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Read on the server (AppShell is a client component and can't read the session cookie).
+  const canAccessKpis = await hasServerPermission(PAGE_SCOPES.kpis);
+
   return (
     <html lang="en">
       <body className={inter.className}>
@@ -31,7 +35,7 @@ export default function RootLayout({
         >
           {/* Wrap your entire application structure with the query cache context provider */}
           <QueryProvider>
-            <AppShell>{children}</AppShell>
+            <AppShell canAccessKpis={canAccessKpis}>{children}</AppShell>
           </QueryProvider>
         </ThunderIDProvider>
       </body>
