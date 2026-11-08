@@ -12,6 +12,8 @@ import {
 import type { KPICategoryKey } from "@/lib/kpi-config";
 import type { FlatBundle, FlatItem } from "@/types/kpi-admin";
 import FlatCategoryView from "@/components/kpis/FlatCategoryView";
+import { useActionPermissions } from "@/hooks/use-action-permissions";
+import { RESOURCE_SCOPES, type ResourceScope } from "@/lib/scopes";
 
 interface ListQueryLike<TData> {
   data: TData | undefined;
@@ -28,12 +30,15 @@ function flatView<TData>(
   useCreate: () => FlatBundle["createMut"],
   useUpdate: () => FlatBundle["updateMut"],
   useDelete: () => FlatBundle["deleteMut"],
+  // Scope prefix whose `:create|update|delete` permissions gate the actions.
+  scope: ResourceScope,
 ): ComponentType {
   function View() {
     const listQ = useList();
     const createMut = useCreate();
     const updateMut = useUpdate();
     const deleteMut = useDelete();
+    const permissions = useActionPermissions(scope);
     const bundle: FlatBundle = {
       isLoading: listQ.isLoading,
       isError: listQ.isError,
@@ -42,6 +47,7 @@ function flatView<TData>(
       updateMut,
       deleteMut,
       labelField,
+      permissions,
     };
     return <FlatCategoryView category={category} bundle={bundle} />;
   }
@@ -54,31 +60,37 @@ const FLAT_VIEWS: Record<KPICategoryKey, ComponentType> = {
     "employmentSector", "sector", useEmploymentSectors,
     (d) => (d?.employment_sectors ?? []).map((e) => ({ id: e.id, label: e.sector })),
     useCreateEmploymentSector, useUpdateEmploymentSector, useDeleteEmploymentSector,
+    RESOURCE_SCOPES.employmentSectors,
   ),
   experience: flatView(
     "experience", "name", useExperiences,
     (d) => (d?.experiences ?? []).map((e) => ({ id: e.id, label: e.name })),
     useCreateExperience, useUpdateExperience, useDeleteExperience,
+    RESOURCE_SCOPES.experiences,
   ),
   educationLevel: flatView(
     "educationLevel", "level", useEducationLevels,
     (d) => (d?.education_levels ?? []).map((e) => ({ id: e.id, label: e.level })),
     useCreateEducationLevel, useUpdateEducationLevel, useDeleteEducationLevel,
+    RESOURCE_SCOPES.educationLevels,
   ),
   formalInformal: flatView(
     "formalInformal", "formality_type", useFormalities,
     (d) => (d?.formalities ?? []).map((f) => ({ id: f.id, label: f.formality_type })),
     useCreateFormality, useUpdateFormality, useDeleteFormality,
+    RESOURCE_SCOPES.formalities,
   ),
   gender: flatView(
     "gender", "gender_type", useGenders,
     (d) => (d?.genders ?? []).map((g) => ({ id: g.id, label: g.gender_type })),
     useCreateGender, useUpdateGender, useDeleteGender,
+    RESOURCE_SCOPES.genders,
   ),
   vocationalEducation: flatView(
     "vocationalEducation", "level", useVocationalEducations,
     (d) => (d?.vocational_educations ?? []).map((v) => ({ id: v.id, label: v.level })),
     useCreateVocationalEducation, useUpdateVocationalEducation, useDeleteVocationalEducation,
+    RESOURCE_SCOPES.vocationalEducations,
   ),
 };
 

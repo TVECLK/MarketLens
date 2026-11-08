@@ -3,6 +3,13 @@ import Link from "next/link";
 import type { HierarchyDef, AccentClasses } from "@/lib/kpi-config";
 import type { HierarchyLevelBundle } from "@/types/kpi-admin";
 import type { HierarchyRow } from "@/types/kpi";
+import { CRUD_ACTIONS } from "@/lib/scopes";
+import {
+  DISABLED_INPUT_CLASS,
+  DISABLED_ROW_ACTION_CLASS,
+  PermissionsHint,
+  usePermissionUi,
+} from "@/components/kpis/permission-ui";
 
 interface HierarchyLevelPanelProps {
   hierarchyDef: HierarchyDef;
@@ -71,6 +78,7 @@ export default function HierarchyLevelPanel({
   const levelDef = hierarchyDef.levels[activeLevelIndex];
   const parentLevelDef = activeLevelIndex > 0 ? hierarchyDef.levels[activeLevelIndex - 1] : null;
   const items = levelBundle.items;
+  const { allowed, actionProps, inputProps, hintProps, emptyMessage } = usePermissionUi(levelBundle.permissions, levelDef.itemLabel);
 
   return (
     <main className="flex-1 p-4 mx-auto space-y-4">
@@ -112,6 +120,8 @@ export default function HierarchyLevelPanel({
         </p>
       )}
 
+      <PermissionsHint {...hintProps} />
+
       <form
         onSubmit={onSubmit}
         className="bg-white p-3 rounded-md shadow-sm flex flex-col sm:flex-row gap-3 sm:items-end sm:flex-wrap"
@@ -124,7 +134,8 @@ export default function HierarchyLevelPanel({
             value={newName}
             onChange={(e) => onNewNameChange(e.target.value)}
             placeholder={`e.g. New ${levelDef.itemLabel}`}
-            className="w-full bg-gray-50 rounded-lg p-2.5 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0"
+            {...inputProps(CRUD_ACTIONS.create)}
+            className={`w-full bg-gray-50 rounded-lg p-2.5 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0 ${DISABLED_INPUT_CLASS}`}
           />
         </div>
         <div className="w-full sm:w-32">
@@ -135,7 +146,8 @@ export default function HierarchyLevelPanel({
             value={newCode}
             onChange={(e) => onNewCodeChange(e.target.value)}
             placeholder="e.g. 1112"
-            className="w-full bg-gray-50 rounded-lg p-2.5 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0"
+            {...inputProps(CRUD_ACTIONS.create)}
+            className={`w-full bg-gray-50 rounded-lg p-2.5 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0 ${DISABLED_INPUT_CLASS}`}
           />
         </div>
         {parentLevelDef && (
@@ -146,7 +158,8 @@ export default function HierarchyLevelPanel({
             <select
               value={newParentId}
               onChange={(e) => onNewParentIdChange(e.target.value)}
-              className="w-full bg-gray-50 rounded-lg p-2.5 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0"
+              {...inputProps(CRUD_ACTIONS.create)}
+              className={`w-full bg-gray-50 rounded-lg p-2.5 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0 ${DISABLED_INPUT_CLASS}`}
             >
               <option value="">Select {parentLevelDef.itemLabel}…</option>
               {parentItems.map((p) => (
@@ -159,13 +172,13 @@ export default function HierarchyLevelPanel({
         )}
         <button
           type="submit"
-          disabled={levelBundle.createMut.isPending}
-          className={`${hAccent.bg} ${hAccent.solidText} text-xs font-bold px-5 py-2.5 rounded-lg hover:opacity-90 transition-all shrink-0 disabled:opacity-50`}
+          {...actionProps(CRUD_ACTIONS.create, levelBundle.createMut.isPending)}
+          className={`${hAccent.bg} ${hAccent.solidText} text-xs font-bold px-5 py-2.5 rounded-lg hover:opacity-90 transition-all shrink-0 disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {levelBundle.createMut.isPending ? "Adding..." : `+ Add ${levelDef.itemLabel}`}
         </button>
       </form>
-      {parentLevelDef && parentItems.length === 0 && (
+      {allowed[CRUD_ACTIONS.create] && parentLevelDef && parentItems.length === 0 && (
         <p className="text-[11px] font-bold text-amber-600 -mt-3 px-1">
           Add at least one {parentLevelDef.itemLabel} first before creating a{" "}
           {levelDef.itemLabel.toLowerCase()}.
@@ -196,7 +209,7 @@ export default function HierarchyLevelPanel({
             {!levelBundle.isLoading && items.length === 0 && (
               <tr>
                 <td colSpan={parentLevelDef ? 4 : 3} className="px-5 py-10 text-center text-gray-400 font-medium">
-                  No items yet — add the first {levelDef.itemLabel.toLowerCase()} above.
+                  {emptyMessage}
                 </td>
               </tr>
             )}
@@ -256,8 +269,8 @@ export default function HierarchyLevelPanel({
                         <>
                           <button
                             onClick={() => onSaveEdit(item.id)}
-                            disabled={levelBundle.updateMut.isPending}
-                            className="text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg transition-all disabled:opacity-50"
+                            {...actionProps(CRUD_ACTIONS.update, levelBundle.updateMut.isPending)}
+                            className="text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {levelBundle.updateMut.isPending ? "Saving..." : "Save"}
                           </button>
@@ -272,13 +285,15 @@ export default function HierarchyLevelPanel({
                         <>
                           <button
                             onClick={() => onStartEdit(item)}
-                            className={`text-[11px] font-bold ${hAccent.text} ${hAccent.lightBg} hover:opacity-80 px-3 py-1.5 rounded-lg transition-all`}
+                            {...actionProps(CRUD_ACTIONS.update)}
+                            className={`text-[11px] font-bold ${hAccent.text} ${hAccent.lightBg} hover:opacity-80 px-3 py-1.5 rounded-lg transition-all ${DISABLED_ROW_ACTION_CLASS}`}
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => onRequestDelete(item)}
-                            className="text-[11px] font-bold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-all"
+                            {...actionProps(CRUD_ACTIONS.delete)}
+                            className={`text-[11px] font-bold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-all ${DISABLED_ROW_ACTION_CLASS}`}
                           >
                             Delete
                           </button>

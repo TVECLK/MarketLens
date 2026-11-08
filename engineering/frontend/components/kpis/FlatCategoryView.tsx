@@ -3,6 +3,8 @@
 import { useState, type FormEvent } from "react";
 import { KPI_CATEGORIES, ACCENT_CLASSES, type KPICategoryKey } from "@/lib/kpi-config";
 import { getErrorMessage } from "@/lib/errors";
+import { permissionGuards } from "@/lib/action-permissions";
+import { CRUD_ACTIONS } from "@/lib/scopes";
 import { useFlashToast } from "@/hooks/use-flash-toast";
 import type { FlatBundle, FlatItem } from "@/types/kpi-admin";
 import FlatCategoryPanel from "@/components/kpis/FlatCategoryPanel";
@@ -27,10 +29,12 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
 
   const [deleteTarget, setDeleteTarget] = useState<FlatItem | null>(null);
   const { toast, flashToast } = useFlashToast();
+  const guards = permissionGuards<FlatItem>(bundle.permissions, config.itemLabel, { setEditError, setDeleteTarget });
 
   // CREATE
   function handleAdd(e: FormEvent) {
     e.preventDefault();
+    if (!guards.canStart(CRUD_ACTIONS.create)) return;
     const trimmed = newName.trim();
     if (!trimmed) {
       setFormError(`${config.itemLabel} name is required.`);
@@ -51,6 +55,7 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
 
   // UPDATE
   function startEdit(item: FlatItem) {
+    if (!guards.canStart(CRUD_ACTIONS.update)) return;
     setEditingId(item.id);
     setEditName(item.label);
     setEditError(null);
@@ -62,6 +67,7 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
   }
 
   function saveEdit(id: number) {
+    if (!guards.canSave()) return;
     const trimmed = editName.trim();
     if (!trimmed) {
       setEditError(`${config.itemLabel} name is required.`);
@@ -113,7 +119,7 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
         onStartEdit={startEdit}
         onCancelEdit={cancelEdit}
         onSaveEdit={saveEdit}
-        onRequestDelete={setDeleteTarget}
+        onRequestDelete={guards.requestDelete}
       />
 
       {deleteTarget && (

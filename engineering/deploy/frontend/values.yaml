@@ -75,6 +75,9 @@ config:
   thunderIdBaseUrl: ""
   thunderIdApplicationId: ""
   thunderIdClientId: ""
+  # Where Thunder returns after login: "<app URL>/auth". Must be a registered redirect URI in Thunder.
+  # Empty = SDK default (the app's root URL), which skips the /auth access check page.
+  thunderIdAfterSignInUrl: ""
   nodeTlsRejectUnauthorized: ""
 
 secrets:
