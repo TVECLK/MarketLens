@@ -104,9 +104,12 @@ describe("PERMISSION_MESSAGES.denied", () => {
 });
 
 describe("permissionsHintText", () => {
-  it("says nothing while loading or when everything is allowed", () => {
-    expect(permissionsHintText(allowedExcept([CRUD_ACTIONS.create], PERMISSION_STATUS.loading), "Gender")).toBeNull();
+  it("says nothing when everything is allowed", () => {
     expect(permissionsHintText(allowedExcept(), "Gender")).toBeNull();
+  });
+
+  it("explains the disabled actions while permissions are loading", () => {
+    expect(permissionsHintText(allowedExcept(ALL, PERMISSION_STATUS.loading), "Gender")).toBe(PERMISSION_MESSAGES.checking);
   });
 
   it("lists the missing actions", () => {

@@ -83,11 +83,12 @@ export function disabledReason(permissions: ActionPermissions, action: CrudActio
 }
 
 /**
- * A visible, one-line explanation of what the user can't do, or null when nothing needs
- * explaining (everything allowed, or permissions still loading).
+ * A visible, one-line explanation of why actions are disabled, or null when everything is allowed.
+ * Shown as text (not only a tooltip) so keyboard and touch users can read it too: disabled buttons
+ * can't be focused, so their tooltip and `aria-describedby` are never reached.
  */
 export function permissionsHintText(permissions: ActionPermissions, itemLabel: string): string | null {
-  if (permissions.status === PERMISSION_STATUS.loading) return null;
+  if (permissions.status === PERMISSION_STATUS.loading) return PERMISSION_MESSAGES.checking;
   if (permissions.status === PERMISSION_STATUS.unavailable) return PERMISSION_MESSAGES.unavailable;
   const missing = ALL_CRUD_ACTIONS.filter((action) => !permissions.allowed[action]);
   return missing.length === 0 ? null : PERMISSION_MESSAGES.denied(missing, itemLabel);

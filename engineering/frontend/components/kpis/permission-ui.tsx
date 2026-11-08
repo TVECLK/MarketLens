@@ -68,7 +68,8 @@ export function PermissionsHint({
   if (!hint) return null;
   const tone = status === PERMISSION_STATUS.unavailable ? "text-red-600 bg-red-50" : "text-gray-500 bg-gray-100";
   return (
-    <p id={id} className={`text-xs font-semibold rounded-md px-3 py-2 ${tone}`}>
+    // A live region, so screen readers announce when "Checking…" turns into the result.
+    <p id={id} role="status" aria-live="polite" className={`text-xs font-semibold rounded-md px-3 py-2 ${tone}`}>
       {hint}
     </p>
   );
