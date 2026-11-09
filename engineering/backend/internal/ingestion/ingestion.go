@@ -14,6 +14,8 @@ import (
 	"marketlens-go-backend/internal/models"
 	"marketlens-go-backend/internal/repositories"
 	"marketlens-go-backend/internal/service"
+
+	"gorm.io/gorm"
 )
 
 // RawJobInput is one crawled job to run through ProcessBatch.
@@ -52,6 +54,7 @@ type FailedJob struct {
 // update (each new job extracted + classified first).
 type IngestionService struct {
 	jobPosts             *service.JobPostService
+	sources              *service.SourceService
 	llmClient            *llm.Client
 	model                string
 	metadataBuilder      *MetadataBuilder
@@ -69,6 +72,7 @@ type IngestionService struct {
 // services)
 func NewIngestionService(
 	jobPosts *service.JobPostService,
+	sources *service.SourceService,
 	llmClient *llm.Client,
 	model string,
 	industryClassifier *IndustryClassifier,
@@ -81,6 +85,7 @@ func NewIngestionService(
 
 	return &IngestionService{
 		jobPosts:             jobPosts,
+		sources:              sources,
 		llmClient:            llmClient,
 		model:                model,
 		metadataBuilder:      metadataBuilder,
@@ -99,6 +104,8 @@ func NewIngestionService(
 // that got its crawler_run_id updated.
 func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInput) []FailedJob {
 	var failures []FailedJob
+	// A batch nearly always comes from one source, so look each name up once.
+	sourceChecks := make(map[string]*FailedJob)
 
 	for _, raw := range rawJobs {
 		if hasNoUsableText(raw) {
@@ -106,6 +113,24 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 				JobID:      raw.JobID,
 				StatusCode: http.StatusBadRequest,
 				Error:      "job has no usable text content",
+			})
+			continue
+		}
+
+		// Checked before dedup and the LLM so a disabled or unknown source
+		// costs nothing and never touches existing jobs.
+		check, cached := sourceChecks[raw.Source]
+		if !cached {
+			check = s.checkSource(ctx, raw.Source)
+			if check == nil || check.StatusCode != http.StatusServiceUnavailable {
+				sourceChecks[raw.Source] = check
+			}
+		}
+		if check != nil {
+			failures = append(failures, FailedJob{
+				JobID:      raw.JobID,
+				StatusCode: check.StatusCode,
+				Error:      check.Error,
 			})
 			continue
 		}
@@ -174,6 +199,28 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 	}
 
 	return failures
+}
+
+// checkSource reports why jobs from the named source must be rejected, or
+// nil if the source is registered and active. JobID is left for the caller
+// to fill in. Unknown/disabled sources are 4xx so the crawler does not retry
+// them; a lookup failure is 503 so it does.
+func (s *IngestionService) checkSource(ctx context.Context, name string) *FailedJob {
+	if strings.TrimSpace(name) == "" {
+		return &FailedJob{StatusCode: http.StatusBadRequest, Error: "job has no source"}
+	}
+
+	source, err := s.sources.GetSourceByName(ctx, name)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return &FailedJob{StatusCode: http.StatusUnprocessableEntity, Error: fmt.Sprintf("source %q is not registered", name)}
+	}
+	if err != nil {
+		return &FailedJob{StatusCode: http.StatusServiceUnavailable, Error: fmt.Sprintf("looking up source %q: %v", name, err)}
+	}
+	if !source.IsActive {
+		return &FailedJob{StatusCode: http.StatusUnprocessableEntity, Error: fmt.Sprintf("source %q is disabled", name)}
+	}
+	return nil
 }
 
 // extractedJob is the shape the LLM is asked to return, matching Schema.

@@ -27,7 +27,7 @@ func (r *Store) GetJobsByBucketKeys(ctx context.Context, bucketKeys []string) ([
 }
 
 // SaveOneJob persists a single new job — employer/job_type/skills
-// FirstOrCreate lookups, a geo lookup, source/ai_version FirstOrCreate,
+// FirstOrCreate lookups, geo and source lookups, ai_version FirstOrCreate,
 // the job itself, then its LSH records keyed off the job's real DB id —
 // in its own transaction, isolated from every other job in the batch.
 func (r *Store) SaveOneJob(ctx context.Context, job *models.JobPost, lshIndexRecords []models.LshIndex) error {
@@ -84,11 +84,15 @@ func (r *Store) SaveOneJob(ctx context.Context, job *models.JobPost, lshIndexRec
 		}
 		job.MetaData.GeoData = nil
 
-		// Source (FirstOrCreate)
+		// Source (lookup only, no create: sources are seeded)
 		if job.MetaData.Source != nil && job.MetaData.Source.Name != "" {
 			var source models.Source
-			if err := tx.Where(models.Source{Name: job.MetaData.Source.Name}).
-				FirstOrCreate(&source).Error; err != nil {
+			err := tx.Where("name = ?", job.MetaData.Source.Name).
+				First(&source).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("%w: source '%s' not registered",
+					ErrPermanentSaveFailure, job.MetaData.Source.Name)
+			} else if err != nil {
 				return wrapSaveErr(err, "source lookup failed")
 			}
 			job.MetaData.SourceID = &source.ID

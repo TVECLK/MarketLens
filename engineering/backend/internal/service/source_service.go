@@ -50,6 +50,12 @@ func (s *SourceService) GetSourceByID(ctx context.Context, id uint) (models.Sour
 	return s.store.GetSourceByID(ctx, id)
 }
 
+// GetSourceByName looks a source up by its exact name, as sent by crawlers
+// and manual uploads.
+func (s *SourceService) GetSourceByName(ctx context.Context, name string) (models.Source, error) {
+	return s.store.GetSourceByName(ctx, name)
+}
+
 // UpdateSourceStatus enables or disables a source.
 func (s *SourceService) UpdateSourceStatus(ctx context.Context, id uint, isActive bool, updatedBy string) (models.Source, error) {
 	updatedBy = strings.TrimSpace(updatedBy)
