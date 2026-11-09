@@ -21,9 +21,9 @@ RETRYABLE_STATUS_CODES = {500, 502, 503, 504, 429, 408}
 
 
 class CrawlIncompleteError(Exception):
-    """The crawl finished, but it can't be trusted to have seen every live job
-    (failed pages, too many failed jobs, or nothing usable was fetched). The source must not be
-    reconciled for this run."""
+    """Raised when a crawl can't be trusted to have seen every live job
+    (failed pages, too many failed jobs, or no usable jobs). Jobs it did fetch
+    are still saved, but its source must not be reconciled for this run."""
 
 
 @dataclass(frozen=True)
