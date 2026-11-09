@@ -13,7 +13,7 @@ export const KPI_CATEGORIES = {
   employmentSector: {
     slug: "employment-sector",
     title: "Employment Sector",
-    description: "Manage emplyment sectors for job classification",
+    description: "Manage employment sectors for job classification",
     itemLabel: "Employment Sector",
   },
   experience: {
