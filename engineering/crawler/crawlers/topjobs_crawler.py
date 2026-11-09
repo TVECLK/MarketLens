@@ -65,10 +65,10 @@ class TopJobsCrawler(BaseJobCrawler):
                     "row_id": row_id,
                     "title": tds[2].find("h2").text.strip()
                     if tds[2].find("h2")
-                    else "N/A",
+                    else "",
                     "employer": tds[2].find("h1").text.strip()
                     if tds[2].find("h1")
-                    else "N/A",
+                    else "",
                     "location": tds[6].text.strip()
                     if len(tds) > 6
                     else (tds[5].text.strip() if len(tds) > 5 else "N/A"),
