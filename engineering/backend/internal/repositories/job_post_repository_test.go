@@ -314,136 +314,127 @@ func TestStore_UpdateDuplicateJob_UnknownJobIsNoOp(t *testing.T) {
 
 // ---------- ReconcileStaleVacancies ----------
 
-func TestStore_ReconcileStaleVacancies_OnlyListedSources(t *testing.T) {
-	db := SetupTestDB(t)
-	store := repositories.NewStore(db)
-
-	roosterID := seedSource(t, db, "Rooster")
-	ikmanID := seedSource(t, db, "Ikman")
-	oldRunID := seedCrawlerRun(t, db)
-	currentRunID := seedCrawlerRun(t, db)
-
-	staleListedID := seedActiveJob(t, db, "stale rooster", roosterID, oldRunID, "bucket_stale_listed")
-	staleUnlistedID := seedActiveJob(t, db, "stale ikman", ikmanID, oldRunID, "bucket_stale_unlisted")
-	currentListedID := seedActiveJob(t, db, "current rooster", roosterID, currentRunID, "bucket_current")
-
-	affected, err := store.ReconcileStaleVacancies(context.Background(), currentRunID, []string{"Rooster"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestStore_ReconcileStaleVacancies(t *testing.T) {
+	// Every case runs against the same data set:
+	//   staleRooster   - Rooster job last seen in the old run
+	//   staleIkman     - Ikman job last seen in the old run
+	//   currentRooster - Rooster job seen in the current run
+	//   endedRooster   - Rooster job from the old run that is already ended
+	tests := []struct {
+		name         string
+		sources      []string
+		unknownRun   bool
+		wantAffected int64
+		wantExpired  []string
+		wantErr      error
+	}{
+		{
+			name:         "only the listed source is reconciled",
+			sources:      []string{"Rooster"},
+			wantAffected: 1,
+			wantExpired:  []string{"staleRooster"},
+		},
+		{
+			name:         "other sources stay untouched",
+			sources:      []string{"Ikman"},
+			wantAffected: 1,
+			wantExpired:  []string{"staleIkman"},
+		},
+		{
+			name:         "several sources are reconciled together",
+			sources:      []string{"Rooster", "Ikman"},
+			wantAffected: 2,
+			wantExpired:  []string{"staleRooster", "staleIkman"},
+		},
+		{
+			name:    "unknown source is a no-op",
+			sources: []string{"DoesNotExist"},
+		},
+		{
+			name:    "nil sources is a no-op",
+			sources: nil,
+		},
+		{
+			name:    "empty sources is a no-op",
+			sources: []string{},
+		},
+		{
+			name:       "unknown crawler run returns an error",
+			sources:    []string{"Rooster"},
+			unknownRun: true,
+			wantErr:    gorm.ErrRecordNotFound,
+		},
 	}
-	if affected != 1 {
-		t.Errorf("expected 1 reconciled job, got %d", affected)
-	}
 
-	lshCount := func(jobID uint) int64 {
-		return countRows(t, db, &models.LshIndex{}, "job_post_id = ?", jobID)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := SetupTestDB(t)
+			store := repositories.NewStore(db)
 
-	if loadMeta(t, db, staleListedID).EndDate == nil {
-		t.Error("stale job of a listed source should have been expired")
-	}
-	if n := lshCount(staleListedID); n != 0 {
-		t.Errorf("stale job of a listed source should lose its LSH rows, got %d", n)
-	}
+			roosterID := seedSource(t, db, "Rooster")
+			ikmanID := seedSource(t, db, "Ikman")
+			oldRunID := seedCrawlerRun(t, db)
+			currentRunID := seedCrawlerRun(t, db)
 
-	if loadMeta(t, db, staleUnlistedID).EndDate != nil {
-		t.Error("stale job of an unlisted source must stay active")
-	}
-	if n := lshCount(staleUnlistedID); n != 1 {
-		t.Errorf("stale job of an unlisted source must keep its LSH rows, got %d", n)
-	}
-
-	if loadMeta(t, db, currentListedID).EndDate != nil {
-		t.Error("job seen in the current run must stay active")
-	}
-	if n := lshCount(currentListedID); n != 1 {
-		t.Errorf("job seen in the current run must keep its LSH rows, got %d", n)
-	}
-}
-
-func TestStore_ReconcileStaleVacancies_UnknownSourceIsNoOp(t *testing.T) {
-	db := SetupTestDB(t)
-	store := repositories.NewStore(db)
-
-	roosterID := seedSource(t, db, "Rooster")
-	oldRunID := seedCrawlerRun(t, db)
-	currentRunID := seedCrawlerRun(t, db)
-	staleID := seedActiveJob(t, db, "stale rooster", roosterID, oldRunID)
-
-	affected, err := store.ReconcileStaleVacancies(context.Background(), currentRunID, []string{"DoesNotExist"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if affected != 0 {
-		t.Errorf("expected 0 reconciled jobs, got %d", affected)
-	}
-	if loadMeta(t, db, staleID).EndDate != nil {
-		t.Error("job must stay active when its source is not listed")
-	}
-}
-
-func TestStore_ReconcileStaleVacancies_SkipsAlreadyEndedJobs(t *testing.T) {
-	db := SetupTestDB(t)
-	store := repositories.NewStore(db)
-
-	roosterID := seedSource(t, db, "Rooster")
-	oldRunID := seedCrawlerRun(t, db)
-	currentRunID := seedCrawlerRun(t, db)
-	endedID := seedActiveJob(t, db, "already ended", roosterID, oldRunID)
-	endJob(t, db, endedID)
-	originalEnd := loadMeta(t, db, endedID).EndDate
-
-	affected, err := store.ReconcileStaleVacancies(context.Background(), currentRunID, []string{"Rooster"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if affected != 0 {
-		t.Errorf("expected 0 reconciled jobs, got %d", affected)
-	}
-	if got := loadMeta(t, db, endedID).EndDate; got == nil || !got.Equal(*originalEnd) {
-		t.Errorf("end date of an already ended job must not change, got %v want %v", got, originalEnd)
-	}
-}
-
-func TestStore_ReconcileStaleVacancies_UnknownRunReturnsError(t *testing.T) {
-	db := SetupTestDB(t)
-	store := repositories.NewStore(db)
-
-	_, err := store.ReconcileStaleVacancies(context.Background(), 9999, []string{"Rooster"})
-	if err == nil {
-		t.Fatal("expected an error for a crawler run that does not exist")
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		t.Errorf("expected gorm.ErrRecordNotFound, got %v", err)
-	}
-}
-
-func TestStore_ReconcileStaleVacancies_NoSourcesIsNoOp(t *testing.T) {
-	db := SetupTestDB(t)
-	store := repositories.NewStore(db)
-
-	roosterID := seedSource(t, db, "Rooster")
-	oldRunID := seedCrawlerRun(t, db)
-	currentRunID := seedCrawlerRun(t, db)
-	staleID := seedActiveJob(t, db, "stale rooster", roosterID, oldRunID, "bucket_a")
-
-	for name, sources := range map[string][]string{
-		"nil":   nil,
-		"empty": {},
-	} {
-		t.Run(name, func(t *testing.T) {
-			affected, err := store.ReconcileStaleVacancies(context.Background(), currentRunID, sources)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+			jobs := map[string]uint{
+				"staleRooster":   seedActiveJob(t, db, "stale rooster", roosterID, oldRunID, "bucket_stale_rooster"),
+				"staleIkman":     seedActiveJob(t, db, "stale ikman", ikmanID, oldRunID, "bucket_stale_ikman"),
+				"currentRooster": seedActiveJob(t, db, "current rooster", roosterID, currentRunID, "bucket_current_rooster"),
+				"endedRooster":   seedActiveJob(t, db, "ended rooster", roosterID, oldRunID, "bucket_ended_rooster"),
 			}
-			if affected != 0 {
-				t.Errorf("expected 0 reconciled jobs, got %d", affected)
+			endJob(t, db, jobs["endedRooster"])
+
+			endDateBefore := make(map[string]*time.Time, len(jobs))
+			for label, id := range jobs {
+				endDateBefore[label] = loadMeta(t, db, id).EndDate
 			}
-			if loadMeta(t, db, staleID).EndDate != nil {
-				t.Error("job must stay active when no source is given")
+
+			runID := currentRunID
+			if tt.unknownRun {
+				runID = 9999
 			}
-			if n := countRows(t, db, &models.LshIndex{}, "job_post_id = ?", staleID); n != 1 {
-				t.Errorf("LSH rows must be kept when no source is given, got %d", n)
+
+			affected, err := store.ReconcileStaleVacancies(context.Background(), runID, tt.sources)
+
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("expected error %v, got %v", tt.wantErr, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if affected != tt.wantAffected {
+					t.Errorf("expected %d reconciled job(s), got %d", tt.wantAffected, affected)
+				}
+			}
+
+			expired := make(map[string]bool, len(tt.wantExpired))
+			for _, label := range tt.wantExpired {
+				expired[label] = true
+			}
+
+			for label, id := range jobs {
+				endDate := loadMeta(t, db, id).EndDate
+				lshRows := countRows(t, db, &models.LshIndex{}, "job_post_id = ?", id)
+
+				if expired[label] {
+					if endDate == nil {
+						t.Errorf("%s: expected the job to be expired", label)
+					}
+					if lshRows != 0 {
+						t.Errorf("%s: expected its LSH rows to be removed, got %d", label, lshRows)
+					}
+					continue
+				}
+
+				before := endDateBefore[label]
+				if (before == nil) != (endDate == nil) || (before != nil && !before.Equal(*endDate)) {
+					t.Errorf("%s: end date must not change, was %v now %v", label, before, endDate)
+				}
+				if lshRows != 1 {
+					t.Errorf("%s: expected its LSH rows to be kept, got %d", label, lshRows)
+				}
 			}
 		})
 	}
