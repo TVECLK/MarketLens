@@ -9,6 +9,7 @@ type Services struct {
 	Analytics   *AnalyticsService
 	JobPosts    *JobPostService
 	CrawlerRuns *CrawlerRunService
+	Sources     *SourceService
 
 	EducationLevels      *CRUDService[models.EducationLevel]
 	Formalities          *CRUDService[models.Formality]
@@ -37,6 +38,7 @@ func NewServices(store *repositories.Store) *Services {
 		Analytics:   NewAnalyticsService(store),
 		JobPosts:    NewJobPostService(store),
 		CrawlerRuns: NewCrawlerRunService(store),
+		Sources:     NewSourceService(store),
 
 		EducationLevels:      NewEducationLevelService(store),
 		Formalities:          NewFormalityService(store),
