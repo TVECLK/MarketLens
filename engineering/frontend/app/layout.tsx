@@ -12,9 +12,9 @@ export const dynamic = "force-dynamic";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "LMIS - Labour Market Intelligence System",
+  title: "Labour Market Analysis System",
   description:
-    "Gen-AI–enabled National Labour Market Demand & Vacancy Intelligence Platform – Sri Lanka",
+    "Gen-AI–enabled National Labour Market Demand & Vacancy Analysis Platform – Sri Lanka",
 };
 
 export default async function RootLayout({
