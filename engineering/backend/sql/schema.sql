@@ -65,12 +65,9 @@ $$;
 CREATE TABLE IF NOT EXISTS source (
     id          SERIAL PRIMARY KEY,
     name        VARCHAR(255) NOT NULL UNIQUE,
-<<<<<<< HEAD
-=======
     type        source_type_enum NOT NULL,
     is_active   BOOLEAN NOT NULL DEFAULT TRUE,
     updated_by  VARCHAR(255),
->>>>>>> 3404a51 (schema.sql has been aligned with the new changes)
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
