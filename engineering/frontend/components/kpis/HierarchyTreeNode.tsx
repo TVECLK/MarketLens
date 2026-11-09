@@ -74,10 +74,9 @@ export default function HierarchyTreeNode(props: HierarchyTreeNodeProps) {
           type="button"
           onClick={() => onSelect(self)}
           aria-current={isSelected ? "true" : undefined}
-          className="cursor-pointer flex-1 min-w-0 flex items-baseline gap-2 py-1.5 text-left"
+          className="cursor-pointer flex-1 min-w-0 py-1.5 text-left"
         >
-          <span className="font-mono text-[11px] font-bold text-gray-500 shrink-0">{row.code}</span>
-          <span className={`text-xs truncate ${isSelected ? `font-black ${THEME.selectedText}` : "font-semibold text-gray-800"}`}>
+          <span className={`block text-xs truncate ${isSelected ? `font-black ${THEME.selectedText}` : "font-semibold text-gray-800"}`}>
             {row.name}
           </span>
         </button>
