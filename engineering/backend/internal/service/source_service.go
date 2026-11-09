@@ -7,8 +7,9 @@ import (
 	"strings"
 )
 
-// Sources are seeded, not created or deleted through the API; the only change allowed is turning
-// one on or off.
+// SourceService fronts the Store's source methods. Sources are seeded, not
+// created or deleted through the API; the only change allowed is turning one
+// on or off.
 type SourceService struct {
 	store *repositories.Store
 }
