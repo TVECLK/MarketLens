@@ -3,8 +3,8 @@ from models import RawJobInput
 
 
 class BaseJobParser(ABC):
-    # Must match the source name the backend stores in the `source` table
-    SOURCE_NAME: str
+    def __init__(self, source_name: str):
+        self._source_name = source_name
 
     @abstractmethod
     def parse_rule_based_fields(self, *args, **kwargs) -> RawJobInput:

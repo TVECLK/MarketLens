@@ -9,9 +9,6 @@ from utils.crawler_run_manager import CrawlerManager
 
 
 class _FakeParser(BaseJobParser):
-    def __init__(self, source_name: str):
-        self.SOURCE_NAME = source_name
-
     def parse_rule_based_fields(self, *args, **kwargs):
         raise NotImplementedError
 
@@ -20,8 +17,11 @@ def make_crawler_class(source_name: str, error: Exception | None = None):
     """A BaseJobCrawler whose crawl_jobs either finishes or raises `error`."""
 
     class _Crawler(BaseJobCrawler):
+        SOURCE_NAME = source_name
+
         def __init__(self):
-            self._parser = _FakeParser(source_name)
+            super().__init__()
+            self._parser = _FakeParser(self.SOURCE_NAME)
 
         async def crawl_jobs(self, crawler_run_id, async_client, thunder_auth):
             if error is not None:

@@ -26,9 +26,17 @@ class CrawlIncompleteError(Exception):
 
 
 class BaseJobCrawler(ABC):
+    # Every crawler must set this to the source name the backend stores in its
+    # `source` table. It is passed on to the crawler's parser.
+    SOURCE_NAME: str
     _parser: BaseJobParser
 
     def __init__(self):
+        source_name = getattr(self, "SOURCE_NAME", None)
+        if not isinstance(source_name, str) or not source_name.strip():
+            raise ValueError(
+                f"{type(self).__name__} must define a non-empty SOURCE_NAME"
+            )
         self._page_errors: List[str] = []
         self._jobs_attempted = 0
         self._jobs_failed = 0
@@ -74,7 +82,7 @@ class BaseJobCrawler(ABC):
 
     @property
     def source_name(self) -> str:
-        return self._parser.SOURCE_NAME
+        return self.SOURCE_NAME
 
     @abstractmethod
     async def crawl_jobs(

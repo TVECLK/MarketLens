@@ -3,8 +3,6 @@ from models import RawJobInput
 
 
 class XpressJobsParser(BaseJobParser):
-    SOURCE_NAME = "XpressJobs"
-
     def parse_rule_based_fields(self, job: dict, crawler_run_id: int) -> RawJobInput:
         return RawJobInput(
             employer=job.get("employer") or "",
@@ -12,5 +10,5 @@ class XpressJobsParser(BaseJobParser):
             location=job.get("location") or "",
             description=job.get("description") or "",
             crawler_run_id=crawler_run_id,
-            source=self.SOURCE_NAME,
+            source=self._source_name,
         )

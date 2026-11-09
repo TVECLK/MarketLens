@@ -3,7 +3,15 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from crawlers import BaseJobCrawler, CrawlIncompleteError, RoosterCrawler
+from crawlers import (
+    BaseJobCrawler,
+    CrawlIncompleteError,
+    GovernmentJobsCrawler,
+    IkmanCrawler,
+    RoosterCrawler,
+    TopJobsCrawler,
+    XpressJobsCrawler,
+)
 from models import RawJobInput
 from parsers import BaseJobParser
 
@@ -11,16 +19,16 @@ ROOSTER_URL = "https://api.rooster.jobs/jobSearch/jobs/search"
 
 
 class _FakeParser(BaseJobParser):
-    SOURCE_NAME = "Fake"
-
     def parse_rule_based_fields(self, *args, **kwargs):
         raise NotImplementedError
 
 
 class _Crawler(BaseJobCrawler):
+    SOURCE_NAME = "Fake"
+
     def __init__(self):
         super().__init__()
-        self._parser = _FakeParser()
+        self._parser = _FakeParser(self.SOURCE_NAME)
 
     async def crawl_jobs(self, crawler_run_id, async_client, thunder_auth):
         raise NotImplementedError
@@ -313,3 +321,43 @@ async def test_rooster_small_crawl_is_not_judged_by_the_ratio(limits):
     client = make_rejecting_client([rooster_page(10, jobs), rooster_page(10, jobs)], 10)
 
     await crawl_rooster(client)  # every job rejected, but only 10 attempted
+
+
+# ---------- source name ----------
+
+
+class _NoSourceCrawler(BaseJobCrawler):
+    async def crawl_jobs(self, crawler_run_id, async_client, thunder_auth):
+        raise NotImplementedError
+
+
+def test_crawler_without_a_source_name_raises():
+    with pytest.raises(ValueError, match="_NoSourceCrawler must define"):
+        _NoSourceCrawler()
+
+
+@pytest.mark.parametrize("bad_name", ["", "   ", None, 5])
+def test_crawler_with_an_invalid_source_name_raises(bad_name):
+    class _BadCrawler(_NoSourceCrawler):
+        SOURCE_NAME = bad_name
+
+    with pytest.raises(ValueError, match="SOURCE_NAME"):
+        _BadCrawler()
+
+
+# These names must match the rows in the backend's `source` table
+@pytest.mark.parametrize(
+    "crawler_class, expected",
+    [
+        (RoosterCrawler, "Rooster"),
+        (IkmanCrawler, "Ikman"),
+        (TopJobsCrawler, "TopJobs"),
+        (GovernmentJobsCrawler, "GovernmentJobs"),
+        (XpressJobsCrawler, "XpressJobs"),
+    ],
+)
+def test_crawlers_pass_their_source_name_to_their_parser(crawler_class, expected):
+    crawler = crawler_class()
+
+    assert crawler.source_name == expected
+    assert crawler._parser._source_name == expected

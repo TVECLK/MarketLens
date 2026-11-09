@@ -10,6 +10,8 @@ class _ConcreteCrawler(BaseJobCrawler):
     """BaseJobCrawler is abstract; _flush_batch is what we're testing and
     doesn't need a real crawl_jobs implementation behind it."""
 
+    SOURCE_NAME = "Fake"
+
     async def crawl_jobs(self, crawler_run_id, async_client, thunder_auth):
         raise NotImplementedError
 

@@ -15,9 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class RoosterCrawler(BaseJobCrawler):
+    SOURCE_NAME = "Rooster"
+
     def __init__(self):
         super().__init__()
-        self._parser = RoosterParser()
+        self._parser = RoosterParser(self.SOURCE_NAME)
 
     async def _fetch_all_jobs(self, async_client: httpx.AsyncClient):
         base_url = "https://api.rooster.jobs/jobSearch/jobs/search"

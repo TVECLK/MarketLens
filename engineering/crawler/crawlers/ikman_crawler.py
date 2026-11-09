@@ -22,9 +22,11 @@ logger = logging.getLogger(__name__)
 
 
 class IkmanCrawler(BaseJobCrawler):
+    SOURCE_NAME = "Ikman"
+
     def __init__(self):
         super().__init__()
-        self._parser = IkmanParser()
+        self._parser = IkmanParser(self.SOURCE_NAME)
 
     # This function returns the last page number from the site
     async def _get_last_page_from_text(self) -> int:

@@ -15,9 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class XpressJobsCrawler(BaseJobCrawler):
+    SOURCE_NAME = "XpressJobs"
+
     def __init__(self):
         super().__init__()
-        self._parser = XpressJobsParser()
+        self._parser = XpressJobsParser(self.SOURCE_NAME)
 
     def _clean_html(self, html_content):
         if not html_content:
