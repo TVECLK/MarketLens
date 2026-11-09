@@ -13,6 +13,14 @@ export const THEME = {
   },
   /** The fill for every action button. */
   button: "bg-[#005A9C] text-white hover:bg-[#004a80]",
+  /** The grey fill for secondary buttons (Cancel, Reset). */
+  buttonSecondary: "bg-gray-100 text-gray-500 hover:bg-gray-200",
+  /** Form controls and their labels. */
+  form: {
+    input:
+      "w-full bg-gray-50 rounded-lg p-2.5 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0",
+    label: "text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5",
+  },
   /** The KPI category list. */
   nav: {
     item: "hover:bg-gray-50",

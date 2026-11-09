@@ -18,9 +18,6 @@ interface CreateItemModalProps {
   onCreated: (name: string) => void;
 }
 
-const INPUT_CLASS =
-  "w-full bg-gray-50 rounded-lg p-2.5 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0";
-const LABEL_CLASS = "text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5";
 
 export default function CreateItemModal({
   itemLabel,
@@ -65,7 +62,7 @@ export default function CreateItemModal({
 
         {parent && parentLabel && (
           <div>
-            <span className={LABEL_CLASS}>Parent {parentLabel}</span>
+            <span className={THEME.form.label}>Parent {parentLabel}</span>
             <p className="text-xs font-bold text-gray-700 bg-gray-100 rounded-lg p-2.5">
               {parent.code} — {parent.name}
             </p>
@@ -73,7 +70,7 @@ export default function CreateItemModal({
         )}
 
         <div>
-          <label htmlFor="create-item-name" className={LABEL_CLASS}>
+          <label htmlFor="create-item-name" className={THEME.form.label}>
             {itemLabel} Name
           </label>
           <input
@@ -81,12 +78,12 @@ export default function CreateItemModal({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={`e.g. New ${itemLabel}`}
-            className={INPUT_CLASS}
+            className={THEME.form.input}
             autoFocus
           />
         </div>
         <div>
-          <label htmlFor="create-item-code" className={LABEL_CLASS}>
+          <label htmlFor="create-item-code" className={THEME.form.label}>
             Code
           </label>
           <input
@@ -94,7 +91,7 @@ export default function CreateItemModal({
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder="e.g. 1112"
-            className={INPUT_CLASS}
+            className={THEME.form.input}
           />
         </div>
 
@@ -104,7 +101,7 @@ export default function CreateItemModal({
           <button
             type="button"
             onClick={onCancel}
-            className="cursor-pointer text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-full transition-all"
+            className={`cursor-pointer text-xs font-bold ${THEME.buttonSecondary} px-4 py-2 rounded-full transition-all`}
           >
             Cancel
           </button>

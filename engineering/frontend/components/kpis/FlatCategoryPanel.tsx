@@ -119,7 +119,7 @@ export default function FlatCategoryPanel({
                           </button>
                           <button
                             onClick={onCancelEdit}
-                            className="cursor-pointer text-[11px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-full transition-all"
+                            className={`cursor-pointer text-[11px] font-bold ${THEME.buttonSecondary} px-3 py-1.5 rounded-full transition-all`}
                           >
                             Cancel
                           </button>

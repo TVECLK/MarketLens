@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { THEME } from "@/lib/theme";
 
 interface ConfirmDeleteModalProps {
   title: string;
@@ -33,7 +34,7 @@ export default function ConfirmDeleteModal({
         <div className="flex justify-end gap-2 mt-6">
           <button
             onClick={onCancel}
-            className="cursor-pointer text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-full transition-all"
+            className={`cursor-pointer text-xs font-bold ${THEME.buttonSecondary} px-4 py-2 rounded-full transition-all`}
           >
             Cancel
           </button>

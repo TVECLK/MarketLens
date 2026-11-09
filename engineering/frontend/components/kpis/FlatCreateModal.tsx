@@ -45,7 +45,7 @@ export default function FlatCreateModal({ itemLabel, bundle, onCancel, onCreated
         <div>
           <label
             htmlFor="create-flat-item-name"
-            className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5"
+            className={THEME.form.label}
           >
             {itemLabel}
           </label>
@@ -54,7 +54,7 @@ export default function FlatCreateModal({ itemLabel, bundle, onCancel, onCreated
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={`e.g. New ${itemLabel}`}
-            className="w-full bg-gray-50 rounded-lg p-2.5 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0"
+            className={THEME.form.input}
             autoFocus
           />
         </div>
@@ -65,7 +65,7 @@ export default function FlatCreateModal({ itemLabel, bundle, onCancel, onCreated
           <button
             type="button"
             onClick={onCancel}
-            className="cursor-pointer text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-full transition-all"
+            className={`cursor-pointer text-xs font-bold ${THEME.buttonSecondary} px-4 py-2 rounded-full transition-all`}
           >
             Cancel
           </button>

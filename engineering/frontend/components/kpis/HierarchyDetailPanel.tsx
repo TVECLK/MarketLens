@@ -24,9 +24,6 @@ interface HierarchyDetailPanelProps {
   onUpdated: (row: HierarchyRow) => void;
 }
 
-const INPUT_CLASS =
-  "w-full bg-gray-50 rounded-lg p-2.5 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0";
-const LABEL_CLASS = "text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1.5";
 
 export default function HierarchyDetailPanel({
   hierarchyId,
@@ -144,7 +141,7 @@ function EditForm({
       <div className="space-y-3">
         {parentList && (
           <div>
-            <label htmlFor="edit-item-parent" className={LABEL_CLASS}>
+            <label htmlFor="edit-item-parent" className={THEME.form.label}>
               Parent {parentLabel}
             </label>
             <select
@@ -152,7 +149,7 @@ function EditForm({
               value={parentId}
               onChange={(e) => setParentId(e.target.value)}
               {...inputProps(CRUD_ACTIONS.update)}
-              className={`${INPUT_CLASS} ${DISABLED_INPUT_CLASS} cursor-pointer`}
+              className={`${THEME.form.input} ${DISABLED_INPUT_CLASS} cursor-pointer`}
             >
               {parentList.isLoading && <option value="">Loading…</option>}
               {!parentList.isLoading && !parentId && <option value="">Select {parentLabel}…</option>}
@@ -171,7 +168,7 @@ function EditForm({
           </div>
         )}
         <div>
-          <label htmlFor="edit-item-name" className={LABEL_CLASS}>
+          <label htmlFor="edit-item-name" className={THEME.form.label}>
             {itemLabel} Name
           </label>
           <input
@@ -179,11 +176,11 @@ function EditForm({
             value={name}
             onChange={(e) => setName(e.target.value)}
             {...inputProps(CRUD_ACTIONS.update)}
-            className={`${INPUT_CLASS} ${DISABLED_INPUT_CLASS}`}
+            className={`${THEME.form.input} ${DISABLED_INPUT_CLASS}`}
           />
         </div>
         <div>
-          <label htmlFor="edit-item-code" className={LABEL_CLASS}>
+          <label htmlFor="edit-item-code" className={THEME.form.label}>
             Code
           </label>
           <input
@@ -191,7 +188,7 @@ function EditForm({
             value={code}
             onChange={(e) => setCode(e.target.value)}
             {...inputProps(CRUD_ACTIONS.update)}
-            className={`${INPUT_CLASS} ${DISABLED_INPUT_CLASS}`}
+            className={`${THEME.form.input} ${DISABLED_INPUT_CLASS}`}
           />
         </div>
       </div>
@@ -206,7 +203,7 @@ function EditForm({
               setParentId(originalParentId);
               setError(null);
             }}
-            className="cursor-pointer text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-full transition-all"
+            className={`cursor-pointer text-xs font-bold ${THEME.buttonSecondary} px-4 py-2 rounded-full transition-all`}
           >
             Reset
           </button>
