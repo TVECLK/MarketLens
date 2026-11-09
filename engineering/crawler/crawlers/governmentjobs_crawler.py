@@ -33,17 +33,15 @@ class GovernmentJobsCrawler(BaseJobCrawler):
         cleaned_text = text.replace("\u200c", "").replace("\u200d", "")
         return cleaned_text
 
+    # Raises on any failure (download, image decoding or OCR) so the caller counts
+    # the job as failed instead of saving error text as its description
     async def _perform_ocr(self, async_client: httpx.AsyncClient, image_url):
-        try:
-            response = await async_client.get(image_url, timeout=10)
-            img = Image.open(BytesIO(response.content)).convert(
-                "L"
-            )  # Convert to grayscale for better OCR
-            return " ".join(
-                pytesseract.image_to_string(img, lang=TESSERACT_LANG).split()
-            )
-        except Exception as e:
-            return f"OCR Error: {e}"
+        response = await async_client.get(image_url, timeout=10)
+        response.raise_for_status()
+        img = Image.open(BytesIO(response.content)).convert(
+            "L"
+        )  # Convert to grayscale for better OCR
+        return " ".join(pytesseract.image_to_string(img, lang=TESSERACT_LANG).split())
 
     async def _fetch_job_details(self, async_client: httpx.AsyncClient):
         base_url = "https://governmentjobs.lk/index.php?page={}&ipp=25&"
