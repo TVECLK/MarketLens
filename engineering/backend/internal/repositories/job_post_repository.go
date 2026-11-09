@@ -135,6 +135,11 @@ func (r *Store) UpdateDuplicateJob(ctx context.Context, jobPostID uint, crawlerR
 }
 
 func (r *Store) ReconcileStaleVacancies(ctx context.Context, currentRunID uint, sources []string) (int64, error) {
+	// Nothing to reconcile without a source; skip the database round trip
+	if len(sources) == 0 {
+		return 0, nil
+	}
+
 	var affectedRows int64
 	now := time.Now()
 

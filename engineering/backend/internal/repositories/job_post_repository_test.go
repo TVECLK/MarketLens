@@ -512,3 +512,34 @@ func TestStore_ReconcileStaleVacancies_UnknownRunReturnsError(t *testing.T) {
 		t.Errorf("expected gorm.ErrRecordNotFound, got %v", err)
 	}
 }
+
+func TestStore_ReconcileStaleVacancies_NoSourcesIsNoOp(t *testing.T) {
+	db := SetupTestDB(t)
+	store := repositories.NewStore(db)
+
+	rooster := seedSource(t, db, "Rooster")
+	oldRun := seedCrawlerRun(t, db)
+	currentRun := seedCrawlerRun(t, db)
+	stale := seedActiveJob(t, db, "stale rooster", rooster, oldRun, "bucket_a")
+
+	for name, sources := range map[string][]string{
+		"nil":   nil,
+		"empty": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			affected, err := store.ReconcileStaleVacancies(context.Background(), currentRun, sources)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if affected != 0 {
+				t.Errorf("expected 0 reconciled jobs, got %d", affected)
+			}
+			if loadMeta(t, db, stale).EndDate != nil {
+				t.Error("job must stay active when no source is given")
+			}
+			if n := countRows(t, db, &models.LshIndex{}, "job_post_id = ?", stale); n != 1 {
+				t.Errorf("LSH rows must be kept when no source is given, got %d", n)
+			}
+		})
+	}
+}
