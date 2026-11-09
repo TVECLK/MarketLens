@@ -76,8 +76,15 @@ class GovernmentJobsCrawler(BaseJobCrawler):
                     continue
                 page_soup = BeautifulSoup(page_result.html, "html.parser")
 
+                job_divs = page_soup.select(".grid-view.product")
+                if not job_divs:
+                    self._mark_page_failure(
+                        f"GovernmentJobs: No jobs found on listing page {page_num}"
+                    )
+                    continue
+
                 # Iterate through each job
-                for job_div in page_soup.select(".grid-view.product"):
+                for job_div in job_divs:
                     try:
                         title = job_div.select_one("h5 strong").text.strip()
                         employer = job_div.select_one('a[href*="vtag"]').text.strip()
