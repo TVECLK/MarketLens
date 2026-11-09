@@ -77,7 +77,12 @@ class XpressJobsCrawler(BaseJobCrawler):
 
             try:
                 response = await async_client.get(list_url, timeout=10)
+                # An error status (e.g. a 429 or 503 with an empty JSON body) must
+                # not be mistaken for the last page
+                response.raise_for_status()
                 jobs_list = response.json()
+                if not isinstance(jobs_list, list):
+                    raise ValueError(f"expected a list, got {type(jobs_list).__name__}")
             except Exception as e:
                 self._mark_page_failure(f"XpressJobs: Error fetching page {page}: {e}")
                 break
