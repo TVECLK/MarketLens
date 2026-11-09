@@ -12,12 +12,12 @@ import type {
   SubMajorGroup, SubMajorGroupListResponse, SubMajorGroupPayload,
   MinorGroup, MinorGroupListResponse, MinorGroupPayload,
   UnitGroup, UnitGroupListResponse, UnitGroupPayload,
-  OccupationGroup, OccupationGroupListResponse, OccupationGroupPayload,
+  OccupationGroup, OccupationGroupPayload,
   IndustrySector, IndustrySectorListResponse, IndustrySectorPayload,
   IndustryDivision, IndustryDivisionListResponse, IndustryDivisionPayload,
   IndustryGroup, IndustryGroupListResponse, IndustryGroupPayload,
   IndustryClass, IndustryClassListResponse, IndustryClassPayload,
-  IndustrySubclass, IndustrySubclassListResponse, IndustrySubclassPayload,
+  IndustrySubclass, IndustrySubclassPayload,
 } from "@/types/kpi";
 import { ENV } from "@/config/env";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -27,23 +27,11 @@ import { invalidateAfterKpiChange, relatedListKeys } from "@/lib/query-invalidat
 const BASE = ENV.NEXT_PUBLIC_API_BASE_URL;
 
 
-function useListQuery<TResponse>(
-   key: string,
-   endpoint: string,
-   params?: Record<string, number | undefined>
- ) {
-   const query = new URLSearchParams();
-   if (params) {
-     Object.entries(params).forEach(([k, v]) => {
-       if (v !== undefined) query.set(k, String(v));
-     });
-   }
-   const qs = query.toString();
-   const url = qs ? `${endpoint}?${qs}` : endpoint;
+function useListQuery<TResponse>(key: string, endpoint: string) {
   return useQuery<TResponse>({
-    queryKey: [key, "list", params ?? {}],
+    queryKey: [key, "list"],
     queryFn: async ({ signal }) => {
-      const res = await fetch(url, { signal });
+      const res = await fetch(endpoint, { signal });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         throw new Error(getApiErrorMessage(data, `Failed to fetch ${key}`));
@@ -342,10 +330,6 @@ export function useDeleteUnitGroup() {
 
 const OCCUPATIONGROUPS_URL = `${BASE}/occupation/occupation-groups`;
 
-export function useOccupationGroups(limit?: number, offset?: number) {
-   return useListQuery<OccupationGroupListResponse>("occupation-groups", OCCUPATIONGROUPS_URL, { limit, offset });
-}
-
 export function useCreateOccupationGroup() {
   return useCreateMutation<OccupationGroupPayload, OccupationGroup>("occupation-groups", OCCUPATIONGROUPS_URL);
 }
@@ -446,10 +430,6 @@ export function useDeleteIndustryClass() {
 // INDUSTRYSUBCLASS ("industry-subclasses") - industry hierarchy level
 
 const INDUSTRYSUBCLASSES_URL = `${BASE}/industry/industry-subclasses`;
-
-export function useIndustrySubclasses(limit?: number, offset?: number) {
-   return useListQuery<IndustrySubclassListResponse>("industry-subclasses", INDUSTRYSUBCLASSES_URL, { limit, offset });
-}
 
 export function useCreateIndustrySubclass() {
   return useCreateMutation<IndustrySubclassPayload, IndustrySubclass>("industry-subclasses", INDUSTRYSUBCLASSES_URL);

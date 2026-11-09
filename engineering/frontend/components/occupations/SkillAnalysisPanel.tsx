@@ -163,14 +163,14 @@ export default function SkillAnalysisPanel({
                     <button
                       onClick={() => onPageChange(Math.max(1, page - 1))}
                       disabled={page <= 1}
-                      className="cursor-pointer px-3 py-1.5 text-xs font-bold rounded-lg border border-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-50"
+                      className="cursor-pointer px-3 py-1.5 text-xs font-bold rounded-full border border-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-50"
                     >
                       Previous
                     </button>
                     <button
                       onClick={() => onPageChange(page + 1)}
                       disabled={page >= lastPage}
-                      className="cursor-pointer px-3 py-1.5 text-xs font-bold rounded-lg border border-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-50"
+                      className="cursor-pointer px-3 py-1.5 text-xs font-bold rounded-full border border-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-50"
                     >
                       Next
                     </button>

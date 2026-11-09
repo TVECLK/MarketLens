@@ -2,7 +2,7 @@ import type { HierarchyRow } from "@/types/kpi";
 
 // Each raw hierarchy API type has a different label/parent field name;
 // these adapt every level down to one common shape (HierarchyRow) so the
-// table/form JSX only needs to be written once instead of ten times.
+// UI only needs to be written once instead of ten times.
 
 export function normTop(
   list: { id: number; name: string; code: string }[] | undefined,

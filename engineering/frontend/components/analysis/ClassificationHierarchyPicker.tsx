@@ -4,6 +4,7 @@ import type {
   HierarchyLevelState,
   PathNode,
 } from "@/hooks/use-hierarchy-drilldown";
+import { THEME } from "@/lib/theme";
 
 interface ClassificationHierarchyPickerProps<TLevelKey extends string> {
   levels: HierarchyLevelState<TLevelKey>[];
@@ -90,7 +91,7 @@ export default function ClassificationHierarchyPicker<TLevelKey extends string>(
               disabled={!nextLevel || nextLevel.isLoading || nextLevel.options.length === 0}
               aria-label={`Add ${nextLevel?.label}`}
               title={`Add ${nextLevel?.label}`}
-              className="cursor-pointer mb-0.5 w-9 h-9 rounded-xl bg-zinc-900 hover:bg-zinc-700 text-white font-black text-base flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className={`cursor-pointer mb-0.5 w-9 h-9 rounded-full ${THEME.button} font-black text-base flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed`}
             >
               +
             </button>
@@ -101,7 +102,7 @@ export default function ClassificationHierarchyPicker<TLevelKey extends string>(
               onClick={onRemoveLevel}
               aria-label="Remove last level"
               title="Remove last level"
-              className="cursor-pointer mb-0.5 w-9 h-9 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-500 font-black text-base flex items-center justify-center transition-colors"
+              className="cursor-pointer mb-0.5 w-9 h-9 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-500 font-black text-base flex items-center justify-center transition-colors"
             >
               −
             </button>

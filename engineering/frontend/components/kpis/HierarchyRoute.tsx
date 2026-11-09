@@ -1,237 +1,134 @@
 "use client";
 
-import { useState } from "react";
 import {
-  useMajorGroups, useCreateMajorGroup, useUpdateMajorGroup, useDeleteMajorGroup,
-  useSubMajorGroups, useCreateSubMajorGroup, useUpdateSubMajorGroup, useDeleteSubMajorGroup,
-  useMinorGroups, useCreateMinorGroup, useUpdateMinorGroup, useDeleteMinorGroup,
-  useUnitGroups, useCreateUnitGroup, useUpdateUnitGroup, useDeleteUnitGroup,
-  useOccupationGroups, useCreateOccupationGroup, useUpdateOccupationGroup, useDeleteOccupationGroup,
+  useMajorGroups, useSubMajorGroups, useMinorGroups, useUnitGroups, useCreateMajorGroup, useUpdateMajorGroup, useDeleteMajorGroup,
+  useCreateSubMajorGroup, useUpdateSubMajorGroup, useDeleteSubMajorGroup,
+  useCreateMinorGroup, useUpdateMinorGroup, useDeleteMinorGroup,
+  useCreateUnitGroup, useUpdateUnitGroup, useDeleteUnitGroup,
+  useCreateOccupationGroup, useUpdateOccupationGroup, useDeleteOccupationGroup,
 
-  useIndustrySectors, useCreateIndustrySector, useUpdateIndustrySector, useDeleteIndustrySector,
-  useIndustryDivisions, useCreateIndustryDivision, useUpdateIndustryDivision, useDeleteIndustryDivision,
-  useIndustryGroups, useCreateIndustryGroup, useUpdateIndustryGroup, useDeleteIndustryGroup,
-  useIndustryClasses, useCreateIndustryClass, useUpdateIndustryClass, useDeleteIndustryClass,
-  useIndustrySubclasses, useCreateIndustrySubclass, useUpdateIndustrySubclass, useDeleteIndustrySubclass,
+  useIndustrySectors, useIndustryDivisions, useIndustryGroups, useIndustryClasses, useCreateIndustrySector, useUpdateIndustrySector, useDeleteIndustrySector,
+  useCreateIndustryDivision, useUpdateIndustryDivision, useDeleteIndustryDivision,
+  useCreateIndustryGroup, useUpdateIndustryGroup, useDeleteIndustryGroup,
+  useCreateIndustryClass, useUpdateIndustryClass, useDeleteIndustryClass,
+  useCreateIndustrySubclass, useUpdateIndustrySubclass, useDeleteIndustrySubclass,
 } from "@/hooks/use-kpi";
-import type { HierarchyId } from "@/lib/kpi-config";
-import { normTop, normChild } from "@/lib/kpi-normalizers";
-import { clampPage } from "@/lib/pagination";
-import type { HierarchyLevelBundle } from "@/types/kpi-admin";
-import HierarchyLevelView from "@/components/kpis/HierarchyLevelView";
 import { useActionPermissions } from "@/hooks/use-action-permissions";
+import type { HierarchyId } from "@/lib/kpi-config";
+import { normChild, normTop } from "@/lib/kpi-normalizers";
 import { RESOURCE_SCOPES } from "@/lib/scopes";
+import type { HierarchyLevelMutations } from "@/types/kpi-admin";
+import HierarchyTreeView from "@/components/kpis/HierarchyTreeView";
 
-const PAGE_SIZE = 20;
+// The tree fetches each level by parent when its parent is expanded (see
+// use-admin-hierarchy-children.ts). Every level that can be someone's parent is
+// also loaded in full, to fill the edit form's "Parent" dropdown; the leaf level
+// never is, so it isn't (it's the only paginated one).
 
-// All five levels of a hierarchy are loaded together: the active level needs
-// the level above for its parent picker, and the delete warning walks every
-// level below to count cascaded rows.
-
-function OccupationRoute({ levelIndex }: { levelIndex: number }) {
-  const [occGroupPage, setOccGroupPage] = useState(1);
-
+function OccupationRoute() {
   const majorGroupsQ = useMajorGroups();
-  const createMajorGroup = useCreateMajorGroup();
-  const updateMajorGroup = useUpdateMajorGroup();
-  const deleteMajorGroup = useDeleteMajorGroup();
-  const majorGroupsPerms = useActionPermissions(RESOURCE_SCOPES.majorGroups);
-
   const subMajorGroupsQ = useSubMajorGroups();
-  const createSubMajorGroup = useCreateSubMajorGroup();
-  const updateSubMajorGroup = useUpdateSubMajorGroup();
-  const deleteSubMajorGroup = useDeleteSubMajorGroup();
-  const subMajorGroupsPerms = useActionPermissions(RESOURCE_SCOPES.subMajorGroups);
-
   const minorGroupsQ = useMinorGroups();
-  const createMinorGroup = useCreateMinorGroup();
-  const updateMinorGroup = useUpdateMinorGroup();
-  const deleteMinorGroup = useDeleteMinorGroup();
-  const minorGroupsPerms = useActionPermissions(RESOURCE_SCOPES.minorGroups);
-
   const unitGroupsQ = useUnitGroups();
-  const createUnitGroup = useCreateUnitGroup();
-  const updateUnitGroup = useUpdateUnitGroup();
-  const deleteUnitGroup = useDeleteUnitGroup();
-  const unitGroupsPerms = useActionPermissions(RESOURCE_SCOPES.unitGroups);
 
-  const occupationGroupsQ = useOccupationGroups(PAGE_SIZE, (occGroupPage - 1) * PAGE_SIZE);
-  // After a delete empties the last page, step back to the new last page.
-  const clampedOccGroupPage = clampPage(occGroupPage, occupationGroupsQ.data?.total, PAGE_SIZE);
-  if (clampedOccGroupPage !== occGroupPage) setOccGroupPage(clampedOccGroupPage);
-  const createOccupationGroup = useCreateOccupationGroup();
-  const updateOccupationGroup = useUpdateOccupationGroup();
-  const deleteOccupationGroup = useDeleteOccupationGroup();
-  const occupationGroupsPerms = useActionPermissions(RESOURCE_SCOPES.occupationGroups);
-
-  const levels: HierarchyLevelBundle[] = [
+  const levels: HierarchyLevelMutations[] = [
     {
-      isLoading: majorGroupsQ.isLoading,
-      isError: majorGroupsQ.isError,
-      items: normTop(majorGroupsQ.data?.major_groups),
-      createMut: createMajorGroup,
-      updateMut: updateMajorGroup,
-      deleteMut: deleteMajorGroup,
-      permissions: majorGroupsPerms,
-      parentField: null,
+      createMut: useCreateMajorGroup(), updateMut: useUpdateMajorGroup(), deleteMut: useDeleteMajorGroup(),
+      permissions: useActionPermissions(RESOURCE_SCOPES.majorGroups), parentField: null,
     },
     {
-      isLoading: subMajorGroupsQ.isLoading,
-      isError: subMajorGroupsQ.isError,
-      items: normChild(subMajorGroupsQ.data?.sub_major_groups, "major_group_id", "major_group"),
-      createMut: createSubMajorGroup,
-      updateMut: updateSubMajorGroup,
-      deleteMut: deleteSubMajorGroup,
-      permissions: subMajorGroupsPerms,
-      parentField: "major_group_id",
+      createMut: useCreateSubMajorGroup(), updateMut: useUpdateSubMajorGroup(), deleteMut: useDeleteSubMajorGroup(),
+      permissions: useActionPermissions(RESOURCE_SCOPES.subMajorGroups), parentField: "major_group_id",
     },
     {
-      isLoading: minorGroupsQ.isLoading,
-      isError: minorGroupsQ.isError,
-      items: normChild(minorGroupsQ.data?.minor_groups, "sub_major_group_id", "sub_major_group"),
-      createMut: createMinorGroup,
-      updateMut: updateMinorGroup,
-      deleteMut: deleteMinorGroup,
-      permissions: minorGroupsPerms,
-      parentField: "sub_major_group_id",
+      createMut: useCreateMinorGroup(), updateMut: useUpdateMinorGroup(), deleteMut: useDeleteMinorGroup(),
+      permissions: useActionPermissions(RESOURCE_SCOPES.minorGroups), parentField: "sub_major_group_id",
     },
     {
-      isLoading: unitGroupsQ.isLoading,
-      isError: unitGroupsQ.isError,
-      items: normChild(unitGroupsQ.data?.unit_groups, "minor_group_id", "minor_group"),
-      createMut: createUnitGroup,
-      updateMut: updateUnitGroup,
-      deleteMut: deleteUnitGroup,
-      permissions: unitGroupsPerms,
-      parentField: "minor_group_id",
+      createMut: useCreateUnitGroup(), updateMut: useUpdateUnitGroup(), deleteMut: useDeleteUnitGroup(),
+      permissions: useActionPermissions(RESOURCE_SCOPES.unitGroups), parentField: "minor_group_id",
     },
     {
-      isLoading: occupationGroupsQ.isLoading,
-      isError: occupationGroupsQ.isError,
-      items: normChild(occupationGroupsQ.data?.occupation_groups, "unit_group_id", "unit_group"),
-      createMut: createOccupationGroup,
-      updateMut: updateOccupationGroup,
-      deleteMut: deleteOccupationGroup,
-      permissions: occupationGroupsPerms,
-      parentField: "unit_group_id",
-      total: occupationGroupsQ.data?.total,
-      page: occGroupPage,
-      setPage: setOccGroupPage,
+      createMut: useCreateOccupationGroup(), updateMut: useUpdateOccupationGroup(), deleteMut: useDeleteOccupationGroup(),
+      permissions: useActionPermissions(RESOURCE_SCOPES.occupationGroups), parentField: "unit_group_id",
     },
   ];
 
   return (
-    <HierarchyLevelView key={levelIndex} hierarchyId="occupation" levelIndex={levelIndex} levels={levels} pageSize={PAGE_SIZE} />
+    <HierarchyTreeView
+      hierarchyId="occupation"
+      lists={[
+        { isLoading: majorGroupsQ.isLoading, isError: majorGroupsQ.isError, items: normTop(majorGroupsQ.data?.major_groups) },
+        {
+          isLoading: subMajorGroupsQ.isLoading, isError: subMajorGroupsQ.isError,
+          items: normChild(subMajorGroupsQ.data?.sub_major_groups, "major_group_id", "major_group"),
+        },
+        {
+          isLoading: minorGroupsQ.isLoading, isError: minorGroupsQ.isError,
+          items: normChild(minorGroupsQ.data?.minor_groups, "sub_major_group_id", "sub_major_group"),
+        },
+        {
+          isLoading: unitGroupsQ.isLoading, isError: unitGroupsQ.isError,
+          items: normChild(unitGroupsQ.data?.unit_groups, "minor_group_id", "minor_group"),
+        },
+      ]}
+      levels={levels}
+    />
   );
 }
 
-function IndustryRoute({ levelIndex }: { levelIndex: number }) {
-  const [indSubclassPage, setIndSubclassPage] = useState(1);
-
+function IndustryRoute() {
   const industrySectorsQ = useIndustrySectors();
-  const createIndustrySector = useCreateIndustrySector();
-  const updateIndustrySector = useUpdateIndustrySector();
-  const deleteIndustrySector = useDeleteIndustrySector();
-  const industrySectorsPerms = useActionPermissions(RESOURCE_SCOPES.industrySectors);
-
   const industryDivisionsQ = useIndustryDivisions();
-  const createIndustryDivision = useCreateIndustryDivision();
-  const updateIndustryDivision = useUpdateIndustryDivision();
-  const deleteIndustryDivision = useDeleteIndustryDivision();
-  const industryDivisionsPerms = useActionPermissions(RESOURCE_SCOPES.industryDivisions);
-
   const industryGroupsQ = useIndustryGroups();
-  const createIndustryGroup = useCreateIndustryGroup();
-  const updateIndustryGroup = useUpdateIndustryGroup();
-  const deleteIndustryGroup = useDeleteIndustryGroup();
-  const industryGroupsPerms = useActionPermissions(RESOURCE_SCOPES.industryGroups);
-
   const industryClassesQ = useIndustryClasses();
-  const createIndustryClass = useCreateIndustryClass();
-  const updateIndustryClass = useUpdateIndustryClass();
-  const deleteIndustryClass = useDeleteIndustryClass();
-  const industryClassesPerms = useActionPermissions(RESOURCE_SCOPES.industryClasses);
 
-  const industrySubclassesQ = useIndustrySubclasses(PAGE_SIZE, (indSubclassPage - 1) * PAGE_SIZE);
-  // After a delete empties the last page, step back to the new last page.
-  const clampedIndSubclassPage = clampPage(indSubclassPage, industrySubclassesQ.data?.total, PAGE_SIZE);
-  if (clampedIndSubclassPage !== indSubclassPage) setIndSubclassPage(clampedIndSubclassPage);
-  const createIndustrySubclass = useCreateIndustrySubclass();
-  const updateIndustrySubclass = useUpdateIndustrySubclass();
-  const deleteIndustrySubclass = useDeleteIndustrySubclass();
-  const industrySubclassesPerms = useActionPermissions(RESOURCE_SCOPES.industrySubClasses);
-
-  const levels: HierarchyLevelBundle[] = [
+  const levels: HierarchyLevelMutations[] = [
     {
-      isLoading: industrySectorsQ.isLoading,
-      isError: industrySectorsQ.isError,
-      items: normTop(industrySectorsQ.data?.industry_sectors),
-      createMut: createIndustrySector,
-      updateMut: updateIndustrySector,
-      deleteMut: deleteIndustrySector,
-      permissions: industrySectorsPerms,
-      parentField: null,
+      createMut: useCreateIndustrySector(), updateMut: useUpdateIndustrySector(), deleteMut: useDeleteIndustrySector(),
+      permissions: useActionPermissions(RESOURCE_SCOPES.industrySectors), parentField: null,
     },
     {
-      isLoading: industryDivisionsQ.isLoading,
-      isError: industryDivisionsQ.isError,
-      items: normChild(industryDivisionsQ.data?.industry_divisions, "industry_sector_id", "industry_sector"),
-      createMut: createIndustryDivision,
-      updateMut: updateIndustryDivision,
-      deleteMut: deleteIndustryDivision,
-      permissions: industryDivisionsPerms,
-      parentField: "industry_sector_id",
+      createMut: useCreateIndustryDivision(), updateMut: useUpdateIndustryDivision(), deleteMut: useDeleteIndustryDivision(),
+      permissions: useActionPermissions(RESOURCE_SCOPES.industryDivisions), parentField: "industry_sector_id",
     },
     {
-      isLoading: industryGroupsQ.isLoading,
-      isError: industryGroupsQ.isError,
-      items: normChild(industryGroupsQ.data?.industry_groups, "industry_division_id", "industry_division"),
-      createMut: createIndustryGroup,
-      updateMut: updateIndustryGroup,
-      deleteMut: deleteIndustryGroup,
-      permissions: industryGroupsPerms,
-      parentField: "industry_division_id",
+      createMut: useCreateIndustryGroup(), updateMut: useUpdateIndustryGroup(), deleteMut: useDeleteIndustryGroup(),
+      permissions: useActionPermissions(RESOURCE_SCOPES.industryGroups), parentField: "industry_division_id",
     },
     {
-      isLoading: industryClassesQ.isLoading,
-      isError: industryClassesQ.isError,
-      items: normChild(industryClassesQ.data?.industry_classes, "industry_group_id", "industry_group"),
-      createMut: createIndustryClass,
-      updateMut: updateIndustryClass,
-      deleteMut: deleteIndustryClass,
-      permissions: industryClassesPerms,
-      parentField: "industry_group_id",
+      createMut: useCreateIndustryClass(), updateMut: useUpdateIndustryClass(), deleteMut: useDeleteIndustryClass(),
+      permissions: useActionPermissions(RESOURCE_SCOPES.industryClasses), parentField: "industry_group_id",
     },
     {
-      isLoading: industrySubclassesQ.isLoading,
-      isError: industrySubclassesQ.isError,
-      items: normChild(industrySubclassesQ.data?.industry_subclasses, "industry_class_id", "industry_class"),
-      createMut: createIndustrySubclass,
-      updateMut: updateIndustrySubclass,
-      deleteMut: deleteIndustrySubclass,
-      permissions: industrySubclassesPerms,
-      parentField: "industry_class_id",
-      total: industrySubclassesQ.data?.total,
-      page: indSubclassPage,
-      setPage: setIndSubclassPage,
+      createMut: useCreateIndustrySubclass(), updateMut: useUpdateIndustrySubclass(), deleteMut: useDeleteIndustrySubclass(),
+      permissions: useActionPermissions(RESOURCE_SCOPES.industrySubClasses), parentField: "industry_class_id",
     },
   ];
 
   return (
-    <HierarchyLevelView key={levelIndex} hierarchyId="industry" levelIndex={levelIndex} levels={levels} pageSize={PAGE_SIZE} />
+    <HierarchyTreeView
+      hierarchyId="industry"
+      lists={[
+        { isLoading: industrySectorsQ.isLoading, isError: industrySectorsQ.isError, items: normTop(industrySectorsQ.data?.industry_sectors) },
+        {
+          isLoading: industryDivisionsQ.isLoading, isError: industryDivisionsQ.isError,
+          items: normChild(industryDivisionsQ.data?.industry_divisions, "industry_sector_id", "industry_sector"),
+        },
+        {
+          isLoading: industryGroupsQ.isLoading, isError: industryGroupsQ.isError,
+          items: normChild(industryGroupsQ.data?.industry_groups, "industry_division_id", "industry_division"),
+        },
+        {
+          isLoading: industryClassesQ.isLoading, isError: industryClassesQ.isError,
+          items: normChild(industryClassesQ.data?.industry_classes, "industry_group_id", "industry_group"),
+        },
+      ]}
+      levels={levels}
+    />
   );
 }
 
-export default function HierarchyRoute({
-  hierarchyId,
-  levelIndex,
-}: {
-  hierarchyId: HierarchyId;
-  levelIndex: number;
-}) {
-  return hierarchyId === "occupation" ? (
-    <OccupationRoute levelIndex={levelIndex} />
-  ) : (
-    <IndustryRoute levelIndex={levelIndex} />
-  );
+export default function HierarchyRoute({ hierarchyId }: { hierarchyId: HierarchyId }) {
+  return hierarchyId === "occupation" ? <OccupationRoute /> : <IndustryRoute />;
 }

@@ -43,7 +43,7 @@ export function usePermissionUi(permissions: ActionPermissions, itemLabel: strin
   });
 
   const emptyMessage = allowed[CRUD_ACTIONS.create]
-    ? `No items yet — add the first ${itemLabel.toLowerCase()} above.`
+    ? `No items yet — add the first ${itemLabel.toLowerCase()}.`
     : "No items yet.";
 
   return {
@@ -52,6 +52,17 @@ export function usePermissionUi(permissions: ActionPermissions, itemLabel: strin
     inputProps,
     hintProps: { id: hintId, hint, status: permissions.status },
     emptyMessage,
+  };
+}
+
+/**
+ * `disabled` and tooltip for one action on one resource, without a hook, for rows that span
+ * several resources (a tree row acts on its own level and on the level below it).
+ */
+export function rowActionProps(permissions: ActionPermissions, action: CrudAction, itemLabel: string) {
+  return {
+    disabled: !permissions.allowed[action],
+    title: disabledReason(permissions, action, itemLabel),
   };
 }
 

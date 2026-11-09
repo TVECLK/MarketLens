@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
-import { hierarchyLevelHref } from "@/lib/kpi-config";
+import HierarchyRoute from "@/components/kpis/HierarchyRoute";
 
-export default function IndustryIndexPage() {
-  redirect(hierarchyLevelHref("industry", 0));
+export default function IndustryPage() {
+  return <HierarchyRoute hierarchyId="industry" />;
 }

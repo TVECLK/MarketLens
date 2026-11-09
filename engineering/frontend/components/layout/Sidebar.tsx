@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { THEME } from "@/lib/theme";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboardIcon },
@@ -43,7 +44,9 @@ export default function Sidebar() {
     <aside
       ref={asideRef}
       className={clsx(
-        "fixed inset-y-0 left-0 z-50 bg-zinc-950 border-r border-zinc-800 flex flex-col font-sans transition-all duration-200",
+        "fixed inset-y-0 left-0 z-50 border-r flex flex-col font-sans transition-all duration-200",
+        THEME.sidebar.bg,
+        THEME.sidebar.border,
         collapsed ? "w-16" : "w-56",
       )}
     >
@@ -51,7 +54,10 @@ export default function Sidebar() {
       <button
         onClick={() => setCollapsed((c) => !c)}
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        className="absolute -right-3 top-16 z-50 w-6 h-6 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors shadow-md cursor-pointer"
+        className={clsx(
+          "absolute -right-3 top-16 z-50 w-6 h-6 rounded-full border flex items-center justify-center transition-colors shadow-md cursor-pointer",
+          THEME.sidebar.toggle,
+        )}
       >
         <ChevronLeftIcon
           className={clsx(
@@ -64,7 +70,8 @@ export default function Sidebar() {
       {/* Logo Component */}
       <div
         className={clsx(
-          "flex items-center gap-3 py-5 border-b border-zinc-800",
+          "flex items-center gap-3 py-5 border-b",
+          THEME.sidebar.border,
           collapsed ? "px-3.5 justify-center" : "px-6",
         )}
       >
@@ -82,7 +89,7 @@ export default function Sidebar() {
             <h1 className="text-white font-bold text-sm tracking-tight leading-tight">
               TVEC
             </h1>
-            <p className="text-zinc-400 text-[9px] uppercase font-semibold tracking-wider leading-tight mt-0.5">
+            <p className={clsx("text-[9px] uppercase font-semibold tracking-wider leading-tight mt-0.5", THEME.sidebar.subtext)}>
               Labour Intelligence
             </p>
           </div>
@@ -103,9 +110,7 @@ export default function Sidebar() {
               className={clsx(
                 "flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-150",
                 collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2.5",
-                isActive
-                  ? "bg-white text-black font-semibold shadow-sm"
-                  : "text-zinc-400 hover:bg-zinc-900 hover:text-white",
+                isActive ? THEME.sidebar.linkActive : THEME.sidebar.link,
               )}
             >
               <item.icon className="w-4 h-4 flex-shrink-0" />

@@ -157,14 +157,6 @@ export interface UnitGroupListResponse {
   count: number;
   unit_groups: UnitGroup[];
 }
-// Paginated - matches GetAllOccupationGroups (limit/offset supported)
-export interface OccupationGroupListResponse {
-  count: number;
-  total: number;
-  limit: number;
-  offset: number;
-  occupation_groups: OccupationGroup[];
-}
 
 export interface MajorGroupPayload {
   name: string;
@@ -259,14 +251,6 @@ export interface IndustryGroupListResponse {
 export interface IndustryClassListResponse {
   count: number;
   industry_classes: IndustryClass[];
-}
-// Paginated - matches GetAllIndustrySubclasses (limit/offset supported)
-export interface IndustrySubclassListResponse {
-  count: number;
-  total: number;
-  limit: number;
-  offset: number;
-  industry_subclasses: IndustrySubclass[];
 }
 
 export interface IndustrySectorPayload {
