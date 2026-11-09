@@ -7,7 +7,7 @@ import { PERMISSION_MESSAGES } from "@/lib/action-permissions";
 import { CRUD_ACTIONS } from "@/lib/scopes";
 import { THEME } from "@/lib/theme";
 import type { HierarchyRow } from "@/types/kpi";
-import type { HierarchyLevelMutations, HierarchySelection } from "@/types/kpi-admin";
+import type { HierarchyLevelMutations, HierarchyRoots, HierarchySelection } from "@/types/kpi-admin";
 import { nodeKey } from "@/components/kpis/HierarchyTreeNode";
 import { DISABLED_INPUT_CLASS, PermissionsHint, usePermissionUi } from "@/components/kpis/permission-ui";
 
@@ -17,6 +17,9 @@ interface HierarchyDetailPanelProps {
   mutations: HierarchyLevelMutations;
   /** Whether to explain disabled actions here (the tree header already does it for the top level). */
   showPermissionsHint: boolean;
+  /** Every item of the level above, for the "Parent" dropdown; null for the top level. */
+  parentList: HierarchyRoots | null;
+  parentLabel: string | null;
   onSelectAncestor: (ancestor: HierarchySelection) => void;
   onUpdated: (row: HierarchyRow) => void;
 }
@@ -30,6 +33,8 @@ export default function HierarchyDetailPanel({
   selection,
   mutations,
   showPermissionsHint,
+  parentList,
+  parentLabel,
   onSelectAncestor,
   onUpdated,
 }: HierarchyDetailPanelProps) {
@@ -64,7 +69,10 @@ export default function HierarchyDetailPanel({
         itemLabel={levelDef.itemLabel}
         row={selection.row}
         mutations={mutations}
+        hasChildren={selection.levelIndex < HIERARCHIES[hierarchyId].levels.length - 1}
         showPermissionsHint={showPermissionsHint}
+        parentList={parentList}
+        parentLabel={parentLabel}
         onUpdated={onUpdated}
       />
     </div>
@@ -75,21 +83,31 @@ function EditForm({
   itemLabel,
   row,
   mutations,
+  hasChildren,
   showPermissionsHint,
+  parentList,
+  parentLabel,
   onUpdated,
 }: {
   itemLabel: string;
   row: HierarchyRow;
   mutations: HierarchyLevelMutations;
+  /** Whether the level below exists: moving the item then also moves what is under it. */
+  hasChildren: boolean;
   showPermissionsHint: boolean;
+  parentList: HierarchyRoots | null;
+  parentLabel: string | null;
   onUpdated: (row: HierarchyRow) => void;
 }) {
+  const originalParentId = row.parentId != null ? String(row.parentId) : "";
   const [name, setName] = useState(row.name);
   const [code, setCode] = useState(row.code);
+  const [parentId, setParentId] = useState(originalParentId);
   const [error, setError] = useState<string | null>(null);
   const { updateMut, parentField, permissions } = mutations;
   const { actionProps, inputProps, hintProps } = usePermissionUi(permissions, itemLabel);
-  const isDirty = name.trim() !== row.name || code.trim() !== row.code;
+  const parentChanged = parentId !== originalParentId;
+  const isDirty = name.trim() !== row.name || code.trim() !== row.code || parentChanged;
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -102,15 +120,17 @@ function EditForm({
 
     if (!trimmedName) return setError(`${itemLabel} name is required.`);
     if (!trimmedCode) return setError(`${itemLabel} code is required.`);
+    if (parentList && !parentId) return setError(`Select a parent ${parentLabel}.`);
     setError(null);
 
     const payload: Record<string, unknown> = { name: trimmedName, code: trimmedCode };
-    if (parentField && row.parentId != null) payload[parentField] = row.parentId;
+    if (parentField && parentId) payload[parentField] = Number(parentId);
 
     updateMut.mutate(
       { id: row.id, payload },
       {
-        onSuccess: () => onUpdated({ ...row, name: trimmedName, code: trimmedCode }),
+        onSuccess: () =>
+          onUpdated({ ...row, name: trimmedName, code: trimmedCode, parentId: parentId ? Number(parentId) : row.parentId }),
         onError: (err) => setError(getErrorMessage(err, "Failed to update item.")),
       },
     );
@@ -122,6 +142,34 @@ function EditForm({
     <form onSubmit={handleSubmit} className="space-y-3">
       {showPermissionsHint && <PermissionsHint {...hintProps} />}
       <div className="space-y-3">
+        {parentList && (
+          <div>
+            <label htmlFor="edit-item-parent" className={LABEL_CLASS}>
+              Parent {parentLabel}
+            </label>
+            <select
+              id="edit-item-parent"
+              value={parentId}
+              onChange={(e) => setParentId(e.target.value)}
+              {...inputProps(CRUD_ACTIONS.update)}
+              className={`${INPUT_CLASS} ${DISABLED_INPUT_CLASS} cursor-pointer`}
+            >
+              {parentList.isLoading && <option value="">Loading…</option>}
+              {!parentList.isLoading && !parentId && <option value="">Select {parentLabel}…</option>}
+              {parentList.items.map((parent) => (
+                <option key={parent.id} value={parent.id}>
+                  {parent.code} — {parent.name}
+                </option>
+              ))}
+            </select>
+            {parentList.isError && (
+              <p className="text-[11px] font-bold text-red-500 mt-1">Failed to load the parent list. Refresh to try again.</p>
+            )}
+            {parentChanged && hasChildren && (
+              <p className="text-[11px] text-gray-500 mt-1">Moving this also moves everything under it.</p>
+            )}
+          </div>
+        )}
         <div>
           <label htmlFor="edit-item-name" className={LABEL_CLASS}>
             {itemLabel} Name
@@ -155,6 +203,7 @@ function EditForm({
             onClick={() => {
               setName(row.name);
               setCode(row.code);
+              setParentId(originalParentId);
               setError(null);
             }}
             className="cursor-pointer text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-full transition-all"

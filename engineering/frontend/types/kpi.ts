@@ -145,6 +145,18 @@ export interface MajorGroupListResponse {
   count: number;
   major_groups: MajorGroup[];
 }
+export interface SubMajorGroupListResponse {
+  count: number;
+  sub_major_groups: SubMajorGroup[];
+}
+export interface MinorGroupListResponse {
+  count: number;
+  minor_groups: MinorGroup[];
+}
+export interface UnitGroupListResponse {
+  count: number;
+  unit_groups: UnitGroup[];
+}
 
 export interface MajorGroupPayload {
   name: string;
@@ -227,6 +239,18 @@ export interface IndustrySubclass {
 export interface IndustrySectorListResponse {
   count: number;
   industry_sectors: IndustrySector[];
+}
+export interface IndustryDivisionListResponse {
+  count: number;
+  industry_divisions: IndustryDivision[];
+}
+export interface IndustryGroupListResponse {
+  count: number;
+  industry_groups: IndustryGroup[];
+}
+export interface IndustryClassListResponse {
+  count: number;
+  industry_classes: IndustryClass[];
 }
 
 export interface IndustrySectorPayload {

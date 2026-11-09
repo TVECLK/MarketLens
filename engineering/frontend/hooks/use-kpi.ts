@@ -9,14 +9,14 @@ import type {
   Gender, GenderListResponse, GenderPayload,
   VocationalEducation, VocationalEducationListResponse, VocationalEducationPayload,
   MajorGroup, MajorGroupListResponse, MajorGroupPayload,
-  SubMajorGroup, SubMajorGroupPayload,
-  MinorGroup, MinorGroupPayload,
-  UnitGroup, UnitGroupPayload,
+  SubMajorGroup, SubMajorGroupListResponse, SubMajorGroupPayload,
+  MinorGroup, MinorGroupListResponse, MinorGroupPayload,
+  UnitGroup, UnitGroupListResponse, UnitGroupPayload,
   OccupationGroup, OccupationGroupPayload,
   IndustrySector, IndustrySectorListResponse, IndustrySectorPayload,
-  IndustryDivision, IndustryDivisionPayload,
-  IndustryGroup, IndustryGroupPayload,
-  IndustryClass, IndustryClassPayload,
+  IndustryDivision, IndustryDivisionListResponse, IndustryDivisionPayload,
+  IndustryGroup, IndustryGroupListResponse, IndustryGroupPayload,
+  IndustryClass, IndustryClassListResponse, IndustryClassPayload,
   IndustrySubclass, IndustrySubclassPayload,
 } from "@/types/kpi";
 import { ENV } from "@/config/env";
@@ -267,6 +267,10 @@ export function useDeleteMajorGroup() {
 
 const SUBMAJORGROUPS_URL = `${BASE}/occupation/sub-major-groups`;
 
+export function useSubMajorGroups() {
+  return useListQuery<SubMajorGroupListResponse>("sub-major-groups", SUBMAJORGROUPS_URL);
+}
+
 export function useCreateSubMajorGroup() {
   return useCreateMutation<SubMajorGroupPayload, SubMajorGroup>("sub-major-groups", SUBMAJORGROUPS_URL);
 }
@@ -284,6 +288,10 @@ export function useDeleteSubMajorGroup() {
 
 const MINORGROUPS_URL = `${BASE}/occupation/minor-groups`;
 
+export function useMinorGroups() {
+  return useListQuery<MinorGroupListResponse>("minor-groups", MINORGROUPS_URL);
+}
+
 export function useCreateMinorGroup() {
   return useCreateMutation<MinorGroupPayload, MinorGroup>("minor-groups", MINORGROUPS_URL);
 }
@@ -300,6 +308,10 @@ export function useDeleteMinorGroup() {
 // UNITGROUP ("unit-groups") - occupation hierarchy level
 
 const UNITGROUPS_URL = `${BASE}/occupation/unit-groups`;
+
+export function useUnitGroups() {
+  return useListQuery<UnitGroupListResponse>("unit-groups", UNITGROUPS_URL);
+}
 
 export function useCreateUnitGroup() {
   return useCreateMutation<UnitGroupPayload, UnitGroup>("unit-groups", UNITGROUPS_URL);
@@ -356,6 +368,10 @@ export function useDeleteIndustrySector() {
 
 const INDUSTRYDIVISIONS_URL = `${BASE}/industry/industry-divisions`;
 
+export function useIndustryDivisions() {
+  return useListQuery<IndustryDivisionListResponse>("industry-divisions", INDUSTRYDIVISIONS_URL);
+}
+
 export function useCreateIndustryDivision() {
   return useCreateMutation<IndustryDivisionPayload, IndustryDivision>("industry-divisions", INDUSTRYDIVISIONS_URL);
 }
@@ -373,6 +389,10 @@ export function useDeleteIndustryDivision() {
 
 const INDUSTRYGROUPS_URL = `${BASE}/industry/industry-groups`;
 
+export function useIndustryGroups() {
+  return useListQuery<IndustryGroupListResponse>("industry-groups", INDUSTRYGROUPS_URL);
+}
+
 export function useCreateIndustryGroup() {
   return useCreateMutation<IndustryGroupPayload, IndustryGroup>("industry-groups", INDUSTRYGROUPS_URL);
 }
@@ -389,6 +409,10 @@ export function useDeleteIndustryGroup() {
 // INDUSTRYCLASS ("industry-classes") - industry hierarchy level
 
 const INDUSTRYCLASSES_URL = `${BASE}/industry/industry-classes`;
+
+export function useIndustryClasses() {
+  return useListQuery<IndustryClassListResponse>("industry-classes", INDUSTRYCLASSES_URL);
+}
 
 export function useCreateIndustryClass() {
   return useCreateMutation<IndustryClassPayload, IndustryClass>("industry-classes", INDUSTRYCLASSES_URL);

@@ -6,7 +6,9 @@ import { getErrorMessage } from "@/lib/errors";
 import { CRUD_ACTIONS } from "@/lib/scopes";
 import { THEME } from "@/lib/theme";
 import { useFlashToast } from "@/hooks/use-flash-toast";
+import type { HierarchyRow } from "@/types/kpi";
 import { useAdminHierarchyChildren } from "@/hooks/use-admin-hierarchy-children";
+import { buildAncestors } from "@/lib/hierarchy-ancestors";
 import type { HierarchyLevelMutations, HierarchyRoots, HierarchySelection } from "@/types/kpi-admin";
 import HierarchyTreeNode, { nodeKey } from "@/components/kpis/HierarchyTreeNode";
 import HierarchyDetailPanel from "@/components/kpis/HierarchyDetailPanel";
@@ -17,7 +19,11 @@ import Toast from "@/components/kpis/Toast";
 
 interface HierarchyTreeViewProps {
   hierarchyId: HierarchyId;
-  roots: HierarchyRoots;
+  /**
+   * Every item of each level that can be a parent, top first: `lists[0]` is the top level,
+   * which the tree starts from. The leaf level has no list. Feeds the "Parent" dropdown.
+   */
+  lists: HierarchyRoots[];
   /** The mutations and permissions of every level, top -> leaf. */
   levels: HierarchyLevelMutations[];
 }
@@ -33,7 +39,8 @@ interface CreateTarget {
 const PANEL_CLASS =
   "bg-white rounded-md shadow-sm flex flex-col min-h-48 max-h-[calc(100vh-14rem)] overflow-hidden";
 
-export default function HierarchyTreeView({ hierarchyId, roots, levels }: HierarchyTreeViewProps) {
+export default function HierarchyTreeView({ hierarchyId, lists, levels }: HierarchyTreeViewProps) {
+  const roots = lists[0];
   const hierarchyDef = HIERARCHIES[hierarchyId];
   const rootLevelDef = hierarchyDef.levels[0];
   const lastLevelIndex = hierarchyDef.levels.length - 1;
@@ -70,6 +77,29 @@ export default function HierarchyTreeView({ hierarchyId, roots, levels }: Hierar
     }
     setCreateTarget(null);
     flashToast(`Added "${name}"`);
+  }
+
+  // Saving can also move the item to another parent. It then shows up under the new parent,
+  // so the tree opens that branch and the breadcrumb is rebuilt to match.
+  function handleUpdated(previous: HierarchySelection, row: HierarchyRow) {
+    const moved = row.parentId !== previous.row.parentId;
+    let ancestors = previous.ancestors;
+    if (moved && row.parentId != null) {
+      const parentLevelIndex = previous.levelIndex - 1;
+      const parent = lists[parentLevelIndex]?.items.find((item) => item.id === row.parentId);
+      if (parent) {
+        // The chain ends with the new parent, so opening every node in it shows the item.
+        const chain = buildAncestors(lists, parentLevelIndex, parent);
+        ancestors = chain;
+        setExpandedKeys((prev) => {
+          const next = new Set(prev);
+          for (const node of chain) next.add(nodeKey(node.levelIndex, node.row.id));
+          return next;
+        });
+      }
+    }
+    setSelection({ levelIndex: previous.levelIndex, row, ancestors });
+    flashToast(`${moved ? "Moved" : "Updated"} "${row.name}"`);
   }
 
   // The backend soft-deletes the row together with all its descendants, and
@@ -170,10 +200,9 @@ export default function HierarchyTreeView({ hierarchyId, roots, levels }: Hierar
                 mutations={levels[selection.levelIndex]}
                 showPermissionsHint={selection.levelIndex > 0}
                 onSelectAncestor={setSelection}
-                onUpdated={(row) => {
-                  setSelection({ ...selection, row });
-                  flashToast(`Updated "${row.name}"`);
-                }}
+                parentList={selection.levelIndex > 0 ? lists[selection.levelIndex - 1] : null}
+                parentLabel={selection.levelIndex > 0 ? hierarchyDef.levels[selection.levelIndex - 1].itemLabel : null}
+                onUpdated={(row) => handleUpdated(selection, row)}
               />
             ) : (
               <p className="text-xs text-gray-400 text-center py-10">
