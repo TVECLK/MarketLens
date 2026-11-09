@@ -7,6 +7,7 @@ import {
   UserDropdown,
 } from "@thunderid/nextjs";
 import Image, { type StaticImageData } from "next/image";
+import { THEME } from "@/lib/theme";
 
 interface HeaderProps {
   title: string;
@@ -50,7 +51,7 @@ export default function Header({
           <SignInButton>
             {({ signIn, isLoading }) => (
               <button
-                className="bg-black text-white px-4 py-2 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
+                className={`${THEME.button} px-4 py-2 rounded-md text-sm font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 transition-colors`}
                 onClick={() => signIn().catch((err) => console.error("Sign-in failed", err))}
                 disabled={isLoading}
               >

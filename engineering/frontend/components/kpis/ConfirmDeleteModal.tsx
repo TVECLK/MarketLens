@@ -24,7 +24,7 @@ export default function ConfirmDeleteModal({
             type="button"
             onClick={onCancel}
             aria-label="Close"
-            className="-mt-1 -mr-1 p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
+            className="-mt-1 -mr-1 p-1 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
           >
             <CloseIcon className="w-4 h-4" />
           </button>
@@ -33,14 +33,14 @@ export default function ConfirmDeleteModal({
         <div className="flex justify-end gap-2 mt-6">
           <button
             onClick={onCancel}
-            className="text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg transition-all"
+            className="text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-full transition-all"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
             disabled={isPending}
-            className="text-xs font-bold text-white bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition-all disabled:opacity-50"
+            className="text-xs font-bold text-white bg-red-600 hover:bg-red-700 px-4 py-2 rounded-full transition-all disabled:opacity-50"
           >
             {isPending ? "Deleting..." : "Delete"}
           </button>

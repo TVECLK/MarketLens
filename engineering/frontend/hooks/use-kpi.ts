@@ -9,15 +9,15 @@ import type {
   Gender, GenderListResponse, GenderPayload,
   VocationalEducation, VocationalEducationListResponse, VocationalEducationPayload,
   MajorGroup, MajorGroupListResponse, MajorGroupPayload,
-  SubMajorGroup, SubMajorGroupListResponse, SubMajorGroupPayload,
-  MinorGroup, MinorGroupListResponse, MinorGroupPayload,
-  UnitGroup, UnitGroupListResponse, UnitGroupPayload,
-  OccupationGroup, OccupationGroupListResponse, OccupationGroupPayload,
+  SubMajorGroup, SubMajorGroupPayload,
+  MinorGroup, MinorGroupPayload,
+  UnitGroup, UnitGroupPayload,
+  OccupationGroup, OccupationGroupPayload,
   IndustrySector, IndustrySectorListResponse, IndustrySectorPayload,
-  IndustryDivision, IndustryDivisionListResponse, IndustryDivisionPayload,
-  IndustryGroup, IndustryGroupListResponse, IndustryGroupPayload,
-  IndustryClass, IndustryClassListResponse, IndustryClassPayload,
-  IndustrySubclass, IndustrySubclassListResponse, IndustrySubclassPayload,
+  IndustryDivision, IndustryDivisionPayload,
+  IndustryGroup, IndustryGroupPayload,
+  IndustryClass, IndustryClassPayload,
+  IndustrySubclass, IndustrySubclassPayload,
 } from "@/types/kpi";
 import { ENV } from "@/config/env";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -27,23 +27,11 @@ import { invalidateAfterKpiChange, relatedListKeys } from "@/lib/query-invalidat
 const BASE = ENV.NEXT_PUBLIC_API_BASE_URL;
 
 
-function useListQuery<TResponse>(
-   key: string,
-   endpoint: string,
-   params?: Record<string, number | undefined>
- ) {
-   const query = new URLSearchParams();
-   if (params) {
-     Object.entries(params).forEach(([k, v]) => {
-       if (v !== undefined) query.set(k, String(v));
-     });
-   }
-   const qs = query.toString();
-   const url = qs ? `${endpoint}?${qs}` : endpoint;
+function useListQuery<TResponse>(key: string, endpoint: string) {
   return useQuery<TResponse>({
-    queryKey: [key, "list", params ?? {}],
+    queryKey: [key, "list"],
     queryFn: async ({ signal }) => {
-      const res = await fetch(url, { signal });
+      const res = await fetch(endpoint, { signal });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         throw new Error(getApiErrorMessage(data, `Failed to fetch ${key}`));
@@ -279,10 +267,6 @@ export function useDeleteMajorGroup() {
 
 const SUBMAJORGROUPS_URL = `${BASE}/occupation/sub-major-groups`;
 
-export function useSubMajorGroups() {
-  return useListQuery<SubMajorGroupListResponse>("sub-major-groups", SUBMAJORGROUPS_URL);
-}
-
 export function useCreateSubMajorGroup() {
   return useCreateMutation<SubMajorGroupPayload, SubMajorGroup>("sub-major-groups", SUBMAJORGROUPS_URL);
 }
@@ -299,10 +283,6 @@ export function useDeleteSubMajorGroup() {
 // MINORGROUP ("minor-groups") - occupation hierarchy level
 
 const MINORGROUPS_URL = `${BASE}/occupation/minor-groups`;
-
-export function useMinorGroups() {
-  return useListQuery<MinorGroupListResponse>("minor-groups", MINORGROUPS_URL);
-}
 
 export function useCreateMinorGroup() {
   return useCreateMutation<MinorGroupPayload, MinorGroup>("minor-groups", MINORGROUPS_URL);
@@ -321,10 +301,6 @@ export function useDeleteMinorGroup() {
 
 const UNITGROUPS_URL = `${BASE}/occupation/unit-groups`;
 
-export function useUnitGroups() {
-  return useListQuery<UnitGroupListResponse>("unit-groups", UNITGROUPS_URL);
-}
-
 export function useCreateUnitGroup() {
   return useCreateMutation<UnitGroupPayload, UnitGroup>("unit-groups", UNITGROUPS_URL);
 }
@@ -341,10 +317,6 @@ export function useDeleteUnitGroup() {
 // OCCUPATIONGROUP ("occupation-groups") - occupation hierarchy level
 
 const OCCUPATIONGROUPS_URL = `${BASE}/occupation/occupation-groups`;
-
-export function useOccupationGroups(limit?: number, offset?: number) {
-   return useListQuery<OccupationGroupListResponse>("occupation-groups", OCCUPATIONGROUPS_URL, { limit, offset });
-}
 
 export function useCreateOccupationGroup() {
   return useCreateMutation<OccupationGroupPayload, OccupationGroup>("occupation-groups", OCCUPATIONGROUPS_URL);
@@ -384,10 +356,6 @@ export function useDeleteIndustrySector() {
 
 const INDUSTRYDIVISIONS_URL = `${BASE}/industry/industry-divisions`;
 
-export function useIndustryDivisions() {
-  return useListQuery<IndustryDivisionListResponse>("industry-divisions", INDUSTRYDIVISIONS_URL);
-}
-
 export function useCreateIndustryDivision() {
   return useCreateMutation<IndustryDivisionPayload, IndustryDivision>("industry-divisions", INDUSTRYDIVISIONS_URL);
 }
@@ -404,10 +372,6 @@ export function useDeleteIndustryDivision() {
 // INDUSTRYGROUP ("industry-groups") - industry hierarchy level
 
 const INDUSTRYGROUPS_URL = `${BASE}/industry/industry-groups`;
-
-export function useIndustryGroups() {
-  return useListQuery<IndustryGroupListResponse>("industry-groups", INDUSTRYGROUPS_URL);
-}
 
 export function useCreateIndustryGroup() {
   return useCreateMutation<IndustryGroupPayload, IndustryGroup>("industry-groups", INDUSTRYGROUPS_URL);
@@ -426,10 +390,6 @@ export function useDeleteIndustryGroup() {
 
 const INDUSTRYCLASSES_URL = `${BASE}/industry/industry-classes`;
 
-export function useIndustryClasses() {
-  return useListQuery<IndustryClassListResponse>("industry-classes", INDUSTRYCLASSES_URL);
-}
-
 export function useCreateIndustryClass() {
   return useCreateMutation<IndustryClassPayload, IndustryClass>("industry-classes", INDUSTRYCLASSES_URL);
 }
@@ -446,10 +406,6 @@ export function useDeleteIndustryClass() {
 // INDUSTRYSUBCLASS ("industry-subclasses") - industry hierarchy level
 
 const INDUSTRYSUBCLASSES_URL = `${BASE}/industry/industry-subclasses`;
-
-export function useIndustrySubclasses(limit?: number, offset?: number) {
-   return useListQuery<IndustrySubclassListResponse>("industry-subclasses", INDUSTRYSUBCLASSES_URL, { limit, offset });
-}
 
 export function useCreateIndustrySubclass() {
   return useCreateMutation<IndustrySubclassPayload, IndustrySubclass>("industry-subclasses", INDUSTRYSUBCLASSES_URL);

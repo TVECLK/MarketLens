@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { KPI_CATEGORIES, ACCENT_CLASSES, type KPICategoryKey } from "@/lib/kpi-config";
+import { useState } from "react";
+import { KPI_CATEGORIES, type KPICategoryKey } from "@/lib/kpi-config";
 import { getErrorMessage } from "@/lib/errors";
 import { permissionGuards } from "@/lib/action-permissions";
 import { CRUD_ACTIONS } from "@/lib/scopes";
 import { useFlashToast } from "@/hooks/use-flash-toast";
 import type { FlatBundle, FlatItem } from "@/types/kpi-admin";
 import FlatCategoryPanel from "@/components/kpis/FlatCategoryPanel";
+import FlatCreateModal from "@/components/kpis/FlatCreateModal";
 import ConfirmDeleteModal from "@/components/kpis/ConfirmDeleteModal";
 import Toast from "@/components/kpis/Toast";
 
@@ -18,10 +19,8 @@ interface FlatCategoryViewProps {
 
 export default function FlatCategoryView({ category, bundle }: FlatCategoryViewProps) {
   const config = KPI_CATEGORIES[category];
-  const accent = ACCENT_CLASSES[config.accent];
 
-  const [newName, setNewName] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
@@ -30,28 +29,6 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
   const [deleteTarget, setDeleteTarget] = useState<FlatItem | null>(null);
   const { toast, flashToast } = useFlashToast();
   const guards = permissionGuards<FlatItem>(bundle.permissions, config.itemLabel, { setEditError, setDeleteTarget });
-
-  // CREATE
-  function handleAdd(e: FormEvent) {
-    e.preventDefault();
-    if (!guards.canStart(CRUD_ACTIONS.create)) return;
-    const trimmed = newName.trim();
-    if (!trimmed) {
-      setFormError(`${config.itemLabel} name is required.`);
-      return;
-    }
-    setFormError(null);
-    bundle.createMut.mutate(
-      { [bundle.labelField]: trimmed },
-      {
-        onSuccess: () => {
-          setNewName("");
-          flashToast(`Added "${trimmed}"`);
-        },
-        onError: (err) => setFormError(getErrorMessage(err, "Failed to create item.")),
-      }
-    );
-  }
 
   // UPDATE
   function startEdit(item: FlatItem) {
@@ -106,12 +83,8 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
     <>
       <FlatCategoryPanel
         config={config}
-        accent={accent}
         bundle={bundle}
-        newName={newName}
-        onNewNameChange={setNewName}
-        formError={formError}
-        onSubmit={handleAdd}
+        onAdd={() => guards.canStart(CRUD_ACTIONS.create) && setCreateOpen(true)}
         editingId={editingId}
         editName={editName}
         onEditNameChange={setEditName}
@@ -121,6 +94,18 @@ export default function FlatCategoryView({ category, bundle }: FlatCategoryViewP
         onSaveEdit={saveEdit}
         onRequestDelete={guards.requestDelete}
       />
+
+      {createOpen && (
+        <FlatCreateModal
+          itemLabel={config.itemLabel}
+          bundle={bundle}
+          onCancel={() => setCreateOpen(false)}
+          onCreated={(name) => {
+            setCreateOpen(false);
+            flashToast(`Added "${name}"`);
+          }}
+        />
+      )}
 
       {deleteTarget && (
         <ConfirmDeleteModal

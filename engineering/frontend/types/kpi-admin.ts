@@ -24,10 +24,15 @@ export interface FlatBundle {
   permissions: ActionPermissions;
 }
 
-export interface HierarchyLevelBundle {
+/** The top level of a hierarchy, loaded as a plain list. */
+export interface HierarchyRoots {
   isLoading: boolean;
   isError: boolean;
   items: HierarchyRow[];
+}
+
+/** The mutations and permissions of one hierarchy level. */
+export interface HierarchyLevelMutations {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see note above
   createMut: MutationLike<any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see note above
@@ -35,7 +40,11 @@ export interface HierarchyLevelBundle {
   deleteMut: MutationLike<number>;
   parentField: string | null; // e.g. "major_group_id", null for the top level
   permissions: ActionPermissions;
-  total?: number;
-  page?: number;
-  setPage?: (p: number) => void;
+}
+
+/** The tree item shown in the detail panel, with the items above it (top -> parent). */
+export interface HierarchySelection {
+  levelIndex: number;
+  row: HierarchyRow;
+  ancestors: HierarchySelection[];
 }

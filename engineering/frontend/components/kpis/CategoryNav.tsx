@@ -15,11 +15,11 @@ import {
   CATEGORY_ORDER,
   HIERARCHIES,
   HIERARCHY_ORDER,
-  ACCENT_CLASSES,
   kpiCategoryHref,
-  hierarchyLevelHref,
+  hierarchyHref,
   type KPICategoryKey,
 } from "@/lib/kpi-config";
+import { THEME } from "@/lib/theme";
 
 // access the values from the cache
 function useFlatCounts(): Record<KPICategoryKey, number | undefined> {
@@ -47,7 +47,6 @@ export default function CategoryNav() {
     <aside className="border-r border-gray-100 bg-white h-screen overflow-y-auto sticky top-0 p-3 space-y-1">
       {CATEGORY_ORDER.map((key) => {
         const cfg = KPI_CATEGORIES[key];
-        const acc = ACCENT_CLASSES[cfg.accent];
         const count = flatCounts[key];
         const href = kpiCategoryHref(key);
         const isActive = pathname === href;
@@ -56,11 +55,10 @@ export default function CategoryNav() {
             key={key}
             href={href}
             aria-current={isActive ? "page" : undefined}
-            className={`w-full text-left px-3 py-2 rounded-md transition-all flex items-center justify-between gap-2 ${isActive ? `${acc.lightBg} ring-1 ${acc.ring}` : "hover:bg-gray-50"
-              }`}
+            className={`w-full text-left px-3 py-2 rounded-md transition-all flex items-center justify-between gap-2 ${isActive ? THEME.nav.itemActive : THEME.nav.item}`}
           >
             <div>
-              <p className={`text-xs font-bold ${isActive ? acc.text : "text-gray-700"}`}>{cfg.title}</p>
+              <p className={`text-xs font-bold ${isActive ? THEME.nav.titleActive : THEME.nav.title}`}>{cfg.title}</p>
               <p className="text-[10px] text-gray-400 mt-0.5">{count ?? "–"} items</p>
             </div>
           </Link>
@@ -74,18 +72,16 @@ export default function CategoryNav() {
         <div className="space-y-1">
           {HIERARCHY_ORDER.map((id) => {
             const def = HIERARCHIES[id];
-            const acc = ACCENT_CLASSES[def.accent];
-            const isActive = pathname.startsWith(`/kpis/${id}/`);
+            const isActive = pathname === hierarchyHref(id);
             return (
               <Link
                 key={id}
-                href={hierarchyLevelHref(id, 0)}
+                href={hierarchyHref(id)}
                 aria-current={isActive ? "page" : undefined}
-                className={`w-full text-left px-3 py-2 rounded-md transition-all flex items-center justify-between gap-2 ${isActive ? `${acc.lightBg} ring-1 ${acc.ring}` : "hover:bg-gray-50"
-                  }`}
+                className={`w-full text-left px-3 py-2 rounded-md transition-all flex items-center justify-between gap-2 ${isActive ? THEME.nav.itemActive : THEME.nav.item}`}
               >
                 <div>
-                  <p className={`text-xs font-bold ${isActive ? acc.text : "text-gray-700"}`}>{def.label}</p>
+                  <p className={`text-xs font-bold ${isActive ? THEME.nav.titleActive : THEME.nav.title}`}>{def.label}</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">{def.levels.length} levels</p>
                 </div>
               </Link>
