@@ -6,6 +6,7 @@ import pytest
 from crawlers import (
     BaseJobCrawler,
     CrawlIncompleteError,
+    CrawlResult,
     GovernmentJobsCrawler,
     IkmanCrawler,
     RoosterCrawler,
@@ -47,12 +48,23 @@ def make_job(job_role="Engineer", description="Builds things") -> RawJobInput:
 
 
 def test_clean_crawl_with_usable_jobs_does_not_raise():
-    _Crawler()._raise_if_incomplete(usable_jobs=3)
+    _Crawler()._finish_crawl(usable_jobs=3)
+
+
+def test_finish_crawl_returns_a_result_with_the_crawl_counts():
+    crawler = _Crawler()
+    crawler._count_jobs(attempted=10, failed=1)
+
+    result = crawler._finish_crawl(usable_jobs=9)
+
+    assert result == CrawlResult(
+        source_name="Fake", jobs_attempted=10, jobs_failed=1, usable_jobs=9
+    )
 
 
 def test_zero_usable_jobs_raises():
     with pytest.raises(CrawlIncompleteError, match="no usable jobs"):
-        _Crawler()._raise_if_incomplete(usable_jobs=0)
+        _Crawler()._finish_crawl(usable_jobs=0)
 
 
 def test_page_failure_raises_even_when_jobs_were_fetched():
@@ -60,7 +72,7 @@ def test_page_failure_raises_even_when_jobs_were_fetched():
     crawler._mark_page_failure("page 7 failed")
 
     with pytest.raises(CrawlIncompleteError, match="page 7 failed"):
-        crawler._raise_if_incomplete(usable_jobs=50)
+        crawler._finish_crawl(usable_jobs=50)
 
 
 def test_all_page_failures_are_reported_together():
@@ -69,7 +81,7 @@ def test_all_page_failures_are_reported_together():
     crawler._mark_page_failure("page 5 failed")
 
     with pytest.raises(CrawlIncompleteError) as exc:
-        crawler._raise_if_incomplete(usable_jobs=10)
+        crawler._finish_crawl(usable_jobs=10)
 
     assert "page 2 failed" in str(exc.value)
     assert "page 5 failed" in str(exc.value)
@@ -77,7 +89,7 @@ def test_all_page_failures_are_reported_together():
 
 def test_error_message_names_the_source():
     with pytest.raises(CrawlIncompleteError, match="^Fake:"):
-        _Crawler()._raise_if_incomplete(usable_jobs=0)
+        _Crawler()._finish_crawl(usable_jobs=0)
 
 
 @pytest.mark.parametrize(
@@ -97,7 +109,7 @@ def test_crawlers_do_not_share_error_state():
     first, second = _Crawler(), _Crawler()
     first._mark_page_failure("boom")
 
-    second._raise_if_incomplete(usable_jobs=1)
+    second._finish_crawl(usable_jobs=1)
 
 
 # ---------- Rooster end to end (fake HTTP client) ----------
@@ -156,7 +168,7 @@ def no_sleep(monkeypatch):
 
 
 async def crawl_rooster(client):
-    await RoosterCrawler().crawl_jobs(
+    return await RoosterCrawler().crawl_jobs(
         crawler_run_id=1, async_client=client, thunder_auth=MagicMock()
     )
 
@@ -166,9 +178,12 @@ async def test_rooster_clean_crawl_succeeds_and_saves_jobs():
     # initial call, then page 1
     client = make_client([rooster_page(2, jobs), rooster_page(2, jobs)])
 
-    await crawl_rooster(client)
+    result = await crawl_rooster(client)
 
     assert sum(len(batch) for batch in client.batches) == 2
+    assert result == CrawlResult(
+        source_name="Rooster", jobs_attempted=2, jobs_failed=0, usable_jobs=2
+    )
 
 
 async def test_rooster_site_down_fails_instead_of_succeeding_with_zero_jobs():
@@ -236,7 +251,7 @@ def test_failures_under_the_ratio_do_not_raise(limits):
     crawler = _Crawler()
     crawler._count_jobs(attempted=100, failed=20)  # exactly 20%: not over the limit
 
-    crawler._raise_if_incomplete(usable_jobs=80)
+    crawler._finish_crawl(usable_jobs=80)
 
 
 def test_failures_over_the_ratio_raise(limits):
@@ -244,14 +259,14 @@ def test_failures_over_the_ratio_raise(limits):
     crawler._count_jobs(attempted=100, failed=21)
 
     with pytest.raises(CrawlIncompleteError, match="21 of 100 jobs failed"):
-        crawler._raise_if_incomplete(usable_jobs=79)
+        crawler._finish_crawl(usable_jobs=79)
 
 
 def test_ratio_is_ignored_below_the_minimum_number_of_jobs(limits):
     crawler = _Crawler()
     crawler._count_jobs(attempted=19, failed=19)
 
-    crawler._raise_if_incomplete(usable_jobs=5)
+    crawler._finish_crawl(usable_jobs=5)
 
 
 def test_ratio_applies_from_the_minimum_number_of_jobs(limits):
@@ -259,7 +274,7 @@ def test_ratio_applies_from_the_minimum_number_of_jobs(limits):
     crawler._count_jobs(attempted=20, failed=10)
 
     with pytest.raises(CrawlIncompleteError, match="10 of 20 jobs failed"):
-        crawler._raise_if_incomplete(usable_jobs=10)
+        crawler._finish_crawl(usable_jobs=10)
 
 
 def test_count_jobs_accumulates_attempts_and_failures():

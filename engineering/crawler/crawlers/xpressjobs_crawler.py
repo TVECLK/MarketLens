@@ -5,7 +5,7 @@ import logging
 from typing import List
 from bs4 import BeautifulSoup
 from pydantic import ValidationError
-from .base_crawler import BaseJobCrawler
+from .base_crawler import BaseJobCrawler, CrawlResult
 from utils import ThunderAuth
 from parsers import XpressJobsParser
 from models import RawJobInput
@@ -115,7 +115,7 @@ class XpressJobsCrawler(BaseJobCrawler):
         crawler_run_id: int,
         async_client: httpx.AsyncClient,
         thunder_auth: ThunderAuth,
-    ) -> None:
+    ) -> CrawlResult:
 
         logger.info("XpressJobs: Xpress jobs crawl started.")
 
@@ -146,5 +146,6 @@ class XpressJobsCrawler(BaseJobCrawler):
             )
             await self._flush_batch(async_client, thunder_auth, job_batch)
 
-        self._raise_if_incomplete(usable_jobs)
+        result = self._finish_crawl(usable_jobs)
         logger.info("XpressJobs: Xpress jobs crawl pass concluded.")
+        return result

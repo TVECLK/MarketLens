@@ -13,8 +13,14 @@ class _FakeParser(BaseJobParser):
         raise NotImplementedError
 
 
-def make_crawler_class(source_name: str, error: Exception | None = None):
-    """A BaseJobCrawler whose crawl_jobs either finishes or raises `error`."""
+_REAL_RESULT = object()
+
+
+def make_crawler_class(
+    source_name: str, error: Exception | None = None, result=_REAL_RESULT
+):
+    """A BaseJobCrawler whose crawl_jobs raises `error`, or returns `result`
+    (by default the CrawlResult a finished crawl returns)."""
 
     class _Crawler(BaseJobCrawler):
         SOURCE_NAME = source_name
@@ -26,6 +32,9 @@ def make_crawler_class(source_name: str, error: Exception | None = None):
         async def crawl_jobs(self, crawler_run_id, async_client, thunder_auth):
             if error is not None:
                 raise error
+            if result is not _REAL_RESULT:
+                return result
+            return self._finish_crawl(usable_jobs=1)
 
     return _Crawler
 
@@ -53,6 +62,19 @@ def ok_response():
 async def test_run_crawler_returns_source_name_on_success(manager):
     result = await manager._run_crawler("rooster", 1, MagicMock())
     assert result == "Rooster"
+
+
+@pytest.mark.parametrize(
+    "returned", [None, "Rooster", True], ids=["nothing", "a string", "a bool"]
+)
+async def test_run_crawler_returns_none_when_crawler_returns_no_crawl_result(
+    manager, returned
+):
+    manager._registry = {"rooster": make_crawler_class("Rooster", result=returned)}
+
+    result = await manager._run_crawler("rooster", 1, MagicMock())
+
+    assert result is None
 
 
 async def test_run_crawler_returns_none_when_crawler_raises(manager):

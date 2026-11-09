@@ -8,6 +8,7 @@ from config import BACKEND_BASE_URL
 
 from crawlers import (
     BaseJobCrawler,
+    CrawlResult,
     IkmanCrawler,
     XpressJobsCrawler,
     TopJobsCrawler,
@@ -101,8 +102,8 @@ class CrawlerManager:
             )
             raise
 
-    # This function calls the relevant crawlers and returns the source name of the
-    # crawler if it finished without raising, otherwise None
+    # This function calls the relevant crawlers and returns the source name from the
+    # crawler's CrawlResult, or None if it raised or did not return a CrawlResult
     async def _run_crawler(
         self,
         name: str,
@@ -117,13 +118,24 @@ class CrawlerManager:
         try:
             logger.info(f"--- Starting crawler: {name} ---")
             crawler_instance = crawler_class()
-            await crawler_instance.crawl_jobs(
+            result = await crawler_instance.crawl_jobs(
                 crawler_run_id=crawler_run_id,
                 async_client=client,
                 thunder_auth=self._thunder_auth,
             )
-            logger.info(f"--- Finished crawler: {name} ---")
-            return crawler_instance.source_name
+            # Only an explicit result counts as success: a crawler that returns
+            # nothing never ran its completeness checks, so it must not be reconciled
+            if not isinstance(result, CrawlResult):
+                logger.error(
+                    f"Crawler '{name}' returned {type(result).__name__} instead of a "
+                    "CrawlResult, treating it as failed."
+                )
+                return None
+            logger.info(
+                f"--- Finished crawler: {name} ({result.jobs_attempted} jobs attempted, "
+                f"{result.jobs_failed} failed, {result.usable_jobs} usable) ---"
+            )
+            return result.source_name
         except Exception as e:
             logger.error(f"Crawler '{name}' failed: {e}", exc_info=True)
             return None

@@ -7,7 +7,7 @@ from typing import List
 from crawl4ai import AsyncWebCrawler
 from bs4 import BeautifulSoup
 from PIL import Image
-from .base_crawler import BaseJobCrawler
+from .base_crawler import BaseJobCrawler, CrawlResult
 from utils import ThunderAuth
 from parsers import GovernmentJobsParser
 from config import BATCH_SIZE
@@ -129,7 +129,7 @@ class GovernmentJobsCrawler(BaseJobCrawler):
         crawler_run_id: int,
         async_client: httpx.AsyncClient,
         thunder_auth: ThunderAuth,
-    ) -> None:
+    ) -> CrawlResult:
 
         logger.info("GovernmentJobs: Government jobs crawl started.")
 
@@ -160,5 +160,6 @@ class GovernmentJobsCrawler(BaseJobCrawler):
             )
             await self._flush_batch(async_client, thunder_auth, job_batch)
 
-        self._raise_if_incomplete(usable_jobs)
+        result = self._finish_crawl(usable_jobs)
         logger.info("GovernmentJobs: Government jobs crawl pass concluded.")
+        return result

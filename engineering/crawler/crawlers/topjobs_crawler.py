@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 from PIL import Image
 from playwright.async_api import async_playwright
 from pydantic import ValidationError
-from .base_crawler import BaseJobCrawler
+from .base_crawler import BaseJobCrawler, CrawlResult
 from utils import ThunderAuth
 from parsers import TopJobsParser
 from models import RawJobInput
@@ -193,7 +193,7 @@ class TopJobsCrawler(BaseJobCrawler):
         crawler_run_id: int,
         async_client: httpx.AsyncClient,
         thunder_auth: ThunderAuth,
-    ) -> None:
+    ) -> CrawlResult:
 
         logger.info("TopJobs: Top jobs crawl started.")
 
@@ -224,5 +224,6 @@ class TopJobsCrawler(BaseJobCrawler):
             )
             await self._flush_batch(async_client, thunder_auth, job_batch)
 
-        self._raise_if_incomplete(usable_jobs)
+        result = self._finish_crawl(usable_jobs)
         logger.info("TopJobs: Top jobs crawl pass concluded.")
+        return result

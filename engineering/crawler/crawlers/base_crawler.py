@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import logging
 from typing import List
 
@@ -25,6 +26,17 @@ class CrawlIncompleteError(Exception):
     reconciled for this run."""
 
 
+@dataclass(frozen=True)
+class CrawlResult:
+    """What a crawler reports when crawl_jobs finishes without being incomplete.
+    The manager only counts a source as successful if it gets one of these."""
+
+    source_name: str
+    jobs_attempted: int
+    jobs_failed: int
+    usable_jobs: int
+
+
 class BaseJobCrawler(ABC):
     # Every crawler must set this to the source name the backend stores in its
     # `source` table. It is passed on to the crawler's parser.
@@ -42,14 +54,14 @@ class BaseJobCrawler(ABC):
         self._jobs_failed = 0
 
     # Records a page-level failure (a listing/API page that could not be read).
-    # The crawl carries on; _raise_if_incomplete raises once at the end.
+    # The crawl carries on; _finish_crawl raises once at the end.
     def _mark_page_failure(self, reason: str) -> None:
         self._page_errors.append(reason)
         logger.error(reason)
 
     # Counts jobs the crawler tried to obtain (attempted) and the ones that could
     # not be obtained or saved (failed). One failed job never fails the crawl:
-    # only the failure ratio checked in _raise_if_incomplete does.
+    # only the failure ratio checked in _finish_crawl does.
     def _count_jobs(self, attempted: int = 1, failed: int = 0) -> None:
         self._jobs_attempted += attempted
         self._jobs_failed += failed
@@ -60,10 +72,11 @@ class BaseJobCrawler(ABC):
     def _is_usable(job: RawJobInput) -> bool:
         return bool(job.job_role.strip() and job.description.strip())
 
-    # Call at the end of crawl_jobs with the number of usable jobs parsed.
-    # A crawl is incomplete on any failed page, when too large a share of the
-    # attempted jobs failed, or when no usable jobs were fetched at all.
-    def _raise_if_incomplete(self, usable_jobs: int) -> None:
+    # Call at the end of crawl_jobs with the number of usable jobs parsed and
+    # return its result. A crawl is incomplete on any failed page, when too large
+    # a share of the attempted jobs failed, or when no usable jobs were fetched
+    # at all; it then raises CrawlIncompleteError instead of returning.
+    def _finish_crawl(self, usable_jobs: int) -> CrawlResult:
         reasons = list(self._page_errors)
         if (
             self._jobs_attempted >= MIN_JOBS_FOR_FAILURE_RATIO
@@ -79,6 +92,12 @@ class BaseJobCrawler(ABC):
             raise CrawlIncompleteError(
                 f"{self.source_name}: crawl incomplete: {'; '.join(reasons)}"
             )
+        return CrawlResult(
+            source_name=self.source_name,
+            jobs_attempted=self._jobs_attempted,
+            jobs_failed=self._jobs_failed,
+            usable_jobs=usable_jobs,
+        )
 
     @property
     def source_name(self) -> str:
@@ -90,7 +109,7 @@ class BaseJobCrawler(ABC):
         crawler_run_id: int,
         async_client: httpx.AsyncClient,
         thunder_auth: ThunderAuth,
-    ) -> None:
+    ) -> CrawlResult:
         pass
 
     async def _flush_batch(

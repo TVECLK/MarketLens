@@ -4,7 +4,7 @@ import re
 import math
 from typing import List
 
-from .base_crawler import BaseJobCrawler
+from .base_crawler import BaseJobCrawler, CrawlResult
 from parsers import IkmanParser
 from utils import ThunderAuth
 from pydantic import ValidationError
@@ -54,7 +54,7 @@ class IkmanCrawler(BaseJobCrawler):
         crawler_run_id: int,
         async_client: httpx.AsyncClient,
         thunder_auth: ThunderAuth,
-    ) -> None:
+    ) -> CrawlResult:
 
         logger.info("Ikman: Ikman crawl started.")
 
@@ -128,5 +128,6 @@ class IkmanCrawler(BaseJobCrawler):
             if job_batch:
                 await self._flush_batch(async_client, thunder_auth, job_batch)
 
-        self._raise_if_incomplete(usable_jobs)
+        result = self._finish_crawl(usable_jobs)
         logger.info("Ikman: Ikman crawl pass concluded.")
+        return result
