@@ -244,7 +244,7 @@ async def test_rooster_a_few_empty_jobs_do_not_fail_the_crawl():
 def limits(monkeypatch):
     """Pin the thresholds so the tests don't depend on the configured values."""
     monkeypatch.setattr("crawlers.base_crawler.MAX_JOB_FAILURE_RATIO", 0.2)
-    monkeypatch.setattr("crawlers.base_crawler.MIN_JOBS_FOR_FAILURE_RATIO", 20)
+    monkeypatch.setattr("crawlers.base_crawler.MIN_JOBS_FOR_FAILURE", 20)
 
 
 def test_failures_under_the_ratio_do_not_raise(limits):

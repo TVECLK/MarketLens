@@ -8,7 +8,7 @@ import httpx
 from config import (
     BACKEND_BASE_URL,
     MAX_JOB_FAILURE_RATIO,
-    MIN_JOBS_FOR_FAILURE_RATIO,
+    MIN_JOBS_FOR_FAILURE,
 )
 from models import RawJobInput
 from parsers.base_parser import BaseJobParser
@@ -79,7 +79,7 @@ class BaseJobCrawler(ABC):
     def _finish_crawl(self, usable_jobs: int) -> CrawlResult:
         reasons = list(self._page_errors)
         if (
-            self._jobs_attempted >= MIN_JOBS_FOR_FAILURE_RATIO
+            self._jobs_attempted >= MIN_JOBS_FOR_FAILURE
             and self._jobs_failed / self._jobs_attempted > MAX_JOB_FAILURE_RATIO
         ):
             reasons.append(
