@@ -6,7 +6,6 @@ import httpx
 import pytest
 
 import main
-from config import BACKEND_BASE_URL
 from crawlers import BaseJobCrawler
 from parsers import BaseJobParser
 from utils.crawler_run_manager import CrawlerManager
@@ -43,6 +42,16 @@ def make_crawler_class(
     return _Crawler
 
 
+# The tests use their own backend URL, so they don't depend on the BACKEND_URL
+# of the environment they run in
+TEST_BACKEND_URL = "http://backend.test/api/v1/crawler"
+
+
+@pytest.fixture(autouse=True)
+def backend_url(monkeypatch):
+    monkeypatch.setattr("utils.crawler_run_manager.BACKEND_BASE_URL", TEST_BACKEND_URL)
+
+
 @pytest.fixture
 def manager():
     manager = CrawlerManager()
@@ -74,7 +83,8 @@ def make_client(behaviors: dict | None = None):
     client.calls = []
 
     async def post(url, json=None, auth=None, **kwargs):
-        path = url.removeprefix(BACKEND_BASE_URL)
+        assert url.startswith(TEST_BACKEND_URL), f"unexpected backend URL: {url}"
+        path = url.removeprefix(TEST_BACKEND_URL)
         client.calls.append(Call(path, json, auth))
         for suffix, behavior in behaviors.items():
             if path.endswith(suffix):
