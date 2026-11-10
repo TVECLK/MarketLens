@@ -77,9 +77,9 @@ export default function Sidebar() {
           <Image
             src="/logo.png"
             alt="Market Lens Logo"
-            width={45}
-            height={45}
-            className="object-contain scale-110"
+            width={30}
+            height={30}
+            className="object-contain"
           />
         </div>
         {!collapsed && (
