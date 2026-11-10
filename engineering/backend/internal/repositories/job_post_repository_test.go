@@ -243,42 +243,58 @@ func TestStore_SaveOneJob_WithoutOptionalRelationsStillSaves(t *testing.T) {
 
 // ---------- UpdateDuplicateJob ----------
 
-func TestStore_UpdateDuplicateJob_RestampsOnlyTheGivenJob(t *testing.T) {
-	db := SetupTestDB(t)
-	store := repositories.NewStore(db)
-	sourceID := seedSource(t, db, "Rooster")
-	oldRunID := seedCrawlerRun(t, db)
-	newRunID := seedCrawlerRun(t, db)
+// missingJobID is an id no seeded job has.
+const missingJobID = 9999
 
-	seenID := seedActiveJob(t, db, "seen again", 1, &sourceID, &oldRunID)
-	untouchedID := seedActiveJob(t, db, "not seen", 1, &sourceID, &oldRunID)
-
-	if err := store.UpdateDuplicateJob(context.Background(), seenID, newRunID); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestStore_UpdateDuplicateJob(t *testing.T) {
+	tests := []struct {
+		name          string
+		target        string // label of the job to re-stamp; "" means an unknown id
+		wantRestamped []string
+	}{
+		{"re-stamps only the given job", "seen", []string{"seen"}},
+		{"unknown job is a no-op", "", nil},
 	}
 
-	if got := loadMeta(t, db, seenID).CrawlerRunID; got == nil || *got != newRunID {
-		t.Errorf("expected job %d to move to run %d, got %v", seenID, newRunID, got)
-	}
-	if got := loadMeta(t, db, untouchedID).CrawlerRunID; got == nil || *got != oldRunID {
-		t.Errorf("job %d must keep run %d, got %v", untouchedID, oldRunID, got)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := SetupTestDB(t)
+			store := repositories.NewStore(db)
+			sourceID := seedSource(t, db, "Rooster")
+			oldRunID := seedCrawlerRun(t, db)
+			newRunID := seedCrawlerRun(t, db)
 
-func TestStore_UpdateDuplicateJob_UnknownJobIsNoOp(t *testing.T) {
-	db := SetupTestDB(t)
-	store := repositories.NewStore(db)
-	sourceID := seedSource(t, db, "Rooster")
-	oldRunID := seedCrawlerRun(t, db)
-	newRunID := seedCrawlerRun(t, db)
-	existingID := seedActiveJob(t, db, "existing", 1, &sourceID, &oldRunID)
+			jobs := map[string]uint{
+				"seen":      seedActiveJob(t, db, "seen", 1, &sourceID, &oldRunID),
+				"untouched": seedActiveJob(t, db, "untouched", 1, &sourceID, &oldRunID),
+			}
 
-	if err := store.UpdateDuplicateJob(context.Background(), 9999, newRunID); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+			targetID := uint(missingJobID)
+			if tt.target != "" {
+				targetID = jobs[tt.target]
+			}
+			if err := store.UpdateDuplicateJob(context.Background(), targetID, newRunID); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
-	if got := loadMeta(t, db, existingID).CrawlerRunID; got == nil || *got != oldRunID {
-		t.Errorf("job %d must keep run %d, got %v", existingID, oldRunID, got)
+			restamped := map[string]bool{}
+			for _, label := range tt.wantRestamped {
+				restamped[label] = true
+			}
+			for label, id := range jobs {
+				want := oldRunID
+				if restamped[label] {
+					want = newRunID
+				}
+				meta := loadMeta(t, db, id)
+				if meta.CrawlerRunID == nil || *meta.CrawlerRunID != want {
+					t.Errorf("%s: want run %d, got %v", label, want, meta.CrawlerRunID)
+				}
+				if meta.EndDate != nil {
+					t.Errorf("%s: end_date must stay NULL, got %v", label, meta.EndDate)
+				}
+			}
+		})
 	}
 }
 
