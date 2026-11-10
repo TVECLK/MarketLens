@@ -3,6 +3,7 @@ package repositories_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,6 +92,7 @@ func newJobToSave(role string) *models.JobPost {
 	}
 }
 
+// Not part of the table below: it checks every field of one saved job.
 func TestStore_SaveOneJob_PersistsJobWithLookupsAndLshRecords(t *testing.T) {
 	db := SetupTestDB(t)
 	store := repositories.NewStore(db)
@@ -146,6 +148,7 @@ func TestStore_SaveOneJob_PersistsJobWithLookupsAndLshRecords(t *testing.T) {
 	}
 }
 
+// Not part of the table below: it needs two saves in a row.
 func TestStore_SaveOneJob_ReusesExistingLookupRows(t *testing.T) {
 	db := SetupTestDB(t)
 	store := repositories.NewStore(db)
@@ -178,66 +181,151 @@ func TestStore_SaveOneJob_ReusesExistingLookupRows(t *testing.T) {
 	}
 }
 
-func TestStore_SaveOneJob_SkipsEmptySkillNames(t *testing.T) {
-	db := SetupTestDB(t)
-	store := repositories.NewStore(db)
-	seedProvince(t, db, "Western")
-
-	job := newJobToSave("Engineer")
-	job.Skills = []models.Skill{{Skill: "Go"}, {Skill: ""}}
-
-	if err := store.SaveOneJob(context.Background(), job, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+// TestStore_SaveOneJob covers the scenarios that differ only in the job that is
+// saved and the rows that end up in the database. The two tests around it stay
+// separate: one checks every field of a single saved job, the other saves two
+// jobs in a row.
+func TestStore_SaveOneJob(t *testing.T) {
+	// rowCounts is the number of rows expected in each table after the save
+	type rowCounts struct {
+		jobs, employers, jobTypes, skills, sources, aiVersions, lshRows int64
 	}
 
-	if n := countRows(t, db, &models.Skill{}, ""); n != 1 {
-		t.Errorf("expected only the non-empty skill to be created, got %d", n)
-	}
-}
-
-func TestStore_SaveOneJob_UnknownProvinceIsPermanentFailureAndRollsBack(t *testing.T) {
-	db := SetupTestDB(t)
-	store := repositories.NewStore(db)
-	// "Western" is deliberately not seeded into geo_data.
-
-	err := store.SaveOneJob(context.Background(), newJobToSave("Engineer"), []models.LshIndex{{BucketKey: "bucket_a"}})
-	if !errors.Is(err, repositories.ErrPermanentSaveFailure) {
-		t.Fatalf("expected ErrPermanentSaveFailure, got %v", err)
+	twoLshRows := []models.LshIndex{
+		{BucketKey: "bucket_a", BandNo: 0},
+		{BucketKey: "bucket_b", BandNo: 1},
 	}
 
-	// The employer/job type/skills were created before the geo lookup failed;
-	// the transaction must have rolled all of it back.
-	for name, model := range map[string]interface{}{
-		"job_post":  &models.JobPost{},
-		"employer":  &models.Employer{},
-		"job_type":  &models.JobType{},
-		"skills":    &models.Skill{},
-		"lsh_index": &models.LshIndex{},
-	} {
-		if n := countRows(t, db, model, ""); n != 0 {
-			t.Errorf("%s: expected nothing to be saved after a failed save, got %d row(s)", name, n)
-		}
+	tests := []struct {
+		name         string
+		seedProvince bool // whether the "Western" province exists in geo_data
+		modify       func(job *models.JobPost)
+		lshRecords   []models.LshIndex
+		wantErr      error  // a sentinel the error must match
+		wantErrText  string // text the error must contain, when there is no sentinel
+		want         rowCounts
+	}{
+		{
+			name:         "saves a job with all its lookups and lsh rows",
+			seedProvince: true,
+			lshRecords:   twoLshRows,
+			want:         rowCounts{jobs: 1, employers: 1, jobTypes: 1, skills: 2, sources: 1, aiVersions: 1, lshRows: 2},
+		},
+		{
+			name:         "saves a job without lsh rows",
+			seedProvince: true,
+			want:         rowCounts{jobs: 1, employers: 1, jobTypes: 1, skills: 2, sources: 1, aiVersions: 1},
+		},
+		{
+			name:         "skips empty skill names",
+			seedProvince: true,
+			modify: func(job *models.JobPost) {
+				// The empty name comes first on purpose: if it were not skipped it
+				// would be created as a blank skill. After "Go" exists, GORM would
+				// just look up that row, and the bug would go unnoticed.
+				job.Skills = []models.Skill{{Skill: ""}, {Skill: "Go"}}
+			},
+			want: rowCounts{jobs: 1, employers: 1, jobTypes: 1, skills: 1, sources: 1, aiVersions: 1},
+		},
+		{
+			name:         "treats empty lookup names as absent",
+			seedProvince: true,
+			modify: func(job *models.JobPost) {
+				job.Employer.Name = ""
+				job.JobType.Type = ""
+				job.MetaData.Source.Name = ""
+				job.MetaData.AiVersion.Version = ""
+			},
+			want: rowCounts{jobs: 1, skills: 2},
+		},
+		{
+			name: "saves a job without any optional relation",
+			modify: func(job *models.JobPost) {
+				job.Employer = nil
+				job.JobType = nil
+				job.Skills = nil
+				job.MetaData.GeoData = nil
+				job.MetaData.Source = nil
+				job.MetaData.AiVersion = nil
+			},
+			want: rowCounts{jobs: 1},
+		},
+		{
+			// The employer, job type and skills are created before the geo
+			// lookup fails, so every count being 0 shows the rollback worked.
+			name:       "unknown province is a permanent failure and rolls everything back",
+			lshRecords: twoLshRows,
+			wantErr:    repositories.ErrPermanentSaveFailure,
+			want:       rowCounts{},
+		},
+		{
+			// Two records with the same bucket key break the (bucket_key,
+			// job_post_id) primary key. The job row and the lookups are already
+			// written by then, so every count being 0 shows the rollback worked.
+			name:         "failing lsh insert rolls the job and its lookups back",
+			seedProvince: true,
+			lshRecords: []models.LshIndex{
+				{BucketKey: "bucket_a", BandNo: 0},
+				{BucketKey: "bucket_a", BandNo: 1},
+			},
+			wantErrText: "lsh_index insert failed",
+			want:        rowCounts{},
+		},
 	}
-}
 
-func TestStore_SaveOneJob_WithoutOptionalRelationsStillSaves(t *testing.T) {
-	db := SetupTestDB(t)
-	store := repositories.NewStore(db)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := SetupTestDB(t)
+			store := repositories.NewStore(db)
+			if tt.seedProvince {
+				seedProvince(t, db, "Western")
+			}
 
-	job := &models.JobPost{
-		JobRole:       "Bare job",
-		WorkMode:      models.WorkModeOnsite,
-		NoOfVacancies: 1,
-		MetaData:      models.JobMetaData{PostedAt: time.Now()},
-	}
+			job := newJobToSave("Engineer")
+			if tt.modify != nil {
+				tt.modify(job)
+			}
 
-	if err := store.SaveOneJob(context.Background(), job, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+			err := store.SaveOneJob(context.Background(), job, tt.lshRecords)
+			wantFailure := tt.wantErr != nil || tt.wantErrText != ""
+			switch {
+			case tt.wantErr != nil:
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("expected error %v, got %v", tt.wantErr, err)
+				}
+			case tt.wantErrText != "":
+				if err == nil || !strings.Contains(err.Error(), tt.wantErrText) {
+					t.Fatalf("expected an error containing %q, got %v", tt.wantErrText, err)
+				}
+			case err != nil:
+				t.Fatalf("unexpected error: %v", err)
+			}
 
-	meta := loadMeta(t, db, job.ID)
-	if meta.SourceID != nil || meta.GeoDataID != nil || meta.AiVersionID != nil {
-		t.Errorf("expected no linked lookups, got source=%v geo=%v ai_version=%v", meta.SourceID, meta.GeoDataID, meta.AiVersionID)
+			got := rowCounts{
+				jobs:       countRows(t, db, &models.JobPost{}, ""),
+				employers:  countRows(t, db, &models.Employer{}, ""),
+				jobTypes:   countRows(t, db, &models.JobType{}, ""),
+				skills:     countRows(t, db, &models.Skill{}, ""),
+				sources:    countRows(t, db, &models.Source{}, ""),
+				aiVersions: countRows(t, db, &models.AiVersion{}, ""),
+				lshRows:    countRows(t, db, &models.LshIndex{}, ""),
+			}
+			if got != tt.want {
+				t.Errorf("row counts: want %+v, got %+v", tt.want, got)
+			}
+
+			if wantFailure {
+				return
+			}
+			// A lookup is only linked to the job if it was created
+			meta := loadMeta(t, db, job.ID)
+			if (meta.SourceID != nil) != (tt.want.sources > 0) {
+				t.Errorf("source link: want linked=%t, got %v", tt.want.sources > 0, meta.SourceID)
+			}
+			if (meta.AiVersionID != nil) != (tt.want.aiVersions > 0) {
+				t.Errorf("ai version link: want linked=%t, got %v", tt.want.aiVersions > 0, meta.AiVersionID)
+			}
+		})
 	}
 }
 
