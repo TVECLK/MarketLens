@@ -43,13 +43,13 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 	}
 	sqlDB.SetMaxOpenConns(1)
 
+	// Register the cleanup before migrating: if the migration fails, t.Fatalf
+	// stops the test, and a cleanup registered after it would never be added
+	t.Cleanup(func() { sqlDB.Close() })
+
 	if err := migrateAll(db); err != nil {
 		t.Fatalf("failed to migrate schema: %v", err)
 	}
-
-	t.Cleanup(func() {
-		sqlDB.Close()
-	})
 
 	return db
 }
