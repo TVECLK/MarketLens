@@ -83,7 +83,8 @@ class BaseJobCrawler(ABC):
         if self._jobs_attempted > 0 and self._jobs_failed >= self._jobs_attempted:
             reasons.append(f"all {self._jobs_attempted} jobs failed")
         elif (
-            self._jobs_attempted >= MIN_JOBS_FOR_FAILURE
+            self._jobs_attempted > 0
+            and self._jobs_attempted >= MIN_JOBS_FOR_FAILURE
             and self._jobs_failed / self._jobs_attempted > MAX_JOB_FAILURE_RATIO
         ):
             reasons.append(
