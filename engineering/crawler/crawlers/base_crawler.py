@@ -78,7 +78,11 @@ class BaseJobCrawler(ABC):
     # at all; it then raises CrawlIncompleteError instead of returning.
     def _finish_crawl(self, usable_jobs: int) -> CrawlResult:
         reasons = list(self._page_errors)
-        if (
+        # Nothing was obtained or saved: this holds for crawls of any size, so it is
+        # checked before the ratio, which small crawls skip
+        if self._jobs_attempted > 0 and self._jobs_failed >= self._jobs_attempted:
+            reasons.append(f"all {self._jobs_attempted} jobs failed")
+        elif (
             self._jobs_attempted >= MIN_JOBS_FOR_FAILURE
             and self._jobs_failed / self._jobs_attempted > MAX_JOB_FAILURE_RATIO
         ):

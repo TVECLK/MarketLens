@@ -264,9 +264,28 @@ def test_failures_over_the_ratio_raise(limits):
 
 def test_ratio_is_ignored_below_the_minimum_number_of_jobs(limits):
     crawler = _Crawler()
-    crawler._count_jobs(attempted=19, failed=19)
+    crawler._count_jobs(attempted=19, failed=10)  # 53%, but too few jobs to judge
 
-    crawler._finish_crawl(usable_jobs=5)
+    crawler._finish_crawl(usable_jobs=9)
+
+
+def test_every_job_failing_raises_even_below_the_minimum_number_of_jobs(limits):
+    crawler = _Crawler()
+    crawler._count_jobs(attempted=3, failed=3)
+
+    with pytest.raises(CrawlIncompleteError, match="all 3 jobs failed"):
+        crawler._finish_crawl(usable_jobs=3)
+
+
+def test_every_job_failing_is_reported_once_not_as_a_ratio_too(limits):
+    crawler = _Crawler()
+    crawler._count_jobs(attempted=25, failed=25)
+
+    with pytest.raises(CrawlIncompleteError) as exc:
+        crawler._finish_crawl(usable_jobs=25)
+
+    assert "all 25 jobs failed" in str(exc.value)
+    assert "limit" not in str(exc.value)
 
 
 def test_ratio_applies_from_the_minimum_number_of_jobs(limits):
@@ -333,9 +352,17 @@ async def test_rooster_many_rejected_jobs_fail_the_crawl(limits):
 
 async def test_rooster_small_crawl_is_not_judged_by_the_ratio(limits):
     jobs = rooster_jobs(10)
+    client = make_rejecting_client([rooster_page(10, jobs), rooster_page(10, jobs)], 5)
+
+    await crawl_rooster(client)  # half rejected, but only 10 attempted
+
+
+async def test_rooster_small_crawl_where_the_backend_rejects_every_job_fails(limits):
+    jobs = rooster_jobs(10)
     client = make_rejecting_client([rooster_page(10, jobs), rooster_page(10, jobs)], 10)
 
-    await crawl_rooster(client)  # every job rejected, but only 10 attempted
+    with pytest.raises(CrawlIncompleteError, match="all 10 jobs failed"):
+        await crawl_rooster(client)
 
 
 # ---------- source name ----------
