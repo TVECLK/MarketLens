@@ -10,5 +10,5 @@ class RoosterParser(BaseJobParser):
             location=job.get("location") or "",
             description=job.get("description") or "",
             crawler_run_id=crawler_run_id,
-            source="Rooster",
+            source=self._source_name,
         )

@@ -15,9 +15,14 @@ async def crawl_job():
 
     try:
         manager = CrawlerManager()
-        await manager.run_all_crawlers(concurrent=True)
+        succeeded_sources = await manager.run_all_crawlers(concurrent=True)
     except Exception:
         logger.exception("CRITICAL ERROR encountered during execution lifecycle")
+        sys.exit(1)
+
+    # A run where no crawler succeeded must not look like a success to the scheduler
+    if not succeeded_sources:
+        logger.error("--- Crawling Failed: no crawler completed successfully ---")
         sys.exit(1)
 
     logger.info("--- Crawling Completed ---")

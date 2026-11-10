@@ -134,7 +134,12 @@ func (r *Store) UpdateDuplicateJob(ctx context.Context, jobPostID uint, crawlerR
 	})
 }
 
-func (r *Store) ReconcileStaleVacancies(ctx context.Context, currentRunID uint) (int64, error) {
+func (r *Store) ReconcileStaleVacancies(ctx context.Context, currentRunID uint, sources []string) (int64, error) {
+	// Nothing to reconcile without a source; skip the database round trip
+	if len(sources) == 0 {
+		return 0, nil
+	}
+
 	var affectedRows int64
 	now := time.Now()
 
@@ -144,15 +149,15 @@ func (r *Store) ReconcileStaleVacancies(ctx context.Context, currentRunID uint) 
 			return err
 		}
 
-		const staleCond = "(crawler_run_id IS NULL OR crawler_run_id <> ?) AND end_date IS NULL"
-		stale := tx.Model(&models.JobMetaData{}).Select("job_post_id").Where(staleCond, currentRunID)
+		const staleCond = "(crawler_run_id IS NULL OR crawler_run_id <> ?) AND end_date IS NULL AND source_id IN (SELECT id FROM source WHERE name IN ?)"
+		stale := tx.Model(&models.JobMetaData{}).Select("job_post_id").Where(staleCond, currentRunID, sources)
 
 		if err := tx.Where("job_post_id IN (?)", stale).Delete(&models.LshIndex{}).Error; err != nil {
 			return err
 		}
 
 		result := tx.Model(&models.JobMetaData{}).
-			Where(staleCond, currentRunID).
+			Where(staleCond, currentRunID, sources).
 			Updates(map[string]interface{}{
 				"end_date": &now,
 			})

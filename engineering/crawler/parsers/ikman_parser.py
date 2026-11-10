@@ -119,5 +119,5 @@ class IkmanParser(BaseJobParser):
             location=location,
             description=description,
             crawler_run_id=crawler_run_id,
-            source="Ikman",
+            source=self._source_name,
         )

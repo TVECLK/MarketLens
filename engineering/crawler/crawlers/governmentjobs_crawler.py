@@ -7,7 +7,7 @@ from typing import List
 from crawl4ai import AsyncWebCrawler
 from bs4 import BeautifulSoup
 from PIL import Image
-from .base_crawler import BaseJobCrawler
+from .base_crawler import BaseJobCrawler, CrawlResult
 from utils import ThunderAuth
 from parsers import GovernmentJobsParser
 from config import BATCH_SIZE
@@ -25,24 +25,25 @@ logger = logging.getLogger(__name__)
 
 
 class GovernmentJobsCrawler(BaseJobCrawler):
+    SOURCE_NAME = "GovernmentJobs"
+
     def __init__(self):
-        self._parser = GovernmentJobsParser()
+        super().__init__()
+        self._parser = GovernmentJobsParser(self.SOURCE_NAME)
 
     def _remove_sinhala_control_chars(self, text):
         cleaned_text = text.replace("\u200c", "").replace("\u200d", "")
         return cleaned_text
 
+    # Raises on any failure (download, image decoding or OCR) so the caller counts
+    # the job as failed instead of saving error text as its description
     async def _perform_ocr(self, async_client: httpx.AsyncClient, image_url):
-        try:
-            response = await async_client.get(image_url, timeout=10)
-            img = Image.open(BytesIO(response.content)).convert(
-                "L"
-            )  # Convert to grayscale for better OCR
-            return " ".join(
-                pytesseract.image_to_string(img, lang=TESSERACT_LANG).split()
-            )
-        except Exception as e:
-            return f"OCR Error: {e}"
+        response = await async_client.get(image_url, timeout=10)
+        response.raise_for_status()
+        img = Image.open(BytesIO(response.content)).convert(
+            "L"
+        )  # Convert to grayscale for better OCR
+        return " ".join(pytesseract.image_to_string(img, lang=TESSERACT_LANG).split())
 
     async def _fetch_job_details(self, async_client: httpx.AsyncClient):
         base_url = "https://governmentjobs.lk/index.php?page={}&ipp=25&"
@@ -55,18 +56,35 @@ class GovernmentJobsCrawler(BaseJobCrawler):
             )
             soup = BeautifulSoup(result.html, "html.parser")
 
-            pagination_text = soup.select_one(".category-results .paginate").text
-            total_pages = int(pagination_text.split()[-1])
+            pagination = soup.select_one(".category-results .paginate")
+            if pagination is None:
+                self._mark_page_failure(
+                    "GovernmentJobs: Could not find the pagination element."
+                )
+                return jobs_data
+            total_pages = int(pagination.text.split()[-1])
 
             for page_num in range(1, total_pages + 1):
                 current_url = base_url.format(page_num)
 
                 # Fetch the specific page
                 page_result = await crawler.arun(url=current_url)
+                if not page_result.success:
+                    self._mark_page_failure(
+                        f"GovernmentJobs: Failed to fetch listing page {page_num}"
+                    )
+                    continue
                 page_soup = BeautifulSoup(page_result.html, "html.parser")
 
+                job_divs = page_soup.select(".grid-view.product")
+                if not job_divs:
+                    self._mark_page_failure(
+                        f"GovernmentJobs: No jobs found on listing page {page_num}"
+                    )
+                    continue
+
                 # Iterate through each job
-                for job_div in page_soup.select(".grid-view.product"):
+                for job_div in job_divs:
                     try:
                         title = job_div.select_one("h5 strong").text.strip()
                         employer = job_div.select_one('a[href*="vtag"]').text.strip()
@@ -104,9 +122,11 @@ class GovernmentJobsCrawler(BaseJobCrawler):
                                 "description": description.strip(),
                             }
                         )
+                        self._count_jobs()
 
                     except Exception as e:
                         logger.error(f"GovernmentJobs: Error parsing job: {e}")
+                        self._count_jobs(failed=1)
                         continue
 
         return jobs_data
@@ -116,13 +136,14 @@ class GovernmentJobsCrawler(BaseJobCrawler):
         crawler_run_id: int,
         async_client: httpx.AsyncClient,
         thunder_auth: ThunderAuth,
-    ) -> None:
+    ) -> CrawlResult:
 
         logger.info("GovernmentJobs: Government jobs crawl started.")
 
         job_data_list = await self._fetch_job_details(async_client)
 
         job_batch: List[RawJobInput] = []
+        usable_jobs = 0
 
         for result in job_data_list:
             try:
@@ -131,6 +152,7 @@ class GovernmentJobsCrawler(BaseJobCrawler):
                 logger.warning(f"GovernmentJobs: Skipping malformed job: {e}")
                 continue
 
+            usable_jobs += self._is_usable(job_input)
             job_batch.append(job_input)
 
             if len(job_batch) >= BATCH_SIZE:
@@ -145,4 +167,6 @@ class GovernmentJobsCrawler(BaseJobCrawler):
             )
             await self._flush_batch(async_client, thunder_auth, job_batch)
 
+        result = self._finish_crawl(usable_jobs)
         logger.info("GovernmentJobs: Government jobs crawl pass concluded.")
+        return result

@@ -10,5 +10,5 @@ class TopJobsParser(BaseJobParser):
             location=data.get("location", ""),
             description=data.get("ocr_text", ""),
             crawler_run_id=crawler_run_id,
-            source="TopJobs",
+            source=self._source_name,
         )

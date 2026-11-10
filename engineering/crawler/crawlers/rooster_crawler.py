@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from utils import ThunderAuth
 from config import BATCH_SIZE
 
-from .base_crawler import BaseJobCrawler
+from .base_crawler import BaseJobCrawler, CrawlResult
 from parsers import RoosterParser
 from models import RawJobInput
 
@@ -15,8 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class RoosterCrawler(BaseJobCrawler):
+    SOURCE_NAME = "Rooster"
+
     def __init__(self):
-        self._parser = RoosterParser()
+        super().__init__()
+        self._parser = RoosterParser(self.SOURCE_NAME)
 
     async def _fetch_all_jobs(self, async_client: httpx.AsyncClient):
         base_url = "https://api.rooster.jobs/jobSearch/jobs/search"
@@ -36,17 +39,17 @@ class RoosterCrawler(BaseJobCrawler):
             response.raise_for_status()
             response_json = response.json()
         except httpx.RequestError as e:
-            logger.error(
+            self._mark_page_failure(
                 f"Rooster: Request failed while fetching initial job page: {e}"
             )
             return all_jobs
         except httpx.HTTPStatusError as e:
-            logger.error(
+            self._mark_page_failure(
                 f"Rooster: Unexpected status {e.response.status_code} while fetching initial job page: {e}"
             )
             return all_jobs
         except ValueError as e:
-            logger.error(
+            self._mark_page_failure(
                 f"Rooster: Failed to decode JSON from initial job page response: {e}"
             )
             return all_jobs
@@ -54,7 +57,7 @@ class RoosterCrawler(BaseJobCrawler):
         try:
             total_jobs = response_json["body"]["count"]
         except (KeyError, TypeError) as e:
-            logger.error(
+            self._mark_page_failure(
                 f"Rooster: Unexpected response structure, missing 'body.count': {e}"
             )
             return all_jobs
@@ -72,21 +75,23 @@ class RoosterCrawler(BaseJobCrawler):
                 response.raise_for_status()
                 response_json = response.json()
             except httpx.RequestError as e:
-                logger.error(f"Rooster: Request failed on page {page}: {e}")
+                self._mark_page_failure(f"Rooster: Request failed on page {page}: {e}")
                 continue
             except httpx.HTTPStatusError as e:
-                logger.error(
+                self._mark_page_failure(
                     f"Rooster: Unexpected status {e.response.status_code} on page {page}: {e}"
                 )
                 continue
             except ValueError as e:
-                logger.error(f"Rooster: Failed to decode JSON on page {page}: {e}")
+                self._mark_page_failure(
+                    f"Rooster: Failed to decode JSON on page {page}: {e}"
+                )
                 continue
 
             try:
                 page_jobs = response_json["body"]["data"]
             except (KeyError, TypeError) as e:
-                logger.warning(
+                self._mark_page_failure(
                     f"Rooster: Missing 'body.data' on page {page}, skipping: {e}"
                 )
                 continue
@@ -103,13 +108,15 @@ class RoosterCrawler(BaseJobCrawler):
         crawler_run_id: int,
         async_client: httpx.AsyncClient,
         thunder_auth: ThunderAuth,
-    ) -> None:
+    ) -> CrawlResult:
 
         logger.info("Rooster: Rooster crawl started.")
 
         job_data_list = await self._fetch_all_jobs(async_client)
+        self._count_jobs(attempted=len(job_data_list))
 
         job_batch: List[RawJobInput] = []
+        usable_jobs = 0
 
         for result in job_data_list:
             try:
@@ -118,6 +125,7 @@ class RoosterCrawler(BaseJobCrawler):
                 logger.warning(f"Rooster: Skipping malformed job: {e}")
                 continue
 
+            usable_jobs += self._is_usable(job_input)
             job_batch.append(job_input)
 
             if len(job_batch) >= BATCH_SIZE:
@@ -132,4 +140,6 @@ class RoosterCrawler(BaseJobCrawler):
             )
             await self._flush_batch(async_client, thunder_auth, job_batch)
 
+        result = self._finish_crawl(usable_jobs)
         logger.info("Rooster: Rooster crawl pass concluded.")
+        return result

@@ -3,6 +3,9 @@ import os
 BACKEND_BASE_URL = os.getenv("BACKEND_URL", "http://backend:8080/api/v1/crawler")
 BATCH_SIZE = 10
 
+MAX_JOB_FAILURE_RATIO = float(os.getenv("MAX_JOB_FAILURE_RATIO", "0.2"))
+MIN_JOBS_FOR_FAILURE = int(os.getenv("MIN_JOBS_FOR_FAILURE", "20"))
+
 THUNDER_BASE_URL = os.getenv("THUNDER_BASE_URL")
 THUNDER_CLIENT_ID = os.getenv("THUNDER_CLIENT_ID")
 THUNDER_CLIENT_SECRET = os.getenv("THUNDER_CLIENT_SECRET")

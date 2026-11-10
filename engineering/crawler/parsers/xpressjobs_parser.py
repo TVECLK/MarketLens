@@ -10,5 +10,5 @@ class XpressJobsParser(BaseJobParser):
             location=job.get("location") or "",
             description=job.get("description") or "",
             crawler_run_id=crawler_run_id,
-            source="XpressJobs",
+            source=self._source_name,
         )

@@ -10,5 +10,5 @@ class GovernmentJobsParser(BaseJobParser):
             location=data.get("location", ""),
             description=data.get("description", ""),
             crawler_run_id=crawler_run_id,
-            source="GovernmentJobs",
+            source=self._source_name,
         )
