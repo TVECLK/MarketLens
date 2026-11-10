@@ -1,100 +1,16 @@
 import logging
-from collections import namedtuple
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 
 import main
-from crawlers import BaseJobCrawler
-from parsers import BaseJobParser
-from utils.crawler_run_manager import CrawlerManager
-
-
-class _FakeParser(BaseJobParser):
-    def parse_rule_based_fields(self, *args, **kwargs):
-        raise NotImplementedError
-
-
-_REAL_RESULT = object()
-
-
-def make_crawler_class(
-    source_name: str, error: Exception | None = None, result=_REAL_RESULT
-):
-    """A BaseJobCrawler whose crawl_jobs raises `error`, or returns `result`
-    (by default the CrawlResult a finished crawl returns)."""
-
-    class _Crawler(BaseJobCrawler):
-        SOURCE_NAME = source_name
-
-        def __init__(self):
-            super().__init__()
-            self._parser = _FakeParser(self.SOURCE_NAME)
-
-        async def crawl_jobs(self, crawler_run_id, async_client, thunder_auth):
-            if error is not None:
-                raise error
-            if result is not _REAL_RESULT:
-                return result
-            return self._finish_crawl(usable_jobs=1)
-
-    return _Crawler
-
-
-# The tests use their own backend URL, so they don't depend on the BACKEND_URL
-# of the environment they run in
-TEST_BACKEND_URL = "http://backend.test/api/v1/crawler"
-
-
-@pytest.fixture(autouse=True)
-def backend_url(monkeypatch):
-    monkeypatch.setattr("utils.crawler_run_manager.BACKEND_BASE_URL", TEST_BACKEND_URL)
-
-
-@pytest.fixture
-def manager():
-    manager = CrawlerManager()
-    manager._registry = {
-        "rooster": make_crawler_class("Rooster"),
-        "ikman": make_crawler_class("Ikman"),
-        "topjobs": make_crawler_class("TopJobs", error=RuntimeError("site down")),
-    }
-    return manager
 
 
 def http_response(status_code: int) -> httpx.Response:
     return httpx.Response(
         status_code, request=httpx.Request("POST", "http://backend.test")
     )
-
-
-Call = namedtuple("Call", ["path", "body", "auth"])
-
-
-def make_client(behaviors: dict | None = None):
-    """A fake HTTP client that records every POST it receives as a Call.
-
-    `behaviors` maps the end of a request path (for example "/jobs/reconcile" or
-    "/complete") to an exception to raise, or an httpx.Response to return.
-    Any other request gets a 200."""
-    behaviors = behaviors or {}
-    client = MagicMock()
-    client.calls = []
-
-    async def post(url, json=None, auth=None, **kwargs):
-        assert url.startswith(TEST_BACKEND_URL), f"unexpected backend URL: {url}"
-        path = url.removeprefix(TEST_BACKEND_URL)
-        client.calls.append(Call(path, json, auth))
-        for suffix, behavior in behaviors.items():
-            if path.endswith(suffix):
-                if isinstance(behavior, Exception):
-                    raise behavior
-                return behavior
-        return http_response(200)
-
-    client.post = AsyncMock(side_effect=post)
-    return client
 
 
 def completions(client) -> list:
@@ -114,7 +30,7 @@ async def test_run_crawler_returns_source_name_on_success(manager):
     "returned", [None, "Rooster", True], ids=["nothing", "a string", "a bool"]
 )
 async def test_run_crawler_returns_none_when_crawler_returns_no_crawl_result(
-    manager, returned
+    manager, returned, make_crawler_class
 ):
     manager._registry = {"rooster": make_crawler_class("Rooster", result=returned)}
 
@@ -152,7 +68,7 @@ async def test_run_all_crawlers_returns_only_the_succeeded_sources(manager, conc
 
 @pytest.mark.parametrize("concurrent", [True, False])
 async def test_run_all_crawlers_returns_an_empty_list_when_all_fail(
-    manager, concurrent
+    manager, concurrent, make_crawler_class
 ):
     manager._registry = {
         "topjobs": make_crawler_class("TopJobs", error=RuntimeError("down")),
@@ -194,7 +110,9 @@ async def test_run_all_crawlers_runs_nothing_when_the_run_cannot_be_started(
 # ---------- _finalize_run ----------
 
 
-async def test_finalize_run_reconciles_then_completes_when_a_source_succeeded(manager):
+async def test_finalize_run_reconciles_then_completes_when_a_source_succeeded(
+    manager, make_client
+):
     client = make_client()
 
     await manager._finalize_run(client, 7, ["Rooster", "Ikman"])
@@ -211,7 +129,7 @@ async def test_finalize_run_reconciles_then_completes_when_a_source_succeeded(ma
 
 
 async def test_finalize_run_records_failed_without_reconciling_when_no_source_succeeded(
-    manager,
+    manager, make_client
 ):
     client = make_client()
 
@@ -231,7 +149,7 @@ async def test_finalize_run_records_failed_without_reconciling_when_no_source_su
     ids=["network error", "HTTP 500", "HTTP 503"],
 )
 async def test_finalize_run_marks_the_run_failed_once_when_reconcile_fails(
-    manager, reconcile_failure
+    manager, reconcile_failure, make_client
 ):
     client = make_client({"/jobs/reconcile": reconcile_failure()})
 
@@ -245,7 +163,7 @@ async def test_finalize_run_marks_the_run_failed_once_when_reconcile_fails(
 
 
 async def test_finalize_run_raises_the_reconcile_error_when_marking_failed_also_fails(
-    manager, caplog
+    manager, caplog, make_client
 ):
     client = make_client(
         {
@@ -264,7 +182,9 @@ async def test_finalize_run_raises_the_reconcile_error_when_marking_failed_also_
     assert len(completions(client)) == 1
 
 
-async def test_finalize_run_raises_when_completing_the_run_fails(manager, caplog):
+async def test_finalize_run_raises_when_completing_the_run_fails(
+    manager, caplog, make_client
+):
     client = make_client({"/complete": httpx.ConnectError("complete down")})
 
     with caplog.at_level(logging.ERROR, logger="utils.crawler_run_manager"):
@@ -284,7 +204,7 @@ async def test_finalize_run_raises_when_completing_the_run_fails(manager, caplog
     ids=["COMPLETED", "FAILED"],
 )
 async def test_finalize_run_sends_the_expected_complete_request(
-    manager, succeeded_sources, expected_status
+    manager, succeeded_sources, expected_status, make_client
 ):
     client = make_client()
 
@@ -296,7 +216,9 @@ async def test_finalize_run_sends_the_expected_complete_request(
     assert sent.auth is manager._thunder_auth
 
 
-async def test_finalize_run_sends_the_thunder_auth_with_the_reconcile_request(manager):
+async def test_finalize_run_sends_the_thunder_auth_with_the_reconcile_request(
+    manager, make_client
+):
     client = make_client()
 
     await manager._finalize_run(client, 7, ["Rooster"])
