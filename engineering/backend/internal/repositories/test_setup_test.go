@@ -115,16 +115,17 @@ func seedCrawlerRun(t *testing.T, db *gorm.DB) uint {
 }
 
 // seedActiveJob creates an active (end_date IS NULL) job with the given number
-// of vacancies for the given source and crawler run, with one LSH row per bucket key.
-func seedActiveJob(t *testing.T, db *gorm.DB, role string, noOfVacancies int, sourceID, runID uint, bucketKeys ...string) uint {
+// of vacancies for the given source and crawler run, with one LSH row per bucket
+// key. A nil sourceID or runID leaves that column NULL.
+func seedActiveJob(t *testing.T, db *gorm.DB, role string, noOfVacancies int, sourceID, runID *uint, bucketKeys ...string) uint {
 	t.Helper()
 	job := models.JobPost{
 		JobRole:       role,
 		WorkMode:      models.WorkModeOnsite,
 		NoOfVacancies: noOfVacancies,
 		MetaData: models.JobMetaData{
-			SourceID:     &sourceID,
-			CrawlerRunID: &runID,
+			SourceID:     sourceID,
+			CrawlerRunID: runID,
 			PostedAt:     time.Now(),
 		},
 	}

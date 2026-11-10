@@ -20,8 +20,8 @@ func TestStore_GetJobsByBucketKeys_ReturnsMatchingActiveJobsWithMetaData(t *test
 	sourceID := seedSource(t, db, "Rooster")
 	runID := seedCrawlerRun(t, db)
 
-	matchID := seedActiveJob(t, db, "match", 1, sourceID, runID, "bucket_a")
-	otherID := seedActiveJob(t, db, "other", 1, sourceID, runID, "bucket_b")
+	matchID := seedActiveJob(t, db, "match", 1, &sourceID, &runID, "bucket_a")
+	otherID := seedActiveJob(t, db, "other", 1, &sourceID, &runID, "bucket_b")
 
 	jobs, err := store.GetJobsByBucketKeys(context.Background(), []string{"bucket_a"})
 	if err != nil {
@@ -46,8 +46,8 @@ func TestStore_GetJobsByBucketKeys_ExcludesEndedJobs(t *testing.T) {
 	sourceID := seedSource(t, db, "Rooster")
 	runID := seedCrawlerRun(t, db)
 
-	activeID := seedActiveJob(t, db, "active", 1, sourceID, runID, "bucket_a")
-	endedID := seedActiveJob(t, db, "ended", 1, sourceID, runID, "bucket_a")
+	activeID := seedActiveJob(t, db, "active", 1, &sourceID, &runID, "bucket_a")
+	endedID := seedActiveJob(t, db, "ended", 1, &sourceID, &runID, "bucket_a")
 	endJob(t, db, endedID)
 
 	jobs, err := store.GetJobsByBucketKeys(context.Background(), []string{"bucket_a"})
@@ -67,7 +67,7 @@ func TestStore_GetJobsByBucketKeys_ReturnsAJobOnceWhenSeveralKeysMatch(t *testin
 	sourceID := seedSource(t, db, "Rooster")
 	runID := seedCrawlerRun(t, db)
 
-	jobID := seedActiveJob(t, db, "multi band", 1, sourceID, runID, "bucket_a", "bucket_b", "bucket_c")
+	jobID := seedActiveJob(t, db, "multi band", 1, &sourceID, &runID, "bucket_a", "bucket_b", "bucket_c")
 
 	jobs, err := store.GetJobsByBucketKeys(context.Background(), []string{"bucket_a", "bucket_b", "bucket_c"})
 	if err != nil {
@@ -84,7 +84,7 @@ func TestStore_GetJobsByBucketKeys_NoMatchReturnsEmpty(t *testing.T) {
 	store := repositories.NewStore(db)
 	sourceID := seedSource(t, db, "Rooster")
 	runID := seedCrawlerRun(t, db)
-	seedActiveJob(t, db, "job", 1, sourceID, runID, "bucket_a")
+	seedActiveJob(t, db, "job", 1, &sourceID, &runID, "bucket_a")
 
 	for name, keys := range map[string][]string{
 		"unknown key": {"does_not_exist"},
@@ -280,8 +280,8 @@ func TestStore_UpdateDuplicateJob_RestampsOnlyTheGivenJob(t *testing.T) {
 	oldRunID := seedCrawlerRun(t, db)
 	newRunID := seedCrawlerRun(t, db)
 
-	seenID := seedActiveJob(t, db, "seen again", 1, sourceID, oldRunID)
-	untouchedID := seedActiveJob(t, db, "not seen", 1, sourceID, oldRunID)
+	seenID := seedActiveJob(t, db, "seen again", 1, &sourceID, &oldRunID)
+	untouchedID := seedActiveJob(t, db, "not seen", 1, &sourceID, &oldRunID)
 
 	if err := store.UpdateDuplicateJob(context.Background(), seenID, newRunID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -301,7 +301,7 @@ func TestStore_UpdateDuplicateJob_UnknownJobIsNoOp(t *testing.T) {
 	sourceID := seedSource(t, db, "Rooster")
 	oldRunID := seedCrawlerRun(t, db)
 	newRunID := seedCrawlerRun(t, db)
-	existingID := seedActiveJob(t, db, "existing", 1, sourceID, oldRunID)
+	existingID := seedActiveJob(t, db, "existing", 1, &sourceID, &oldRunID)
 
 	if err := store.UpdateDuplicateJob(context.Background(), 9999, newRunID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -320,6 +320,13 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 	//   staleIkman     - Ikman job last seen in the old run
 	//   currentRooster - Rooster job seen in the current run
 	//   endedRooster   - Rooster job from the old run that is already ended
+	//   nullRunRooster - Rooster job with no crawler run (NULL)
+	//   nullRunIkman   - Ikman job with no crawler run (NULL)
+	//   nullSource     - job from the old run with no source (NULL)
+	//   nullSourceRun  - job with neither a source nor a crawler run (NULL)
+	//
+	// A NULL crawler run counts as stale, but only for a listed source. A job
+	// without a source is never reconciled, because it can't be attributed to one.
 	tests := []struct {
 		name         string
 		sources      []string
@@ -331,20 +338,20 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 		{
 			name:         "only the listed source is reconciled",
 			sources:      []string{"Rooster"},
-			wantAffected: 1,
-			wantExpired:  []string{"staleRooster"},
+			wantAffected: 2,
+			wantExpired:  []string{"staleRooster", "nullRunRooster"},
 		},
 		{
 			name:         "other sources stay untouched",
 			sources:      []string{"Ikman"},
-			wantAffected: 1,
-			wantExpired:  []string{"staleIkman"},
+			wantAffected: 2,
+			wantExpired:  []string{"staleIkman", "nullRunIkman"},
 		},
 		{
 			name:         "several sources are reconciled together",
 			sources:      []string{"Rooster", "Ikman"},
-			wantAffected: 2,
-			wantExpired:  []string{"staleRooster", "staleIkman"},
+			wantAffected: 4,
+			wantExpired:  []string{"staleRooster", "staleIkman", "nullRunRooster", "nullRunIkman"},
 		},
 		{
 			name:    "unknown source is a no-op",
@@ -377,10 +384,14 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 			currentRunID := seedCrawlerRun(t, db)
 
 			jobs := map[string]uint{
-				"staleRooster":   seedActiveJob(t, db, "stale rooster", 1, roosterID, oldRunID, "bucket_stale_rooster"),
-				"staleIkman":     seedActiveJob(t, db, "stale ikman", 1, ikmanID, oldRunID, "bucket_stale_ikman"),
-				"currentRooster": seedActiveJob(t, db, "current rooster", 1, roosterID, currentRunID, "bucket_current_rooster"),
-				"endedRooster":   seedActiveJob(t, db, "ended rooster", 1, roosterID, oldRunID, "bucket_ended_rooster"),
+				"staleRooster":   seedActiveJob(t, db, "stale rooster", 1, &roosterID, &oldRunID, "bucket_stale_rooster"),
+				"staleIkman":     seedActiveJob(t, db, "stale ikman", 1, &ikmanID, &oldRunID, "bucket_stale_ikman"),
+				"currentRooster": seedActiveJob(t, db, "current rooster", 1, &roosterID, &currentRunID, "bucket_current_rooster"),
+				"endedRooster":   seedActiveJob(t, db, "ended rooster", 1, &roosterID, &oldRunID, "bucket_ended_rooster"),
+				"nullRunRooster": seedActiveJob(t, db, "null run rooster", 1, &roosterID, nil, "bucket_null_run_rooster"),
+				"nullRunIkman":   seedActiveJob(t, db, "null run ikman", 1, &ikmanID, nil, "bucket_null_run_ikman"),
+				"nullSource":     seedActiveJob(t, db, "null source", 1, nil, &oldRunID, "bucket_null_source"),
+				"nullSourceRun":  seedActiveJob(t, db, "null source and run", 1, nil, nil, "bucket_null_source_run"),
 			}
 			endJob(t, db, jobs["endedRooster"])
 
