@@ -71,7 +71,7 @@ class TopJobsCrawler(BaseJobCrawler):
                     else "",
                     "location": tds[6].text.strip()
                     if len(tds) > 6
-                    else (tds[5].text.strip() if len(tds) > 5 else "N/A"),
+                    else (tds[5].text.strip() if len(tds) > 5 else ""),
                     "ocr_text": None,
                     "error": None,
                 }
