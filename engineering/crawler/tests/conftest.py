@@ -123,7 +123,8 @@ def make_client(backend_url):
         client.calls = []
 
         async def post(url, json=None, auth=None, **kwargs):
-            assert url.startswith(backend_url), f"unexpected backend URL: {url}"
+            if not url.startswith(backend_url):
+                pytest.fail(f"request sent outside the test backend: {url}")
             path = url.removeprefix(backend_url)
             client.calls.append(Call(path, json, auth))
             for suffix, behavior in behaviors.items():
