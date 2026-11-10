@@ -2,6 +2,7 @@ package repositories_test
 
 import (
 	"fmt"
+	"net/url"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 
 	// A unique DSN per test avoids two tests sharing the same in-memory
 	// database when run in parallel.
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared&_foreign_keys=on", t.Name())
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared&_foreign_keys=on", url.PathEscape(t.Name()))
 
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
