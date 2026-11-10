@@ -14,89 +14,59 @@ import (
 
 // ---------- GetJobsByBucketKeys ----------
 
-func TestStore_GetJobsByBucketKeys_ReturnsMatchingActiveJobsWithMetaData(t *testing.T) {
+func TestStore_GetJobsByBucketKeys(t *testing.T) {
+	// The queries only read, so every case shares one data set:
+	//   match - active job with bucket_a
+	//   other - active job with bucket_b
+	//   ended - ended job with bucket_a
+	//   multi - active job with three buckets
 	db := SetupTestDB(t)
 	store := repositories.NewStore(db)
 	sourceID := seedSource(t, db, "Rooster")
 	runID := seedCrawlerRun(t, db)
 
-	matchID := seedActiveJob(t, db, "match", 1, &sourceID, &runID, "bucket_a")
-	otherID := seedActiveJob(t, db, "other", 1, &sourceID, &runID, "bucket_b")
+	jobs := map[string]uint{
+		"match": seedActiveJob(t, db, "match", 1, &sourceID, &runID, "bucket_a"),
+		"other": seedActiveJob(t, db, "other", 1, &sourceID, &runID, "bucket_b"),
+		"ended": seedActiveJob(t, db, "ended", 1, &sourceID, &runID, "bucket_a"),
+		"multi": seedActiveJob(t, db, "multi", 1, &sourceID, &runID, "bucket_c", "bucket_d", "bucket_e"),
+	}
+	endJob(t, db, jobs["ended"])
 
-	jobs, err := store.GetJobsByBucketKeys(context.Background(), []string{"bucket_a"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	tests := []struct {
+		name string
+		keys []string
+		want []string
+	}{
+		{"returns jobs with a matching key", []string{"bucket_a"}, []string{"match"}},
+		{"excludes ended jobs", []string{"bucket_a"}, []string{"match"}},
+		{"returns a job once when several keys match", []string{"bucket_c", "bucket_d", "bucket_e"}, []string{"multi"}},
+		{"returns jobs from different keys", []string{"bucket_a", "bucket_b"}, []string{"match", "other"}},
+		{"unknown key returns nothing", []string{"does_not_exist"}, nil},
+		{"empty key list returns nothing", []string{}, nil},
+		{"nil key list returns nothing", nil, nil},
 	}
 
-	ids := jobIDs(jobs)
-	if len(jobs) != 1 || !ids[matchID] {
-		t.Fatalf("expected only job %d, got %v", matchID, ids)
-	}
-	if ids[otherID] {
-		t.Errorf("job %d has a different bucket key and must not be returned", otherID)
-	}
-	if jobs[0].MetaData.JobPostID != matchID {
-		t.Errorf("expected MetaData to be preloaded for job %d, got job_post_id %d", matchID, jobs[0].MetaData.JobPostID)
-	}
-}
-
-func TestStore_GetJobsByBucketKeys_ExcludesEndedJobs(t *testing.T) {
-	db := SetupTestDB(t)
-	store := repositories.NewStore(db)
-	sourceID := seedSource(t, db, "Rooster")
-	runID := seedCrawlerRun(t, db)
-
-	activeID := seedActiveJob(t, db, "active", 1, &sourceID, &runID, "bucket_a")
-	endedID := seedActiveJob(t, db, "ended", 1, &sourceID, &runID, "bucket_a")
-	endJob(t, db, endedID)
-
-	jobs, err := store.GetJobsByBucketKeys(context.Background(), []string{"bucket_a"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	ids := jobIDs(jobs)
-	if len(jobs) != 1 || !ids[activeID] {
-		t.Errorf("expected only the active job %d, got %v", activeID, ids)
-	}
-}
-
-func TestStore_GetJobsByBucketKeys_ReturnsAJobOnceWhenSeveralKeysMatch(t *testing.T) {
-	db := SetupTestDB(t)
-	store := repositories.NewStore(db)
-	sourceID := seedSource(t, db, "Rooster")
-	runID := seedCrawlerRun(t, db)
-
-	jobID := seedActiveJob(t, db, "multi band", 1, &sourceID, &runID, "bucket_a", "bucket_b", "bucket_c")
-
-	jobs, err := store.GetJobsByBucketKeys(context.Background(), []string{"bucket_a", "bucket_b", "bucket_c"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(jobs) != 1 || jobs[0].ID != jobID {
-		t.Errorf("expected job %d exactly once, got %d result(s)", jobID, len(jobs))
-	}
-}
-
-func TestStore_GetJobsByBucketKeys_NoMatchReturnsEmpty(t *testing.T) {
-	db := SetupTestDB(t)
-	store := repositories.NewStore(db)
-	sourceID := seedSource(t, db, "Rooster")
-	runID := seedCrawlerRun(t, db)
-	seedActiveJob(t, db, "job", 1, &sourceID, &runID, "bucket_a")
-
-	for name, keys := range map[string][]string{
-		"unknown key": {"does_not_exist"},
-		"empty list":  {},
-	} {
-		t.Run(name, func(t *testing.T) {
-			jobs, err := store.GetJobsByBucketKeys(context.Background(), keys)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := store.GetJobsByBucketKeys(context.Background(), tt.keys)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if len(jobs) != 0 {
-				t.Errorf("expected no jobs, got %d", len(jobs))
+
+			if len(got) != len(tt.want) {
+				t.Fatalf("expected %d job(s), got %d: %v", len(tt.want), len(got), jobIDs(got))
+			}
+			ids := jobIDs(got)
+			for _, label := range tt.want {
+				if !ids[jobs[label]] {
+					t.Errorf("expected %s (job %d) in the result, got %v", label, jobs[label], ids)
+				}
+			}
+			for _, job := range got {
+				if job.MetaData.JobPostID != job.ID {
+					t.Errorf("expected MetaData to be preloaded for job %d, got job_post_id %d", job.ID, job.MetaData.JobPostID)
+				}
 			}
 		})
 	}
