@@ -19,7 +19,6 @@ type Source struct {
 	Name      string         `json:"name"       gorm:"size:255;not null;unique"`
 	Type      SourceType     `json:"type"       gorm:"type:source_type_enum;not null"`
 	IsActive  bool           `json:"is_active"  gorm:"not null;default:true"`
-	UpdatedBy *string        `json:"updated_by" gorm:"size:255"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`

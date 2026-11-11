@@ -7,9 +7,6 @@ import (
 	"strings"
 )
 
-// SourceService fronts the Store's source methods. Sources are seeded, not
-// created or deleted through the API; the only change allowed is turning one
-// on or off.
 type SourceService struct {
 	store *repositories.Store
 }
@@ -47,7 +44,7 @@ func (s *SourceService) ListActiveAutoSources(ctx context.Context) ([]models.Sou
 }
 
 func (s *SourceService) GetSourceByID(ctx context.Context, id uint) (models.Source, error) {
-	return s.store.GetSourceByID(ctx, id)
+	return s.store.Sources().GetByID(ctx, id)
 }
 
 // GetSourceByName looks a source up by its exact name, as sent by crawlers
@@ -56,11 +53,28 @@ func (s *SourceService) GetSourceByName(ctx context.Context, name string) (model
 	return s.store.GetSourceByName(ctx, name)
 }
 
-// UpdateSourceStatus enables or disables a source.
-func (s *SourceService) UpdateSourceStatus(ctx context.Context, id uint, isActive bool, updatedBy string) (models.Source, error) {
-	updatedBy = strings.TrimSpace(updatedBy)
-	if updatedBy == "" {
-		return models.Source{}, ValidationErrorf("updated_by is required")
+func (s *SourceService) RenameSource(ctx context.Context, id uint, name string) (models.Source, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return models.Source{}, ValidationErrorf("name is required")
 	}
-	return s.store.UpdateSourceStatus(ctx, id, isActive, updatedBy)
+
+	current, err := s.store.Sources().GetByID(ctx, id)
+	if err != nil {
+		return models.Source{}, err
+	}
+	if current.Type != models.SourceTypeManual {
+		return models.Source{}, ValidationErrorf("only manual sources can be renamed; %q is %s and must match its crawler's SOURCE_NAME", current.Name, current.Type)
+	}
+	if current.Name == name {
+		return current, nil
+	}
+
+	return s.store.Sources().Update(ctx, id, map[string]interface{}{"name": name})
+}
+
+// UpdateSourceStatus enables or disables a source. A map is used so that
+// is_active = false is written (a struct update would skip the zero value).
+func (s *SourceService) UpdateSourceStatus(ctx context.Context, id uint, isActive bool) (models.Source, error) {
+	return s.store.Sources().Update(ctx, id, map[string]interface{}{"is_active": isActive})
 }

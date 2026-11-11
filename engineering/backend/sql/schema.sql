@@ -67,7 +67,6 @@ CREATE TABLE IF NOT EXISTS source (
     name        VARCHAR(255) NOT NULL UNIQUE,
     type        source_type_enum NOT NULL,
     is_active   BOOLEAN NOT NULL DEFAULT TRUE,
-    updated_by  VARCHAR(255),
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     deleted_at  TIMESTAMPTZ

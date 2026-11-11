@@ -1,7 +1,6 @@
 package api
 
 import (
-	"marketlens-go-backend/internal/auth"
 	"marketlens-go-backend/internal/models"
 	"net/http"
 	"strconv"
@@ -54,8 +53,7 @@ func (h *Handler) GetSourceByIDHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, item)
 }
 
-// UpdateSourceStatusHandler enables or disables a source. The caller is
-// recorded as updated_by from the verified token, never from the body.
+// UpdateSourceStatusHandler enables or disables a source.
 func (h *Handler) UpdateSourceStatusHandler(c *gin.Context) {
 	id, ok := parseIDParam(c, "id")
 	if !ok {
@@ -66,7 +64,7 @@ func (h *Handler) UpdateSourceStatusHandler(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "Invalid request payload", err)
 		return
 	}
-	item, err := h.Sources.UpdateSourceStatus(c.Request.Context(), id, *in.IsActive, auth.CurrentSub(c))
+	item, err := h.Sources.UpdateSourceStatus(c.Request.Context(), id, *in.IsActive)
 	if err != nil {
 		respondRepoError(c, "Failed to update source status", err)
 		return
