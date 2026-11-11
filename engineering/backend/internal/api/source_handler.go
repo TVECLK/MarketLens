@@ -14,6 +14,17 @@ type updateSourceStatusInput struct {
 	IsActive *bool `json:"is_active" binding:"required"`
 }
 
+// IsActive is optional: nil means active.
+type createSourceInput struct {
+	Name     string `json:"name"      binding:"required,max=255"`
+	Type     string `json:"type"      binding:"required"`
+	IsActive *bool  `json:"is_active"`
+}
+
+type renameSourceInput struct {
+	Name string `json:"name" binding:"required,max=255"`
+}
+
 type sourceListResponse struct {
 	Count   int             `json:"count"`
 	Sources []models.Source `json:"sources"`
@@ -51,6 +62,55 @@ func (h *Handler) GetSourceByIDHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, item)
+}
+
+// CreateSourceHandler adds a source, or restores a deleted one with the same
+// name. A name used by a live source is a 400 "already exists".
+func (h *Handler) CreateSourceHandler(c *gin.Context) {
+	var in createSourceInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		respondError(c, http.StatusBadRequest, "Invalid request payload", err)
+		return
+	}
+	item, err := h.Sources.CreateSource(c.Request.Context(), in.Name, in.Type, in.IsActive)
+	if err != nil {
+		respondRepoError(c, "Failed to create source", err)
+		return
+	}
+	c.JSON(http.StatusCreated, item)
+}
+
+// RenameSourceHandler renames a manual source. Auto sources are a 400,
+// because their name must match the crawler's SOURCE_NAME.
+func (h *Handler) RenameSourceHandler(c *gin.Context) {
+	id, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	var in renameSourceInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		respondError(c, http.StatusBadRequest, "Invalid request payload", err)
+		return
+	}
+	item, err := h.Sources.RenameSource(c.Request.Context(), id, in.Name)
+	if err != nil {
+		respondRepoError(c, "Failed to rename source", err)
+		return
+	}
+	c.JSON(http.StatusOK, item)
+}
+
+// DeleteSourceHandler soft-deletes a source. Its jobs keep their link to it.
+func (h *Handler) DeleteSourceHandler(c *gin.Context) {
+	id, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	if err := h.Sources.DeleteSource(c.Request.Context(), id); err != nil {
+		respondRepoError(c, "Failed to delete source", err)
+		return
+	}
+	c.JSON(http.StatusOK, messageResponse{Message: "Source deleted successfully"})
 }
 
 // UpdateSourceStatusHandler enables or disables a source.
