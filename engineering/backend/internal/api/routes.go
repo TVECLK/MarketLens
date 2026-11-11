@@ -64,6 +64,18 @@ func RegisterRoutes(r *gin.Engine, h *Handler, verifier *auth.Verifier) {
 			ingestionRoutes.POST("/runs/:id/complete", auth.RequireScope("crawler:complete"), h.CompleteCrawlerRunHandler)
 			ingestionRoutes.POST("/jobs/batch-save", auth.RequireScope("crawler:batch-save"), h.BatchSaveJobsHandler)
 			ingestionRoutes.POST("/jobs/reconcile", auth.RequireScope("crawler:reconcile"), h.ReconcileStaleVacanciesHandler)
+			ingestionRoutes.GET("/sources", auth.RequireScope("crawler:sources"), h.CrawlerListSourcesHandler)
+		}
+
+		sourceRoutes := v1.Group("/sources")
+		sourceRoutes.Use(auth.AuthRequired(verifier))
+		{
+			sourceRoutes.GET("", auth.RequireScope("sources:read"), h.ListSourcesHandler)
+			sourceRoutes.GET("/:id", auth.RequireScope("sources:read"), h.GetSourceByIDHandler)
+			sourceRoutes.POST("", auth.RequireScope("sources:create"), h.CreateSourceHandler)
+			sourceRoutes.PUT("/:id", auth.RequireScope("sources:update"), h.RenameSourceHandler)
+			sourceRoutes.PATCH("/:id/status", auth.RequireScope("sources:update"), h.UpdateSourceStatusHandler)
+			sourceRoutes.DELETE("/:id", auth.RequireScope("sources:delete"), h.DeleteSourceHandler)
 		}
 
 		// Flat lookup tables

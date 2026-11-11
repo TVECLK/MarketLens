@@ -27,7 +27,7 @@ func (r *Store) GetJobsByBucketKeys(ctx context.Context, bucketKeys []string) ([
 }
 
 // SaveOneJob persists a single new job — employer/job_type/skills
-// FirstOrCreate lookups, a geo lookup, source/ai_version FirstOrCreate,
+// FirstOrCreate lookups, geo and source lookups, ai_version FirstOrCreate,
 // the job itself, then its LSH records keyed off the job's real DB id —
 // in its own transaction, isolated from every other job in the batch.
 func (r *Store) SaveOneJob(ctx context.Context, job *models.JobPost, lshIndexRecords []models.LshIndex) error {
@@ -84,12 +84,23 @@ func (r *Store) SaveOneJob(ctx context.Context, job *models.JobPost, lshIndexRec
 		}
 		job.MetaData.GeoData = nil
 
-		// Source (FirstOrCreate)
+		// Source (lookup only, no create: sources are created through the API).
+		// Deleted sources are excluded by GORM's soft-delete filter. A disabled
+		// source is rejected here too, so a source disabled mid-batch, or a
+		// caller that skips ingestion's checkSource, can't save jobs for it.
 		if job.MetaData.Source != nil && job.MetaData.Source.Name != "" {
 			var source models.Source
-			if err := tx.Where(models.Source{Name: job.MetaData.Source.Name}).
-				FirstOrCreate(&source).Error; err != nil {
+			err := tx.Where("name = ?", job.MetaData.Source.Name).
+				First(&source).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("%w: source '%s' not registered",
+					ErrPermanentSaveFailure, job.MetaData.Source.Name)
+			} else if err != nil {
 				return wrapSaveErr(err, "source lookup failed")
+			}
+			if !source.IsActive {
+				return fmt.Errorf("%w: source '%s' is disabled",
+					ErrPermanentSaveFailure, job.MetaData.Source.Name)
 			}
 			job.MetaData.SourceID = &source.ID
 		}
@@ -149,15 +160,18 @@ func (r *Store) ReconcileStaleVacancies(ctx context.Context, currentRunID uint, 
 			return err
 		}
 
-		const staleCond = "(crawler_run_id IS NULL OR crawler_run_id <> ?) AND end_date IS NULL AND source_id IN (SELECT id FROM source WHERE name IN ?)"
-		stale := tx.Model(&models.JobMetaData{}).Select("job_post_id").Where(staleCond, currentRunID, sources)
+		// Only active, non-deleted sources are reconciled, whatever their type:
+		// a source disabled or deleted mid-run keeps its open jobs.
+		const staleCond = "(crawler_run_id IS NULL OR crawler_run_id <> ?) AND end_date IS NULL AND source_id IN (SELECT id FROM source WHERE name IN ? AND is_active = ? AND deleted_at IS NULL)"
+		staleArgs := []interface{}{currentRunID, sources, true}
+		stale := tx.Model(&models.JobMetaData{}).Select("job_post_id").Where(staleCond, staleArgs...)
 
 		if err := tx.Where("job_post_id IN (?)", stale).Delete(&models.LshIndex{}).Error; err != nil {
 			return err
 		}
 
 		result := tx.Model(&models.JobMetaData{}).
-			Where(staleCond, currentRunID, sources).
+			Where(staleCond, staleArgs...).
 			Updates(map[string]interface{}{
 				"end_date": &now,
 			})

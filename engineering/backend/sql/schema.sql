@@ -52,11 +52,24 @@ CREATE TABLE IF NOT EXISTS geo_data (
     updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+-- auto:   collected by a crawler; name matches the crawler parser's `source=` value
+-- manual: entered by hand (e.g. newspaper ads via manual upload)
+DO $$
+BEGIN
+    CREATE TYPE source_type_enum AS ENUM ('auto', 'manual');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END
+$$;
+
 CREATE TABLE IF NOT EXISTS source (
     id          SERIAL PRIMARY KEY,
     name        VARCHAR(255) NOT NULL UNIQUE,
+    type        source_type_enum NOT NULL,
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    updated_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    deleted_at  TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS experience (

@@ -97,6 +97,7 @@ func TestStore_SaveOneJob_PersistsJobWithLookupsAndLshRecords(t *testing.T) {
 	db := SetupTestDB(t)
 	store := repositories.NewStore(db)
 	geoID := seedProvince(t, db, "Western")
+	sourceID := seedSource(t, db, "Rooster")
 	runID := seedCrawlerRun(t, db)
 
 	job := newJobToSave("Engineer")
@@ -136,8 +137,11 @@ func TestStore_SaveOneJob_PersistsJobWithLookupsAndLshRecords(t *testing.T) {
 	if meta.GeoDataID == nil || *meta.GeoDataID != geoID {
 		t.Errorf("expected geo data %d to be linked, got %v", geoID, meta.GeoDataID)
 	}
-	if meta.SourceID == nil || meta.AiVersionID == nil {
-		t.Errorf("expected source and ai version to be linked, got source=%v ai_version=%v", meta.SourceID, meta.AiVersionID)
+	if meta.SourceID == nil || *meta.SourceID != sourceID {
+		t.Errorf("expected source %d to be linked, got %v", sourceID, meta.SourceID)
+	}
+	if meta.AiVersionID == nil {
+		t.Errorf("expected ai version to be linked, got %v", meta.AiVersionID)
 	}
 	if meta.CrawlerRunID == nil || *meta.CrawlerRunID != runID {
 		t.Errorf("expected crawler run %d, got %v", runID, meta.CrawlerRunID)
@@ -153,6 +157,7 @@ func TestStore_SaveOneJob_ReusesExistingLookupRows(t *testing.T) {
 	db := SetupTestDB(t)
 	store := repositories.NewStore(db)
 	seedProvince(t, db, "Western")
+	seedSource(t, db, "Rooster")
 
 	if err := store.SaveOneJob(context.Background(), newJobToSave("First"), nil); err != nil {
 		t.Fatalf("unexpected error saving first job: %v", err)
@@ -196,25 +201,33 @@ func TestStore_SaveOneJob(t *testing.T) {
 		{BucketKey: "bucket_b", BandNo: 1},
 	}
 
+	// Every case seeds the "Rooster" source unless skipSourceSeed is set:
+	// sources are seeded, never created by SaveOneJob, so the source row count
+	// is 1 whether or not the job ends up linked to it.
 	tests := []struct {
-		name         string
-		seedProvince bool // whether the "Western" province exists in geo_data
-		modify       func(job *models.JobPost)
-		lshRecords   []models.LshIndex
-		wantErr      error  // a sentinel the error must match
-		wantErrText  string // text the error must contain, when there is no sentinel
-		want         rowCounts
+		name           string
+		seedProvince   bool // whether the "Western" province exists in geo_data
+		skipSourceSeed bool // whether to leave the "Rooster" source out
+		sourceDisabled bool // whether the seeded "Rooster" source is disabled
+		modify         func(job *models.JobPost)
+		lshRecords     []models.LshIndex
+		wantErr        error  // a sentinel the error must match
+		wantErrText    string // text the error must contain, when there is no sentinel
+		want           rowCounts
+		sourceLinked   bool // whether the saved job should point at the source
 	}{
 		{
 			name:         "saves a job with all its lookups and lsh rows",
 			seedProvince: true,
 			lshRecords:   twoLshRows,
 			want:         rowCounts{jobs: 1, employers: 1, jobTypes: 1, skills: 2, sources: 1, aiVersions: 1, lshRows: 2},
+			sourceLinked: true,
 		},
 		{
 			name:         "saves a job without lsh rows",
 			seedProvince: true,
 			want:         rowCounts{jobs: 1, employers: 1, jobTypes: 1, skills: 2, sources: 1, aiVersions: 1},
+			sourceLinked: true,
 		},
 		{
 			name:         "skips empty skill names",
@@ -225,7 +238,8 @@ func TestStore_SaveOneJob(t *testing.T) {
 				// just look up that row, and the bug would go unnoticed.
 				job.Skills = []models.Skill{{Skill: ""}, {Skill: "Go"}}
 			},
-			want: rowCounts{jobs: 1, employers: 1, jobTypes: 1, skills: 1, sources: 1, aiVersions: 1},
+			want:         rowCounts{jobs: 1, employers: 1, jobTypes: 1, skills: 1, sources: 1, aiVersions: 1},
+			sourceLinked: true,
 		},
 		{
 			name:         "treats empty lookup names as absent",
@@ -236,7 +250,7 @@ func TestStore_SaveOneJob(t *testing.T) {
 				job.MetaData.Source.Name = ""
 				job.MetaData.AiVersion.Version = ""
 			},
-			want: rowCounts{jobs: 1, skills: 2},
+			want: rowCounts{jobs: 1, skills: 2, sources: 1},
 		},
 		{
 			name: "saves a job without any optional relation",
@@ -248,7 +262,7 @@ func TestStore_SaveOneJob(t *testing.T) {
 				job.MetaData.Source = nil
 				job.MetaData.AiVersion = nil
 			},
-			want: rowCounts{jobs: 1},
+			want: rowCounts{jobs: 1, sources: 1},
 		},
 		{
 			// The employer, job type and skills are created before the geo
@@ -256,7 +270,29 @@ func TestStore_SaveOneJob(t *testing.T) {
 			name:       "unknown province is a permanent failure and rolls everything back",
 			lshRecords: twoLshRows,
 			wantErr:    repositories.ErrPermanentSaveFailure,
-			want:       rowCounts{},
+			want:       rowCounts{sources: 1},
+		},
+		{
+			// Sources are seeded, never created on save. sources being 0 shows
+			// no row was created; the rest being 0 shows the rollback worked.
+			name:           "unknown source is a permanent failure and creates no source",
+			seedProvince:   true,
+			skipSourceSeed: true,
+			lshRecords:     twoLshRows,
+			wantErr:        repositories.ErrPermanentSaveFailure,
+			want:           rowCounts{},
+		},
+		{
+			// The source exists but is disabled. The text check tells this apart
+			// from "not registered"; the counts show the rollback worked and the
+			// source row was left alone.
+			name:           "disabled source is a permanent failure and rolls everything back",
+			seedProvince:   true,
+			sourceDisabled: true,
+			lshRecords:     twoLshRows,
+			wantErr:        repositories.ErrPermanentSaveFailure,
+			wantErrText:    "source 'Rooster' is disabled",
+			want:           rowCounts{sources: 1},
 		},
 		{
 			// Two records with the same bucket key break the (bucket_key,
@@ -269,7 +305,7 @@ func TestStore_SaveOneJob(t *testing.T) {
 				{BucketKey: "bucket_a", BandNo: 1},
 			},
 			wantErrText: "lsh_index insert failed",
-			want:        rowCounts{},
+			want:        rowCounts{sources: 1},
 		},
 	}
 
@@ -280,6 +316,9 @@ func TestStore_SaveOneJob(t *testing.T) {
 			if tt.seedProvince {
 				seedProvince(t, db, "Western")
 			}
+			if !tt.skipSourceSeed {
+				seedSourceOf(t, db, "Rooster", models.SourceTypeAuto, !tt.sourceDisabled)
+			}
 
 			job := newJobToSave("Engineer")
 			if tt.modify != nil {
@@ -288,16 +327,13 @@ func TestStore_SaveOneJob(t *testing.T) {
 
 			err := store.SaveOneJob(context.Background(), job, tt.lshRecords)
 			wantFailure := tt.wantErr != nil || tt.wantErrText != ""
-			switch {
-			case tt.wantErr != nil:
-				if !errors.Is(err, tt.wantErr) {
-					t.Fatalf("expected error %v, got %v", tt.wantErr, err)
-				}
-			case tt.wantErrText != "":
-				if err == nil || !strings.Contains(err.Error(), tt.wantErrText) {
-					t.Fatalf("expected an error containing %q, got %v", tt.wantErrText, err)
-				}
-			case err != nil:
+			if tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
+				t.Fatalf("expected error %v, got %v", tt.wantErr, err)
+			}
+			if tt.wantErrText != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErrText)) {
+				t.Fatalf("expected an error containing %q, got %v", tt.wantErrText, err)
+			}
+			if !wantFailure && err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
@@ -317,10 +353,10 @@ func TestStore_SaveOneJob(t *testing.T) {
 			if wantFailure {
 				return
 			}
-			// A lookup is only linked to the job if it was created
+			// A lookup is only linked to the job if the job named it
 			meta := loadMeta(t, db, job.ID)
-			if (meta.SourceID != nil) != (tt.want.sources > 0) {
-				t.Errorf("source link: want linked=%t, got %v", tt.want.sources > 0, meta.SourceID)
+			if (meta.SourceID != nil) != tt.sourceLinked {
+				t.Errorf("source link: want linked=%t, got %v", tt.sourceLinked, meta.SourceID)
 			}
 			if (meta.AiVersionID != nil) != (tt.want.aiVersions > 0) {
 				t.Errorf("ai version link: want linked=%t, got %v", tt.want.aiVersions > 0, meta.AiVersionID)
@@ -398,9 +434,14 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 	//   nullRunIkman   - Ikman job with no crawler run (NULL)
 	//   nullSource     - job from the old run with no source (NULL)
 	//   nullSourceRun  - job with neither a source nor a crawler run (NULL)
+	//   staleDisabled  - job from the old run of a disabled auto source
+	//   staleManual    - job from the old run of a manual (newspaper) source
+	//   staleDeleted   - job from the old run of a soft-deleted source
 	//
 	// A NULL crawler run counts as stale, but only for a listed source. A job
 	// without a source is never reconciled, because it can't be attributed to one.
+	// A disabled or deleted source is never reconciled, even when listed. A listed
+	// manual source is reconciled like any other.
 	tests := []struct {
 		name         string
 		sources      []string
@@ -432,6 +473,26 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 			sources: []string{"DoesNotExist"},
 		},
 		{
+			name:    "disabled source keeps its open jobs",
+			sources: []string{"Disabled"},
+		},
+		{
+			name:    "deleted source keeps its open jobs",
+			sources: []string{"Deleted"},
+		},
+		{
+			name:         "manual source is reconciled like any other",
+			sources:      []string{"Daily News"},
+			wantAffected: 1,
+			wantExpired:  []string{"staleManual"},
+		},
+		{
+			name:         "disabled and deleted sources are skipped alongside active ones",
+			sources:      []string{"Rooster", "Disabled", "Deleted", "Daily News"},
+			wantAffected: 3,
+			wantExpired:  []string{"staleRooster", "nullRunRooster", "staleManual"},
+		},
+		{
 			name:    "nil sources is a no-op",
 			sources: nil,
 		},
@@ -454,6 +515,9 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 
 			roosterID := seedSource(t, db, "Rooster")
 			ikmanID := seedSource(t, db, "Ikman")
+			disabledID := seedSourceOf(t, db, "Disabled", models.SourceTypeAuto, false)
+			manualID := seedSourceOf(t, db, "Daily News", models.SourceTypeManual, true)
+			deletedID := seedSource(t, db, "Deleted")
 			oldRunID := seedCrawlerRun(t, db)
 			currentRunID := seedCrawlerRun(t, db)
 
@@ -466,8 +530,15 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 				"nullRunIkman":   seedActiveJob(t, db, "null run ikman", 1, &ikmanID, nil, "bucket_null_run_ikman"),
 				"nullSource":     seedActiveJob(t, db, "null source", 1, nil, &oldRunID, "bucket_null_source"),
 				"nullSourceRun":  seedActiveJob(t, db, "null source and run", 1, nil, nil, "bucket_null_source_run"),
+				"staleDisabled":  seedActiveJob(t, db, "stale disabled", 1, &disabledID, &oldRunID, "bucket_stale_disabled"),
+				"staleManual":    seedActiveJob(t, db, "stale manual", 1, &manualID, &oldRunID, "bucket_stale_manual"),
+				"staleDeleted":   seedActiveJob(t, db, "stale deleted", 1, &deletedID, &oldRunID, "bucket_stale_deleted"),
 			}
 			endJob(t, db, jobs["endedRooster"])
+			// Soft delete after its job exists, as in production.
+			if err := db.Delete(&models.Source{}, deletedID).Error; err != nil {
+				t.Fatalf("failed to soft-delete source: %v", err)
+			}
 
 			endDateBefore := make(map[string]*time.Time, len(jobs))
 			for label, id := range jobs {
@@ -499,6 +570,10 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 				expired[label] = true
 			}
 
+			// Every job closed by one reconcile call must share a single end date.
+			var sharedEndDate *time.Time
+			var sharedLabel string
+
 			for label, id := range jobs {
 				endDate := loadMeta(t, db, id).EndDate
 				lshRows := countRows(t, db, &models.LshIndex{}, "job_post_id = ?", id)
@@ -506,6 +581,10 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 				if expired[label] {
 					if endDate == nil {
 						t.Errorf("%s: expected the job to be expired", label)
+					} else if sharedEndDate == nil {
+						sharedEndDate, sharedLabel = endDate, label
+					} else if !endDate.Equal(*sharedEndDate) {
+						t.Errorf("%s: expected the same end date as %s (%v), got %v", label, sharedLabel, *sharedEndDate, *endDate)
 					}
 					if lshRows != 0 {
 						t.Errorf("%s: expected its LSH rows to be removed, got %d", label, lshRows)

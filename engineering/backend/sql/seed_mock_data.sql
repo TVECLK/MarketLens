@@ -412,7 +412,7 @@ INSERT INTO public.lsh_index (bucket_key, band_no, job_post_id) VALUES ('b7_abba
 -- Data for Name: source; Type: TABLE DATA; Schema: public; Owner: app_user
 --
 
-INSERT INTO public.source (id, name, created_at, updated_at) VALUES (1, 'Ikman', '2026-09-17 01:08:16.573532+00', '2026-09-17 01:08:16.573532+00');
+-- Sources (including 'Ikman', id 1, referenced by meta_data below) are seeded in seed.sql.
 
 --
 -- TOC entry 3786 (class 0 OID 16680)
@@ -504,5 +504,5 @@ SELECT pg_catalog.setval('public.skills_id_seq', 45, true);
 -- Name: source_id_seq; Type: SEQUENCE SET; Schema: public; Owner: app_user
 --
 
-SELECT pg_catalog.setval('public.source_id_seq', 1, true);
+-- source_id_seq is set in seed.sql.
 

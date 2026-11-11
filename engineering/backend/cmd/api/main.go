@@ -78,6 +78,7 @@ func main() {
 	)
 	ingestionSvc := ingestion.NewIngestionService(
 		services.JobPosts,
+		services.Sources,
 		llmClient,
 		cfg.LLM.Model,
 		industryClassifier,

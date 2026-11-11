@@ -8042,6 +8042,18 @@ INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, 
 
 
 --
+-- Data for Name: source; Type: TABLE DATA; Schema: public; Owner: app_user
+-- name must match the crawler parsers' `source=` value.
+--
+
+INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (1, 'Ikman', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (2, 'XpressJobs', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (3, 'TopJobs', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (4, 'Rooster', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (5, 'GovernmentJobs', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+
+
+--
 -- TOC entry 3824 (class 0 OID 16802)
 -- Dependencies: 268
 -- Data for Name: vocational_education; Type: TABLE DATA; Schema: public; Owner: app_user
@@ -8200,6 +8212,13 @@ SELECT pg_catalog.setval('public.occupation_group_id_seq', 4859, true);
 --
 
 SELECT pg_catalog.setval('public.sub_major_group_id_seq', 44, true);
+
+
+--
+-- Name: source_id_seq; Type: SEQUENCE SET; Schema: public; Owner: app_user
+--
+
+SELECT pg_catalog.setval('public.source_id_seq', 5, true);
 
 
 --
