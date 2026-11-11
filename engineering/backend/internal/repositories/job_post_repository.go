@@ -84,7 +84,10 @@ func (r *Store) SaveOneJob(ctx context.Context, job *models.JobPost, lshIndexRec
 		}
 		job.MetaData.GeoData = nil
 
-		// Source (lookup only, no create: sources are seeded)
+		// Source (lookup only, no create: sources are created through the API).
+		// Deleted sources are excluded by GORM's soft-delete filter. A disabled
+		// source is rejected here too, so a source disabled mid-batch, or a
+		// caller that skips ingestion's checkSource, can't save jobs for it.
 		if job.MetaData.Source != nil && job.MetaData.Source.Name != "" {
 			var source models.Source
 			err := tx.Where("name = ?", job.MetaData.Source.Name).
@@ -94,6 +97,10 @@ func (r *Store) SaveOneJob(ctx context.Context, job *models.JobPost, lshIndexRec
 					ErrPermanentSaveFailure, job.MetaData.Source.Name)
 			} else if err != nil {
 				return wrapSaveErr(err, "source lookup failed")
+			}
+			if !source.IsActive {
+				return fmt.Errorf("%w: source '%s' is disabled",
+					ErrPermanentSaveFailure, job.MetaData.Source.Name)
 			}
 			job.MetaData.SourceID = &source.ID
 		}

@@ -208,6 +208,7 @@ func TestStore_SaveOneJob(t *testing.T) {
 		name           string
 		seedProvince   bool // whether the "Western" province exists in geo_data
 		skipSourceSeed bool // whether to leave the "Rooster" source out
+		sourceDisabled bool // whether the seeded "Rooster" source is disabled
 		modify         func(job *models.JobPost)
 		lshRecords     []models.LshIndex
 		wantErr        error  // a sentinel the error must match
@@ -282,6 +283,18 @@ func TestStore_SaveOneJob(t *testing.T) {
 			want:           rowCounts{},
 		},
 		{
+			// The source exists but is disabled. The text check tells this apart
+			// from "not registered"; the counts show the rollback worked and the
+			// source row was left alone.
+			name:           "disabled source is a permanent failure and rolls everything back",
+			seedProvince:   true,
+			sourceDisabled: true,
+			lshRecords:     twoLshRows,
+			wantErr:        repositories.ErrPermanentSaveFailure,
+			wantErrText:    "source 'Rooster' is disabled",
+			want:           rowCounts{sources: 1},
+		},
+		{
 			// Two records with the same bucket key break the (bucket_key,
 			// job_post_id) primary key. The job row and the lookups are already
 			// written by then, so every count being 0 shows the rollback worked.
@@ -304,7 +317,7 @@ func TestStore_SaveOneJob(t *testing.T) {
 				seedProvince(t, db, "Western")
 			}
 			if !tt.skipSourceSeed {
-				seedSource(t, db, "Rooster")
+				seedSourceOf(t, db, "Rooster", models.SourceTypeAuto, !tt.sourceDisabled)
 			}
 
 			job := newJobToSave("Engineer")
@@ -314,16 +327,13 @@ func TestStore_SaveOneJob(t *testing.T) {
 
 			err := store.SaveOneJob(context.Background(), job, tt.lshRecords)
 			wantFailure := tt.wantErr != nil || tt.wantErrText != ""
-			switch {
-			case tt.wantErr != nil:
-				if !errors.Is(err, tt.wantErr) {
-					t.Fatalf("expected error %v, got %v", tt.wantErr, err)
-				}
-			case tt.wantErrText != "":
-				if err == nil || !strings.Contains(err.Error(), tt.wantErrText) {
-					t.Fatalf("expected an error containing %q, got %v", tt.wantErrText, err)
-				}
-			case err != nil:
+			if tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
+				t.Fatalf("expected error %v, got %v", tt.wantErr, err)
+			}
+			if tt.wantErrText != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErrText)) {
+				t.Fatalf("expected an error containing %q, got %v", tt.wantErrText, err)
+			}
+			if !wantFailure && err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
