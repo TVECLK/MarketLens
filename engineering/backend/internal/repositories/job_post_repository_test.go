@@ -426,11 +426,12 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 	//   nullSourceRun  - job with neither a source nor a crawler run (NULL)
 	//   staleDisabled  - job from the old run of a disabled auto source
 	//   staleManual    - job from the old run of a manual (newspaper) source
+	//   staleDeleted   - job from the old run of a soft-deleted source
 	//
 	// A NULL crawler run counts as stale, but only for a listed source. A job
 	// without a source is never reconciled, because it can't be attributed to one.
-	// A disabled source is never reconciled, even when listed. A listed manual
-	// source is reconciled like any other.
+	// A disabled or deleted source is never reconciled, even when listed. A listed
+	// manual source is reconciled like any other.
 	tests := []struct {
 		name         string
 		sources      []string
@@ -466,14 +467,18 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 			sources: []string{"Disabled"},
 		},
 		{
+			name:    "deleted source keeps its open jobs",
+			sources: []string{"Deleted"},
+		},
+		{
 			name:         "manual source is reconciled like any other",
 			sources:      []string{"Daily News"},
 			wantAffected: 1,
 			wantExpired:  []string{"staleManual"},
 		},
 		{
-			name:         "disabled source is skipped alongside active ones",
-			sources:      []string{"Rooster", "Disabled", "Daily News"},
+			name:         "disabled and deleted sources are skipped alongside active ones",
+			sources:      []string{"Rooster", "Disabled", "Deleted", "Daily News"},
 			wantAffected: 3,
 			wantExpired:  []string{"staleRooster", "nullRunRooster", "staleManual"},
 		},
@@ -502,6 +507,7 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 			ikmanID := seedSource(t, db, "Ikman")
 			disabledID := seedSourceOf(t, db, "Disabled", models.SourceTypeAuto, false)
 			manualID := seedSourceOf(t, db, "Daily News", models.SourceTypeManual, true)
+			deletedID := seedSource(t, db, "Deleted")
 			oldRunID := seedCrawlerRun(t, db)
 			currentRunID := seedCrawlerRun(t, db)
 
@@ -516,8 +522,13 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 				"nullSourceRun":  seedActiveJob(t, db, "null source and run", 1, nil, nil, "bucket_null_source_run"),
 				"staleDisabled":  seedActiveJob(t, db, "stale disabled", 1, &disabledID, &oldRunID, "bucket_stale_disabled"),
 				"staleManual":    seedActiveJob(t, db, "stale manual", 1, &manualID, &oldRunID, "bucket_stale_manual"),
+				"staleDeleted":   seedActiveJob(t, db, "stale deleted", 1, &deletedID, &oldRunID, "bucket_stale_deleted"),
 			}
 			endJob(t, db, jobs["endedRooster"])
+			// Soft delete after its job exists, as in production.
+			if err := db.Delete(&models.Source{}, deletedID).Error; err != nil {
+				t.Fatalf("failed to soft-delete source: %v", err)
+			}
 
 			endDateBefore := make(map[string]*time.Time, len(jobs))
 			for label, id := range jobs {

@@ -153,9 +153,9 @@ func (r *Store) ReconcileStaleVacancies(ctx context.Context, currentRunID uint, 
 			return err
 		}
 
-		// Only active sources are reconciled, whatever their type: a source
-		// disabled mid-run keeps its open jobs.
-		const staleCond = "(crawler_run_id IS NULL OR crawler_run_id <> ?) AND end_date IS NULL AND source_id IN (SELECT id FROM source WHERE name IN ? AND is_active = ?)"
+		// Only active, non-deleted sources are reconciled, whatever their type:
+		// a source disabled or deleted mid-run keeps its open jobs.
+		const staleCond = "(crawler_run_id IS NULL OR crawler_run_id <> ?) AND end_date IS NULL AND source_id IN (SELECT id FROM source WHERE name IN ? AND is_active = ? AND deleted_at IS NULL)"
 		staleArgs := []interface{}{currentRunID, sources, true}
 		stale := tx.Model(&models.JobMetaData{}).Select("job_post_id").Where(staleCond, staleArgs...)
 
