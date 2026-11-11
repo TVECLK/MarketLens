@@ -97,11 +97,21 @@ func migrateAll(db *gorm.DB) error {
 
 // ---------- Seed and query helpers ----------
 
+// seedSource creates an active auto (crawler) source.
 func seedSource(t *testing.T, db *gorm.DB, name string) uint {
 	t.Helper()
-	src := models.Source{Name: name}
+	return seedSourceOf(t, db, name, models.SourceTypeAuto, true)
+}
+
+func seedSourceOf(t *testing.T, db *gorm.DB, name string, sourceType models.SourceType, isActive bool) uint {
+	t.Helper()
+	src := models.Source{Name: name, Type: sourceType}
 	if err := db.Create(&src).Error; err != nil {
 		t.Fatalf("failed to create source %q: %v", name, err)
+	}
+	// Set separately: Create skips is_active = false because of its default:true tag.
+	if err := db.Model(&src).Update("is_active", isActive).Error; err != nil {
+		t.Fatalf("failed to set is_active on source %q: %v", name, err)
 	}
 	return src.ID
 }
