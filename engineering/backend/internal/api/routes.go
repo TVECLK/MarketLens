@@ -67,12 +67,18 @@ func RegisterRoutes(r *gin.Engine, h *Handler, verifier *auth.Verifier) {
 			ingestionRoutes.GET("/sources", auth.RequireScope("crawler:sources"), h.CrawlerListSourcesHandler)
 		}
 
-		// Sources: seeded, so no create/delete; the only change is enabling or disabling one.
+		// Sources (admin, authenticated). Create restores a deleted source with
+		// the same name; PUT renames a manual source; PATCH /status enables or
+		// disables one; DELETE is a soft delete.
 		sourceRoutes := v1.Group("/sources")
+		sourceRoutes.Use(auth.AuthRequired(verifier))
 		{
-			sourceRoutes.GET("", auth.AuthRequired(verifier), auth.RequireScope("sources:read"), h.ListSourcesHandler)
-			sourceRoutes.GET("/:id", auth.AuthRequired(verifier), auth.RequireScope("sources:read"), h.GetSourceByIDHandler)
-			sourceRoutes.PATCH("/:id", auth.AuthRequired(verifier), auth.RequireScope("sources:update"), h.UpdateSourceStatusHandler)
+			sourceRoutes.GET("", auth.RequireScope("sources:read"), h.ListSourcesHandler)
+			sourceRoutes.GET("/:id", auth.RequireScope("sources:read"), h.GetSourceByIDHandler)
+			sourceRoutes.POST("", auth.RequireScope("sources:create"), h.CreateSourceHandler)
+			sourceRoutes.PUT("/:id", auth.RequireScope("sources:update"), h.RenameSourceHandler)
+			sourceRoutes.PATCH("/:id/status", auth.RequireScope("sources:update"), h.UpdateSourceStatusHandler)
+			sourceRoutes.DELETE("/:id", auth.RequireScope("sources:delete"), h.DeleteSourceHandler)
 		}
 
 		// Flat lookup tables
