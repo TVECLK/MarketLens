@@ -53,6 +53,37 @@ func (s *SourceService) GetSourceByName(ctx context.Context, name string) (model
 	return s.store.GetSourceByName(ctx, name)
 }
 
+// CreateSource adds a source, or restores a deleted source with the same
+// name. isActive nil means active. A name already used by a live source is
+// reported as "already exists" by the UNIQUE(name) constraint.
+func (s *SourceService) CreateSource(ctx context.Context, name, sourceType string, isActive *bool) (models.Source, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return models.Source{}, ValidationErrorf("name is required")
+	}
+	t := models.SourceType(sourceType)
+	if !validSourceTypes[t] {
+		return models.Source{}, ValidationErrorf("invalid type %q, must be 'auto' or 'manual'", sourceType)
+	}
+	active := true
+	if isActive != nil {
+		active = *isActive
+	}
+
+	source := models.Source{Name: name, Type: t, IsActive: active}
+	if err := s.store.CreateSource(ctx, &source); err != nil {
+		return models.Source{}, err
+	}
+	return source, nil
+}
+
+// DeleteSource soft-deletes a source. Its jobs keep their link to it, and
+// creating a source with the same name later restores it. A missing or
+// already-deleted source is gorm.ErrRecordNotFound.
+func (s *SourceService) DeleteSource(ctx context.Context, id uint) error {
+	return s.store.Sources().Delete(ctx, id)
+}
+
 func (s *SourceService) RenameSource(ctx context.Context, id uint, name string) (models.Source, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
