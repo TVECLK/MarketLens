@@ -67,9 +67,6 @@ func RegisterRoutes(r *gin.Engine, h *Handler, verifier *auth.Verifier) {
 			ingestionRoutes.GET("/sources", auth.RequireScope("crawler:sources"), h.CrawlerListSourcesHandler)
 		}
 
-		// Sources (admin, authenticated). Create restores a deleted source with
-		// the same name; PUT renames a manual source; PATCH /status enables or
-		// disables one; DELETE is a soft delete.
 		sourceRoutes := v1.Group("/sources")
 		sourceRoutes.Use(auth.AuthRequired(verifier))
 		{
