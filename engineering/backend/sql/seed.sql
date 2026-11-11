@@ -8046,11 +8046,11 @@ INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, 
 -- name must match the crawler parsers' `source=` value.
 --
 
-INSERT INTO public.source (id, name, type, is_active, updated_by, created_at, updated_at) VALUES (1, 'Ikman', 'auto', true, NULL, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00');
-INSERT INTO public.source (id, name, type, is_active, updated_by, created_at, updated_at) VALUES (2, 'XpressJobs', 'auto', true, NULL, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00');
-INSERT INTO public.source (id, name, type, is_active, updated_by, created_at, updated_at) VALUES (3, 'TopJobs', 'auto', true, NULL, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00');
-INSERT INTO public.source (id, name, type, is_active, updated_by, created_at, updated_at) VALUES (4, 'Rooster', 'auto', true, NULL, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00');
-INSERT INTO public.source (id, name, type, is_active, updated_by, created_at, updated_at) VALUES (5, 'GovernmentJobs', 'auto', true, NULL, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00');
+INSERT INTO public.source (id, name, type, is_active, updated_by, created_at, updated_at, deleted_at) VALUES (1, 'Ikman', 'auto', true, NULL, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, updated_by, created_at, updated_at, deleted_at) VALUES (2, 'XpressJobs', 'auto', true, NULL, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, updated_by, created_at, updated_at, deleted_at) VALUES (3, 'TopJobs', 'auto', true, NULL, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, updated_by, created_at, updated_at, deleted_at) VALUES (4, 'Rooster', 'auto', true, NULL, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, updated_by, created_at, updated_at, deleted_at) VALUES (5, 'GovernmentJobs', 'auto', true, NULL, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
 
 
 --
