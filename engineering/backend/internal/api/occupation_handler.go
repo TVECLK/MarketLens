@@ -526,6 +526,16 @@ func (h *Handler) CreateOccupationGroupHandler(c *gin.Context) {
 }
 
 func (h *Handler) GetAllOccupationGroupsHandler(c *gin.Context) {
+	// 8. The default/max limit (20 / 100) is a business rule, but it lives
+	// here in the handler, so the MCP tools don't get it - over MCP a caller
+	// can pass any limit and pull the whole table. Move the rule into the
+	// service layer so REST and MCP share it; keep only the string parsing
+	// here. Don't put it in the generic CRUDService.GetAll for everyone:
+	// lookups rely on limit=0 meaning "all rows". Instead, apply it per
+	// paginated resource - e.g. a WithPagination(20, 100) CRUDOption for
+	// OccupationGroups/IndustrySubclasses, and a clamp inside the Analytics
+	// skills/hiring-employers methods. Same clamp is copied in
+	// industry_handler.go and analytics_handler.go (marked "part of 8").
 	limit := 20
 	offset := 0
 

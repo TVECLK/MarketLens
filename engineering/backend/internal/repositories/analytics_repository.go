@@ -9,6 +9,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// Part of 11 (optional, see service/validation.go): this level list is a
+// second copy of the one in validation.go.
+//
 // levelTables maps each occupation/industry hierarchy level name to the
 // table that backs it, for levelRowExists.
 var levelTables = map[string]string{

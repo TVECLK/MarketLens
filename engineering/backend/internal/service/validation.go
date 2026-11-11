@@ -78,6 +78,22 @@ func validateNameAndCode(name, code string) error {
 	return nil
 }
 
+// 11. (Optional / good to have) These level names are correct, but the same
+// list is written out independently in several places: here,
+// levelTables and the switch cases in repositories/analytics_repository.go,
+// and the MCP level descriptions (see 2-4). Nothing ties them together, so
+// adding/renaming a level in one place but not the others would compile
+// fine and break at runtime. Consider one ordered definition, e.g.
+//
+//	var Hierarchies = map[string][]string{
+//		"occupation": {"major-group", "sub-major-group", "minor-group", "unit-group", "occupation-group"},
+//		"industry":   {"industry-sector", "industry-division", "industry-group", "industry-class", "industry-subclass"},
+//	}
+//
+// and derive valid levels, leaf levels (last in each list) and the child
+// level (next in the list) from it. Not a bug - only worth doing if this
+// code is being touched anyway.
+
 // validOccupationLevels / validIndustryLevels / leafLevels
 var validOccupationLevels = map[string]bool{
 	"major-group":      true,
