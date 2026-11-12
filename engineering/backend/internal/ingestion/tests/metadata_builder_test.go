@@ -43,7 +43,7 @@ func TestMetadataBuilder_Build(t *testing.T) {
 func TestMetadataBuilder_CachesWithinTTL(t *testing.T) {
 	db := setupDB(t)
 	formalityQueries := countQueries(t, db, "formality")
-	b := newMetadataBuilder(newServices(db), 50*time.Millisecond)
+	b := newMetadataBuilder(newServices(db), time.Minute)
 	ctx := context.Background()
 
 	if _, _, _, err := b.Build(ctx); err != nil {
@@ -62,13 +62,29 @@ func TestMetadataBuilder_CachesWithinTTL(t *testing.T) {
 	if got := formalityQueries.Load(); got != perRefresh {
 		t.Errorf("expected no extra queries within the TTL window, got %d (was %d)", got, perRefresh)
 	}
+}
 
+func TestMetadataBuilder_RefreshesAfterTTL(t *testing.T) {
+	db := setupDB(t)
+	formalityQueries := countQueries(t, db, "formality")
+	b := newMetadataBuilder(newServices(db), 50*time.Millisecond)
+	ctx := context.Background()
+
+	if _, _, _, err := b.Build(ctx); err != nil {
+		t.Fatalf("first Build() error: %v", err)
+	}
+	perRefresh := formalityQueries.Load()
+	if perRefresh == 0 {
+		t.Fatal("expected the first Build() to query formalities")
+	}
+
+	// Sleeping past the TTL can only make expiry more certain, so a slow
+	// runner can't make this test flake.
 	time.Sleep(60 * time.Millisecond)
 
 	if _, _, _, err := b.Build(ctx); err != nil {
-		t.Fatalf("third Build() error: %v", err)
+		t.Fatalf("second Build() error: %v", err)
 	}
-
 	if got := formalityQueries.Load(); got != 2*perRefresh {
 		t.Errorf("expected a second refresh after TTL expiry (%d queries), got %d", 2*perRefresh, got)
 	}
