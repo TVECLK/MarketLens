@@ -142,7 +142,6 @@ export default function AddSourceModal({ existing, create, isPending, onCancel, 
           placeholder={isAuto ? "e.g. JobSiteLK" : "e.g. Daily News"}
           autoComplete="off"
           spellCheck={!isAuto}
-          autoFocus
           className={`${THEME.form.input} ${isAuto ? "font-mono" : ""}`}
         />
         {taken && (

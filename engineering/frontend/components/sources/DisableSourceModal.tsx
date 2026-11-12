@@ -22,7 +22,6 @@ export default function DisableSourceModal({ source, isPending, onCancel, onConf
           <button
             type="button"
             onClick={onCancel}
-            autoFocus
             className={`cursor-pointer text-xs font-bold ${THEME.buttonSecondary} px-4 py-2 rounded-full transition-all`}
           >
             Cancel

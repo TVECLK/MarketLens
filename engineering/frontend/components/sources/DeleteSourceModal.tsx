@@ -76,7 +76,6 @@ export default function DeleteSourceModal({ source, isPending, error, onCancel, 
               onChange={(e) => setTyped(e.target.value)}
               autoComplete="off"
               spellCheck={false}
-              autoFocus
               className={`${THEME.form.input} font-mono`}
             />
           </div>

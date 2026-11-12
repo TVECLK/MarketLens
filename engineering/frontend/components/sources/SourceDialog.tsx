@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, type ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { XMarkIcon } from "@heroicons/react/16/solid";
 
 interface SourceDialogProps {
@@ -14,17 +14,9 @@ interface SourceDialogProps {
   size?: "sm" | "md";
 }
 
-/** The overlay and card every source dialog uses, styled like the KPI modals. Escape closes it. */
+/** The overlay and card every source dialog uses, styled like the KPI modals. */
 export default function SourceDialog({ title, children, footer, onClose, onSubmit, size = "sm" }: SourceDialogProps) {
   const titleId = useId();
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   const body = (
     <>
