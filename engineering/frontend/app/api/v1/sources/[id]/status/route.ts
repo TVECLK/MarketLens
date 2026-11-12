@@ -31,10 +31,7 @@ export const PATCH = withAuth<{ params: Promise<{ id: string }> }>(async (reques
   } catch (error) {
     console.error("[sources] status update failed:", error);
     return NextResponse.json(
-      {
-        error: "Failed to update source status",
-        details: error instanceof Error ? error.message : String(error),
-      },
+      { error: "Failed to update source status" },
       { status: 500 }
     );
   }

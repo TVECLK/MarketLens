@@ -29,10 +29,7 @@ export const GET = withAuth<Ctx>(async (_request, { params, token }) => {
   } catch (error) {
     console.error("[sources] fetch failed:", error);
     return NextResponse.json(
-      {
-        error: "Failed to fetch source",
-        details: error instanceof Error ? error.message : String(error),
-      },
+      { error: "Failed to fetch source" },
       { status: 500 }
     );
   }
@@ -66,10 +63,7 @@ export const PUT = withAuth<Ctx>(async (request, { params, token }) => {
   } catch (error) {
     console.error("[sources] rename failed:", error);
     return NextResponse.json(
-      {
-        error: "Failed to rename source",
-        details: error instanceof Error ? error.message : String(error),
-      },
+      { error: "Failed to rename source" },
       { status: 500 }
     );
   }
@@ -100,10 +94,7 @@ export const DELETE = withAuth<Ctx>(async (_request, { params, token }) => {
   } catch (error) {
     console.error("[sources] delete failed:", error);
     return NextResponse.json(
-      {
-        error: "Failed to delete source",
-        details: error instanceof Error ? error.message : String(error),
-      },
+      { error: "Failed to delete source" },
       { status: 500 }
     );
   }

@@ -27,10 +27,7 @@ export const GET = withAuth(async (request, { token }) => {
   } catch (error) {
     console.error("[sources] fetch failed:", error);
     return NextResponse.json(
-      {
-        error: "Failed to fetch sources",
-        details: error instanceof Error ? error.message : String(error),
-      },
+      { error: "Failed to fetch sources" },
       { status: 500 }
     );
   }
@@ -63,10 +60,7 @@ export const POST = withAuth(async (request, { token }) => {
   } catch (error) {
     console.error("[sources] create failed:", error);
     return NextResponse.json(
-      {
-        error: "Failed to create source",
-        details: error instanceof Error ? error.message : String(error),
-      },
+      { error: "Failed to create source" },
       { status: 500 }
     );
   }
