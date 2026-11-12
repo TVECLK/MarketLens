@@ -20,6 +20,7 @@ export const RESOURCE_SCOPES = {
   industryGroups: 'industry-groups',
   industryClasses: 'industry-classes',
   industrySubClasses: 'industry-sub-classes',
+  sources: 'sources',
 } as const
 
 export type ResourceScope = (typeof RESOURCE_SCOPES)[keyof typeof RESOURCE_SCOPES]
@@ -49,10 +50,26 @@ export const scopeFor = (resource: ResourceScope, action: CrudAction) => `${reso
 /**
  * Permissions that grant access to a whole area of the app, rather than an action on one resource.
  * Checked on the server (proxy and root layout), so a user without them never sees the area.
+ * Any one of them lets a user into the admin area; each page still needs its own.
  */
 export const PAGE_SCOPES = {
   /** The KPI reference-data manager (`/kpis/*`) and the sidebar that links to it. */
   kpis: 'kpis:access',
+  /** The Data Sources page (`/data-sources`) and its sidebar link. */
+  datasource: 'datasource:access'
+} as const
+
+export type PageScopeKey = keyof typeof PAGE_SCOPES
+
+/** Which page scopes the signed-in user has, keyed like `PAGE_SCOPES`. Read on the server. */
+export type PageAccess = Record<PageScopeKey, boolean>
+
+/**
+ * Permissions to read a resource whose backend GET routes are protected (most lists are public).
+ */
+export const READ_SCOPES = {
+  /** `GET /sources` and `GET /sources/:id`. */
+  sources: 'sources:read',
 } as const
 
 // build the appScopes string to send to the IDP
@@ -61,6 +78,7 @@ export const appScopes = [
   'profile',
   ...Object.values(RESOURCE_SCOPES).flatMap((resource) => ALL_CRUD_ACTIONS.map((action) => scopeFor(resource, action))),
   ...Object.values(PAGE_SCOPES),
+  ...Object.values(READ_SCOPES),
 ]
 
 export const scopeString = appScopes.join(' ')

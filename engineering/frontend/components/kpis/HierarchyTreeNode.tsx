@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronRightIcon } from "@heroicons/react/16/solid";
 import { useAdminHierarchyChildren } from "@/hooks/use-admin-hierarchy-children";
 import { HIERARCHIES, type HierarchyId } from "@/lib/kpi-config";
 import { CRUD_ACTIONS } from "@/lib/scopes";
@@ -56,18 +57,7 @@ export default function HierarchyTreeNode(props: HierarchyTreeNodeProps) {
             aria-label={`${isExpanded ? "Collapse" : "Expand"} ${row.name}`}
             className="cursor-pointer w-6 h-7 shrink-0 flex items-center justify-center text-gray-400 hover:text-gray-700"
           >
-            <svg
-              className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <polyline points="9 6 15 12 9 18" />
-            </svg>
+            <ChevronRightIcon className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
           </button>
         )}
         <button

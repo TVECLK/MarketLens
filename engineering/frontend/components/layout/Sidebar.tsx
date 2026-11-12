@@ -6,16 +6,31 @@ import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { ChevronLeftIcon } from "@heroicons/react/16/solid";
+import { ChartBarIcon, CircleStackIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
 import { THEME } from "@/lib/theme";
+import type { PageAccess, PageScopeKey } from "@/lib/scopes";
 
-const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboardIcon },
-  { name: "KPIs", href: "/kpis", icon: GaugeIcon, protected: true },
+interface NavItem {
+  name: string;
+  href: string;
+  icon: typeof Squares2X2Icon;
+  /** Only shown to signed-in users. */
+  protected?: boolean;
+  /** Only shown when the user has this page scope. */
+  page?: PageScopeKey;
+}
+
+const navigation: NavItem[] = [
+  { name: "Dashboard", href: "/", icon: Squares2X2Icon },
+  { name: "KPIs", href: "/kpis", icon: ChartBarIcon, protected: true, page: "kpis" },
+  { name: "Data Sources", href: "/data-sources", icon: CircleStackIcon, protected: true, page: "datasource" },
 ];
 
 const COLLAPSED_W = "4rem"; // w-16
 
-export default function Sidebar() {
+export default function Sidebar({ pageAccess }: { pageAccess: PageAccess }) {
+  const visibleNavigation = navigation.filter((item) => !item.page || pageAccess[item.page]);
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const asideRef = useRef<HTMLElement>(null);
@@ -98,7 +113,7 @@ export default function Sidebar() {
 
       {/* Navigation Links */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navigation.map((item) => {
+        {visibleNavigation.map((item) => {
           const isActive =
             pathname === item.href ||
             (item.href !== "/" && pathname.startsWith(item.href));
@@ -126,59 +141,5 @@ export default function Sidebar() {
         })}
       </nav>
     </aside>
-  );
-}
-
-// --- Inline Minimal SVG Icon components ---
-
-function ChevronLeftIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="15 18 9 12 15 6" />
-    </svg>
-  );
-}
-
-function LayoutDashboardIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3" y="3" width="7" height="7" rx="1" />
-      <rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="3" y="14" width="7" height="7" rx="1" />
-      <rect x="14" y="14" width="7" height="7" rx="1" />
-    </svg>
-  );
-}
-
-function GaugeIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="m12 14 4-4" />
-      <path d="M3.34 19a10 10 0 1 1 17.32 0" />
-    </svg>
   );
 }
