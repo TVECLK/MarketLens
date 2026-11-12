@@ -70,15 +70,19 @@ export function useRenameSource() {
   });
 }
 
-type SourceListSnapshot = [readonly unknown[], SourceListResponse | undefined][];
 
-/**
- * Enables or disables a source. The switch flips at once: every cached list is updated before the
- * request, and put back if it fails.
- */
 export function useUpdateSourceStatus() {
   const queryClient = useQueryClient();
   const listsKey = [SOURCES_QUERY_KEY, "list"];
+
+  /** Sets one source's `is_active` in every cached list, leaving the other sources untouched. */
+  const setCachedStatus = (id: number, isActive: boolean) =>
+    queryClient.setQueriesData<SourceListResponse>({ queryKey: listsKey }, (data) =>
+      data && {
+        ...data,
+        sources: data.sources.map((s) => (s.id === id ? { ...s, is_active: isActive } : s)),
+      },
+    );
 
   return useMutation({
     mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) =>
@@ -87,19 +91,18 @@ export function useUpdateSourceStatus() {
         body: { is_active: isActive },
         errorMessage: "Failed to update source status",
       }),
-    onMutate: async ({ id, isActive }): Promise<{ snapshot: SourceListSnapshot }> => {
+    onMutate: async ({ id, isActive }): Promise<{ previous: boolean | undefined }> => {
       await queryClient.cancelQueries({ queryKey: listsKey });
-      const snapshot = queryClient.getQueriesData<SourceListResponse>({ queryKey: listsKey });
-      queryClient.setQueriesData<SourceListResponse>({ queryKey: listsKey }, (data) =>
-        data && {
-          ...data,
-          sources: data.sources.map((s) => (s.id === id ? { ...s, is_active: isActive } : s)),
-        },
-      );
-      return { snapshot };
+      // This source's status before the change, from whichever cached list has it.
+      const previous = queryClient
+        .getQueriesData<SourceListResponse>({ queryKey: listsKey })
+        .flatMap(([, data]) => data?.sources ?? [])
+        .find((s) => s.id === id)?.is_active;
+      setCachedStatus(id, isActive);
+      return { previous };
     },
-    onError: (_err, _vars, context) => {
-      for (const [key, data] of context?.snapshot ?? []) queryClient.setQueryData(key, data);
+    onError: (_err, { id }, context) => {
+      if (context?.previous !== undefined) setCachedStatus(id, context.previous);
     },
     // Refetch either way: a filtered list (e.g. active only) may now include or exclude the source.
     onSettled: () => queryClient.invalidateQueries({ queryKey: [SOURCES_QUERY_KEY] }),
