@@ -47,10 +47,21 @@ func serveProtectedResourceMetadata(meta Metadata) http.HandlerFunc {
 
 const scopesKey contextKey = "scopes"
 
-// serverInstructions is sent to every MCP client on initialize. It carries
-// the newspaper-upload workflow so the client shows the extracted jobs in
-// the chat and waits for the user's go-ahead before anything is saved.
-const serverInstructions = `Newspaper vacancy upload workflow. When the user uploads a newspaper image:
+// serverInstructions is sent to every MCP client on initialize. It explains
+// how the read tools relate to each other, and carries the newspaper-upload
+// workflow so the client shows the extracted jobs in the chat and waits for
+// the user's go-ahead before anything is saved.
+const serverInstructions = labourMarketInstructions + "\n\n" + newspaperInstructions
+
+const labourMarketInstructions = `Labour market data tools - how they fit together:
+- Reference lists (get_experiences, get_provinces, get_job_types, get_employment_sectors, get_education_levels, get_formalities, get_genders, get_vocational_educations) only list the available values, with no counts. For vacancy counts by one of those dimensions use the matching get_*_by_level tool.
+- Two classification hierarchies exist: 'occupation' (major-group > sub-major-group > minor-group > unit-group > occupation-group) and 'industry' (industry-sector > industry-division > industry-group > industry-class > industry-subclass). A level must belong to the standard it is used with. Use get_major_groups / get_industry_sectors to get top-level ids, and get_hierarchy_children to go one level down (the leaf levels have no children).
+- To find a specific leaf (occupation group or industry subclass), drill down with get_hierarchy_children rather than paging through get_occupation_groups / get_industry_subclasses.
+- get_occupations_by_date_range / get_industries_by_date_range give one count per top-level group, for an overview or to compare groups. To break down one specific group by province, gender, experience and so on, use the get_*_by_level tools with that group's level and id.
+- get_all_skills_by_occupation and get_top_hiring_employers_by_occupation are occupation-only. get_vacancy_trend is national and not scoped to a level.
+- Paginated tools return 'total'; the next page starts at offset + limit, and you stop when offset >= total. Omit limit to use the default.`
+
+const newspaperInstructions = `Newspaper vacancy upload workflow. When the user uploads a newspaper image:
 1. Read the image yourself and extract every job ad: employer, job role, location, description.
 2. Call select_manual_source so the user chooses which newspaper the image came from. The user may only choose a source it offers. If it returns status choose_in_chat, list those names and ask the user to pick one. If the user says none match, or there are no sources, tell them: "If there is no matching source, you should add source from the dashboard and then try again." Do not continue without a selected source.
 3. Show the extracted jobs in the chat as a numbered table (employer, role, location, description) together with the chosen source.
@@ -201,27 +212,39 @@ func plainGetAll[T any](getAll func(ctx context.Context, limit, offset int, from
 }
 
 func registerLookupTools(server *mcp.Server, svcs *service.Services) {
-	registerNoArgTool(server, "get_experiences", "List all experience levels.",
+	// These are reference lists only (no counts). Each description points to
+	// the matching get_*_by_level tool for vacancy counts, and uses "e.g."
+	// examples rather than full value lists so they don't go stale when the
+	// database changes.
+	registerNoArgTool(server, "get_experiences",
+		"List all experience levels (reference list only, no counts). For vacancy counts by experience level, use get_experience_by_level.",
 		plainGetAll(svcs.Experiences.GetAll))
 
-	registerNoArgTool(server, "get_provinces", "List all Sri Lankan provinces used for geo-tagging job posts.",
+	registerNoArgTool(server, "get_provinces",
+		"List all Sri Lankan provinces used for geo-tagging job posts (reference list only, no counts). For vacancy counts by province, use get_province_by_level.",
 		plainGetAll(svcs.GeoData.GetAll))
 
-	registerNoArgTool(server, "get_job_types", "List all job types (Full Time, Part Time, Contract, Internship).",
+	registerNoArgTool(server, "get_job_types",
+		"List all job types, e.g. Full Time or Part Time (reference list only, no counts). For vacancy counts by job type, use get_job_type_by_level.",
 		plainGetAll(svcs.JobTypes.GetAll))
 
-	registerNoArgTool(server, "get_employment_sectors", "List all employment sectors (Government, Private, NGO, etc.).",
+	registerNoArgTool(server, "get_employment_sectors",
+		"List all employment sectors, e.g. Government or Private (reference list only, no counts). For vacancy counts by employment sector, use get_employment_sector_by_level.",
 		plainGetAll(svcs.EmploymentSectors.GetAll))
 
-	registerNoArgTool(server, "get_education_levels", "List all education level categories.",
+	registerNoArgTool(server, "get_education_levels",
+		"List all education level categories (reference list only, no counts). For vacancy counts by education level, use get_education_by_level.",
 		plainGetAll(svcs.EducationLevels.GetAll))
 
-	registerNoArgTool(server, "get_formalities", "List all formality categories (Formal / Informal sector).",
+	registerNoArgTool(server, "get_formalities",
+		"List all formality categories, i.e. formal vs informal sector (reference list only, no counts). For vacancy counts by formality, use get_formality_by_level.",
 		plainGetAll(svcs.Formalities.GetAll))
 
-	registerNoArgTool(server, "get_genders", "List all gender categories used in job postings.",
+	registerNoArgTool(server, "get_genders",
+		"List all gender categories used in job postings (reference list only, no counts). For vacancy counts by gender, use get_gender_by_level.",
 		plainGetAll(svcs.Genders.GetAll))
 
-	registerNoArgTool(server, "get_vocational_educations", "List all vocational education (NVQ) levels.",
+	registerNoArgTool(server, "get_vocational_educations",
+		"List all vocational education (NVQ) levels (reference list only, no counts). For vacancy counts by vocational education level, use get_vocational_education_by_level.",
 		plainGetAll(svcs.VocationalEducations.GetAll))
 }
