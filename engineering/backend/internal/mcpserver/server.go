@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"marketlens-go-backend/internal/auth"
+	"marketlens-go-backend/internal/ingestion"
 	"marketlens-go-backend/internal/service"
 )
 
@@ -46,6 +47,20 @@ func serveProtectedResourceMetadata(meta Metadata) http.HandlerFunc {
 
 const scopesKey contextKey = "scopes"
 
+// serverInstructions is sent to every MCP client on initialize. It carries
+// the newspaper-upload workflow so the client shows the extracted jobs in
+// the chat and waits for the user's go-ahead before anything is saved.
+const serverInstructions = `Newspaper vacancy upload workflow. When the user uploads a newspaper image:
+1. Read the image yourself and extract every job ad: employer, job role, location, description.
+2. Call select_manual_source so the user chooses which newspaper the image came from. The user may only choose a source it offers. If it returns status choose_in_chat, list those names and ask the user to pick one. If the user says none match, or there are no sources, tell them: "If there is no matching source, you should add source from the dashboard and then try again." Do not continue without a selected source.
+3. Show the extracted jobs in the chat as a numbered table (employer, role, location, description) together with the chosen source.
+4. Call submit_newspaper_vacancies. It shows the user a Yes / No / Edit form and saves only on Yes.
+   - status cancelled (user chose No): stop. Nothing was saved.
+   - status edits_requested (user chose Edit): apply the returned edits to the jobs (if none were given, ask the user in the chat what to change), show the updated numbered table in the chat, then call submit_newspaper_vacancies again with the updated jobs so the user confirms again.
+   - saved: tell the user how many were submitted and list any that failed.
+5. Only if the tool says the client cannot show a confirmation form: ask the user in the chat, and call it again with user_confirmed=true only after their explicit yes.
+Never save without the user's explicit Yes, and never set user_confirmed on your own.`
+
 func requireValidToken(verifier *auth.Verifier, publicBaseURL string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
@@ -75,16 +90,16 @@ func requireValidToken(verifier *auth.Verifier, publicBaseURL string, next http.
 
 // New builds the MCP server and registers every read-only (GET-equivalent)
 // tool against the given services.
-func New(svcs *service.Services) *mcp.Server {
+func New(svcs *service.Services, ingestionSvc *ingestion.IngestionService) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "marketlens-mcp",
 		Version: "v1.0.0",
-	}, nil)
+	}, &mcp.ServerOptions{Instructions: serverInstructions})
 
 	registerLookupTools(server, svcs)
 	registerHierarchyTools(server, svcs)
 	registerAnalysisTools(server, svcs)
-	registerManualUploadTools(server)
+	registerManualUploadTools(server, svcs, ingestionSvc)
 
 	return server
 }

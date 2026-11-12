@@ -5,6 +5,7 @@ import (
 
 	"marketlens-go-backend/internal/auth"
 	"marketlens-go-backend/internal/config"
+	"marketlens-go-backend/internal/ingestion"
 	"marketlens-go-backend/internal/mcpserver"
 	"marketlens-go-backend/internal/repositories"
 	"marketlens-go-backend/internal/service"
@@ -34,7 +35,12 @@ func main() {
 	}
 	mcpVerifier := auth.NewVerifier(mcpAuthCfg)
 
-	mcpServer := mcpserver.New(services)
+	if err := cfg.LLM.Validate(); err != nil {
+		log.Fatalf("llm client misconfigured: %v", err)
+	}
+	ingestionSvc := ingestion.NewServiceFromConfig(services, cfg.LLM, cfg.Ingestion)
+
+	mcpServer := mcpserver.New(services, ingestionSvc)
 
 	meta := mcpserver.Metadata{
 		ResourceID:    cfg.MCP.ResourceID,
