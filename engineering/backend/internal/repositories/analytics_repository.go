@@ -9,28 +9,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// levelTables maps each occupation/industry hierarchy level name to the
-// table that backs it, for levelRowExists.
-var levelTables = map[string]string{
-	"major-group":      "major_group",
-	"sub-major-group":  "sub_major_group",
-	"minor-group":      "minor_group",
-	"unit-group":       "unit_group",
-	"occupation-group": "occupation_group",
-
-	"industry-sector":   "industry_sector",
-	"industry-division": "industry_division",
-	"industry-group":    "industry_group",
-	"industry-class":    "industry_class",
-	"industry-subclass": "industry_subclass",
-}
-
 // levelRowExists reports whether id existed, at some point during
 // [fromDate, toDate], in the table backing the given hierarchy level — not
 // just whether it's active right now, so a since-deleted row still counts
 // for a date range that predates its deletion.
 func (r *Store) levelRowExists(ctx context.Context, level string, id uint, fromDate, toDate time.Time) (bool, error) {
-	table := levelTables[level]
+	table := models.LevelTable(level)
 	toDateExclusive := exclusiveUpperBound(toDate)
 	var exists bool
 	err := r.db.WithContext(ctx).Raw(

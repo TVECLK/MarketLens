@@ -145,7 +145,7 @@ func (s *AnalyticsService) GetLevelChildren(ctx context.Context, standard, level
 	if err := validateStandardAndLevel(standard, level); err != nil {
 		return nil, "", err
 	}
-	if leafLevels[level] {
+	if models.IsLeafLevel(level) {
 		return nil, "", ValidationErrorf("'%s' is a leaf level and has no children", level)
 	}
 	if err := validateDateRange(fromDate, toDate); err != nil {
