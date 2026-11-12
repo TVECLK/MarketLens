@@ -122,6 +122,9 @@ export default function SourcesPanel() {
   }
 
   function saveEdit(source: Source) {
+    // One rename at a time: overlapping requests could save an older name last. Enter in the input
+    // reaches here even while the Save button is disabled.
+    if (renameMut.isPending) return;
     const name = editName.trim();
     if (!name) return setEditError("Name is required.");
     if (name === source.name) return cancelEdit();
@@ -279,7 +282,8 @@ export default function SourcesPanel() {
                           onChange={(e) => setEditName(e.target.value)}
                           onKeyDown={(e) => onEditKey(e, source)}
                           aria-label={`New name for ${source.name}`}
-                          className="w-full bg-gray-50 rounded-lg p-2 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0"
+                          disabled={renameMut.isPending}
+                          className="w-full bg-gray-50 rounded-lg p-2 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0 disabled:opacity-60 disabled:cursor-not-allowed"
                           autoFocus
                         />
                         {editError && <p className="text-[10px] font-bold text-red-500 mt-1">{editError}</p>}
