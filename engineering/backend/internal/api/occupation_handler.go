@@ -526,14 +526,11 @@ func (h *Handler) CreateOccupationGroupHandler(c *gin.Context) {
 }
 
 func (h *Handler) GetAllOccupationGroupsHandler(c *gin.Context) {
-	limit := 20
-	offset := 0
-
+	// Parsing only: 0 means "not given". The default and maximum page size
+	// are applied by the service.
+	limit, offset := 0, 0
 	if l := c.Query("limit"); l != "" {
 		if v, err := strconv.Atoi(l); err == nil && v > 0 {
-			if v > 100 {
-				v = 100
-			}
 			limit = v
 		}
 	}
@@ -549,7 +546,7 @@ func (h *Handler) GetAllOccupationGroupsHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, occupationGroupPaginatedResponse{Count: len(items), Total: total, Limit: limit, Offset: offset, OccupationGroups: items})
+	c.JSON(http.StatusOK, occupationGroupPaginatedResponse{Count: len(items), Total: total, Limit: h.OccupationGroups.PageLimit(limit), Offset: offset, OccupationGroups: items})
 }
 
 func (h *Handler) GetOccupationGroupByIDHandler(c *gin.Context) {

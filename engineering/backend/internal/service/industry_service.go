@@ -91,5 +91,6 @@ func NewIndustrySubclassService(store *repositories.Store) *CRUDService[models.I
 			}
 			return store.GetIndustrySubclassesByIndustryClass(ctx, parentID)
 		}),
+		WithPagination[models.IndustrySubclass](DefaultPageLimit, MaxPageLimit),
 	)
 }
