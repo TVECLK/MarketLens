@@ -79,7 +79,11 @@ export default function SourcesPanel() {
     );
   }, [all, typeFilter, search]);
 
-  const pendingStatusId = statusMut.isPending ? statusMut.variables?.id : undefined;
+  // One status change at a time: every switch is locked while a request is in flight, because the
+  // backend applies writes in arrival order, so overlapping requests could save an older choice last.
+  // That also makes `variables` the only request in flight, so it names the row being saved.
+  const statusBusy = statusMut.isPending;
+  const pendingStatusId = statusBusy ? statusMut.variables?.id : undefined;
 
   // status
   function setStatus(source: Source, isActive: boolean) {
@@ -99,7 +103,7 @@ export default function SourcesPanel() {
   }
 
   function onToggle(source: Source, next: boolean) {
-    if (!allowed[CRUD_ACTIONS.update]) return;
+    if (!allowed[CRUD_ACTIONS.update] || statusBusy) return;
     if (next) setStatus(source, true);
     else setDisableTarget(source);
   }
@@ -304,7 +308,7 @@ export default function SourcesPanel() {
                         checked={source.is_active}
                         label={source.name}
                         onChange={(next) => onToggle(source, next)}
-                        disabled={updateProps.disabled || statusPending}
+                        disabled={updateProps.disabled || statusBusy}
                         title={updateProps.title}
                         aria-describedby={updateProps["aria-describedby"]}
                       />
