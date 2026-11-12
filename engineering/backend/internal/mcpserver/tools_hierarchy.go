@@ -32,21 +32,21 @@ func registerHierarchyTools(server *mcp.Server, svcs *service.Services) {
 
 	// Paginated
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "get_occupation_groups",
-		Description: "List occupation groups (leaf level of the SLSO hierarchy), paginated.",
+		Name: "get_occupation_groups",
+		Description: "List occupation groups (leaf level of the SLSO hierarchy), paginated. To find a " +
+			"specific occupation group, drill down with get_hierarchy_children starting from " +
+			"get_major_groups instead of paging through this list - paging through every leaf row " +
+			"costs many calls, drilling down takes about five small ones. To page: the result has " +
+			"'total'; the next page starts at offset + limit; stop when offset >= total.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in struct {
-		Limit  int `json:"limit" jsonschema:"max rows to return, default 20"`
-		Offset int `json:"offset" jsonschema:"rows to skip, default 0"`
+		Limit  int `json:"limit,omitempty" jsonschema:"max rows to return, default 20, max 100"`
+		Offset int `json:"offset,omitempty" jsonschema:"rows to skip, default 0"`
 	}) (*mcp.CallToolResult, any, error) {
-		limit := in.Limit
-		if limit <= 0 {
-			limit = 20
-		}
-		items, total, err := svcs.OccupationGroups.GetAll(ctx, limit, in.Offset, nil, nil)
+		items, total, err := svcs.OccupationGroups.GetAll(ctx, in.Limit, in.Offset, nil, nil)
 		if err != nil {
 			return nil, nil, err
 		}
-		return nil, map[string]any{"items": items, "total": total, "limit": limit, "offset": in.Offset}, nil
+		return nil, map[string]any{"items": items, "total": total, "limit": svcs.OccupationGroups.PageLimit(in.Limit), "offset": max(in.Offset, 0)}, nil
 	})
 	registerIDTool(server, "get_occupation_group", "Get a single occupation group by id.",
 		svcs.OccupationGroups.GetByID)
@@ -73,21 +73,21 @@ func registerHierarchyTools(server *mcp.Server, svcs *service.Services) {
 
 	// Paginated
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "get_industry_subclasses",
-		Description: "List industry subclasses (leaf level of the SLSIC hierarchy), paginated.",
+		Name: "get_industry_subclasses",
+		Description: "List industry subclasses (leaf level of the SLSIC hierarchy), paginated. To find a " +
+			"specific industry subclass, drill down with get_hierarchy_children starting from " +
+			"get_industry_sectors instead of paging through this list - paging through every leaf row " +
+			"costs many calls, drilling down takes about five small ones. To page: the result has " +
+			"'total'; the next page starts at offset + limit; stop when offset >= total.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in struct {
-		Limit  int `json:"limit" jsonschema:"max rows to return, default 20"`
-		Offset int `json:"offset" jsonschema:"rows to skip, default 0"`
+		Limit  int `json:"limit,omitempty" jsonschema:"max rows to return, default 20, max 100"`
+		Offset int `json:"offset,omitempty" jsonschema:"rows to skip, default 0"`
 	}) (*mcp.CallToolResult, any, error) {
-		limit := in.Limit
-		if limit <= 0 {
-			limit = 20
-		}
-		items, total, err := svcs.IndustrySubclasses.GetAll(ctx, limit, in.Offset, nil, nil)
+		items, total, err := svcs.IndustrySubclasses.GetAll(ctx, in.Limit, in.Offset, nil, nil)
 		if err != nil {
 			return nil, nil, err
 		}
-		return nil, map[string]any{"items": items, "total": total, "limit": limit, "offset": in.Offset}, nil
+		return nil, map[string]any{"items": items, "total": total, "limit": svcs.IndustrySubclasses.PageLimit(in.Limit), "offset": max(in.Offset, 0)}, nil
 	})
 	registerIDTool(server, "get_industry_subclass", "Get a single industry subclass by id.",
 		svcs.IndustrySubclasses.GetByID)
@@ -129,7 +129,10 @@ func registerHierarchyTools(server *mcp.Server, svcs *service.Services) {
 // from/to date query params every breakdown endpoint requires.
 type levelInput struct {
 	Standard string `json:"standard" jsonschema:"'occupation' or 'industry'"`
-	Level    string `json:"level" jsonschema:"the hierarchy level name, e.g. 'major-group' or 'industry-sector'"`
+	// The level names below mirror models.hierarchies (models/hierarchy.go),
+	// the single source of truth; struct tags must be static, so keep them in
+	// step when a level is added or renamed.
+	Level    string `json:"level" jsonschema:"the hierarchy level name, and it must belong to the chosen standard. For standard 'occupation': 'major-group', 'sub-major-group', 'minor-group', 'unit-group' or 'occupation-group'. For standard 'industry': 'industry-sector', 'industry-division', 'industry-group', 'industry-class' or 'industry-subclass'"`
 	ID       uint   `json:"id" jsonschema:"the numeric id at that level"`
 	FromDate string `json:"from_date" jsonschema:"start date, format YYYY-MM-DD"`
 	ToDate   string `json:"to_date" jsonschema:"end date, format YYYY-MM-DD"`
