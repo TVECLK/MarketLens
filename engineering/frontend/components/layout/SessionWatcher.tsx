@@ -20,11 +20,24 @@ export default function SessionWatcher() {
   const lastCheck = useRef(0);
 
   useEffect(() => {
+    // A check postponed by the throttle. At most one is pending.
+    let trailing: ReturnType<typeof setTimeout> | undefined;
+
     const recheck = () => {
       if (document.visibilityState !== "visible") return;
-      const now = Date.now();
-      if (now - lastCheck.current < MIN_INTERVAL_MS) return;
-      lastCheck.current = now;
+      const wait = lastCheck.current + MIN_INTERVAL_MS - Date.now();
+      if (wait > 0) {
+        // Too soon after the last check: run it once the window ends rather than dropping it, so a
+        // sign-out in another tab within that window is still picked up.
+        trailing ??= setTimeout(() => {
+          trailing = undefined;
+          recheck();
+        }, wait);
+        return;
+      }
+      clearTimeout(trailing);
+      trailing = undefined;
+      lastCheck.current = Date.now();
       router.refresh();
     };
 
@@ -33,6 +46,7 @@ export default function SessionWatcher() {
     return () => {
       document.removeEventListener("visibilitychange", recheck);
       window.removeEventListener("focus", recheck);
+      clearTimeout(trailing);
     };
   }, [router]);
 
