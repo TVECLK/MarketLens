@@ -8,7 +8,6 @@ import type {
   SourceListResponse,
 } from "@/types/source";
 import { ENV } from "@/config/env";
-import { apiFetch } from "@/lib/api-fetch";
 import { fetchJson } from "@/lib/fetch-json";
 
 const BASE = ENV.NEXT_PUBLIC_API_BASE_URL;
@@ -38,7 +37,6 @@ export function useSources(filters: SourceFilters = {}) {
     queryFn: ({ signal }) =>
       fetchJson<SourceListResponse>(sourcesListUrl(filters), {
         signal,
-        fetcher: apiFetch,
         errorMessage: "Failed to fetch sources",
       }),
   });
@@ -52,7 +50,6 @@ export function useCreateSource() {
       fetchJson<Source>(SOURCES_URL, {
         method: "POST",
         body: payload,
-        fetcher: apiFetch,
         errorMessage: "Failed to create source",
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [SOURCES_QUERY_KEY] }),
@@ -67,7 +64,6 @@ export function useRenameSource() {
       fetchJson<Source>(`${SOURCES_URL}/${id}`, {
         method: "PUT",
         body: { name },
-        fetcher: apiFetch,
         errorMessage: "Failed to rename source",
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [SOURCES_QUERY_KEY] }),
@@ -89,7 +85,6 @@ export function useUpdateSourceStatus() {
       fetchJson<Source>(`${SOURCES_URL}/${id}/status`, {
         method: "PATCH",
         body: { is_active: isActive },
-        fetcher: apiFetch,
         errorMessage: "Failed to update source status",
       }),
     onMutate: async ({ id, isActive }): Promise<{ snapshot: SourceListSnapshot }> => {
@@ -118,7 +113,6 @@ export function useDeleteSource() {
     mutationFn: (id: number) =>
       fetchJson<{ message: string }>(`${SOURCES_URL}/${id}`, {
         method: "DELETE",
-        fetcher: apiFetch,
         errorMessage: "Failed to delete source",
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [SOURCES_QUERY_KEY] }),

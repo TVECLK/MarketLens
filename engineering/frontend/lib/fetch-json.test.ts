@@ -48,16 +48,8 @@ describe("fetchJson", () => {
     expect(fetchSpy).toHaveBeenCalledWith("/a/1", { signal: undefined, method: "DELETE" });
   });
 
-  it("uses the given fetcher instead of fetch", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ n: 2 }));
-    await expect(fetchJson("/a", { fetcher })).resolves.toEqual({ n: 2 });
-    expect(fetcher).toHaveBeenCalledWith("/a", { signal: undefined });
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("throws the fetcher's error message the same way", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ details: { error: "already exists" } }, 400));
-    await expect(fetchJson("/a", { method: "POST", body: {}, fetcher })).rejects.toThrow("already exists");
+  it("throws the backend's message from a wrapped error body", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(json({ details: { error: "already exists" } }, 400));
+    await expect(fetchJson("/a", { method: "POST", body: {} })).rejects.toThrow("already exists");
   });
 });

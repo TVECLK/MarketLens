@@ -8,8 +8,6 @@ interface FetchJsonOptions {
   method?: string;
   /** Sent as JSON, with a `Content-Type: application/json` header. */
   body?: unknown;
-  /** What sends the request. Defaults to `fetch`; pass `apiFetch` to go through the mock switch. */
-  fetcher?: typeof fetch;
 }
 
 /**
@@ -18,7 +16,7 @@ interface FetchJsonOptions {
  * has none (or isn't JSON).
  */
 export async function fetchJson<T>(url: string, options: FetchJsonOptions = {}): Promise<T> {
-  const { signal, errorMessage = `Request failed: ${url}`, method, body, fetcher = fetch } = options;
+  const { signal, errorMessage = `Request failed: ${url}`, method, body } = options;
 
   // Only the options that were given, so a plain GET is sent exactly as `fetch(url, { signal })`.
   const init: RequestInit = { signal };
@@ -28,7 +26,7 @@ export async function fetchJson<T>(url: string, options: FetchJsonOptions = {}):
     init.body = JSON.stringify(body);
   }
 
-  const res = await fetcher(url, init);
+  const res = await fetch(url, init);
   if (!res.ok) {
     const errorBody = await res.json().catch(() => null);
     throw new Error(getApiErrorMessage(errorBody, errorMessage));
