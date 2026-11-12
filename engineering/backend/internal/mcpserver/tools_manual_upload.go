@@ -299,6 +299,12 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 			"it again with user_confirmed=true only after their explicit yes.\n\n" +
 			"IMPORTANT: never invent a source name - it must be one returned by select_manual_source.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, in submitNewspaperVacanciesInput) (*mcp.CallToolResult, any, error) {
+		// Checked first so the user is never asked to confirm a submission
+		// that cannot be processed.
+		if ingestionSvc == nil {
+			return nil, nil, fmt.Errorf("newspaper vacancy submission is unavailable: the LLM is not configured on the MCP server.")
+		}
+
 		if len(in.Jobs) == 0 {
 			return nil, nil, fmt.Errorf("jobs list must not be empty - extract at least one job from the image first")
 		}

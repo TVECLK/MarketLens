@@ -35,10 +35,15 @@ func main() {
 	}
 	mcpVerifier := auth.NewVerifier(mcpAuthCfg)
 
+	// Only newspaper vacancy submission needs the LLM. If it isn't configured,
+	// start anyway so the read-only tools keep working; the submit tool then
+	// reports that it is unavailable.
+	var ingestionSvc *ingestion.IngestionService
 	if err := cfg.LLM.Validate(); err != nil {
-		log.Fatalf("llm client misconfigured: %v", err)
+		log.Printf("llm not configured, newspaper vacancy submission is disabled: %v", err)
+	} else {
+		ingestionSvc = ingestion.NewServiceFromConfig(services, cfg.LLM, cfg.Ingestion)
 	}
-	ingestionSvc := ingestion.NewServiceFromConfig(services, cfg.LLM, cfg.Ingestion)
 
 	mcpServer := mcpserver.New(services, ingestionSvc)
 
