@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { LockClosedIcon } from "@heroicons/react/16/solid";
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import {
@@ -63,6 +63,8 @@ export default function SourcesPanel() {
   const [disableTarget, setDisableTarget] = useState<Source | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Source | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  /** Changes whenever a rename editor opens or closes, so a rename's result can tell if its editor is gone. */
+  const editSession = useRef(0);
 
   const all = useMemo(() => [...(sourceList.data?.sources ?? [])].sort(bySourceOrder), [sourceList.data]);
 
@@ -111,12 +113,14 @@ export default function SourcesPanel() {
   // rename
   function startEdit(source: Source) {
     if (!allowed[CRUD_ACTIONS.update] || source.type !== "manual") return;
+    editSession.current++;
     setEditingId(source.id);
     setEditName(source.name);
     setEditError(null);
   }
 
   function cancelEdit() {
+    editSession.current++;
     setEditingId(null);
     setEditError(null);
   }
@@ -128,14 +132,22 @@ export default function SourcesPanel() {
     const name = editName.trim();
     if (!name) return setEditError("Name is required.");
     if (name === source.name) return cancelEdit();
+    // The editor that sent this request. If another one has been opened (or this one closed) by the
+    // time it finishes, the result must not close or mark that editor.
+    const session = editSession.current;
+    const isSameEditor = () => editSession.current === session;
     renameMut.mutate(
       { id: source.id, name },
       {
         onSuccess: () => {
-          cancelEdit();
+          if (isSameEditor()) cancelEdit();
           flashToast(`Renamed to "${name}"`);
         },
         onError: (err) => {
+          if (!isSameEditor()) {
+            flashToast(getErrorMessage(err, `Couldn't rename "${source.name}".`));
+            return;
+          }
           const message = getErrorMessage(err, "Failed to rename source.");
           setEditError(
             message.includes("already exists")
