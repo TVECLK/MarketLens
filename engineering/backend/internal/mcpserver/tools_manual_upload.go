@@ -47,14 +47,20 @@ const (
 	confirmEdit = "Edit"
 )
 
-// clientSupportsElicitation reports whether the connected client declared
-// the elicitation capability, i.e. can show a form to the user.
+// clientSupportsElicitation reports whether the connected client can show a
+// form to the user. It follows the SDK's own rule in ServerSession.Elicit:
+// a client declaring only URL elicitation cannot do forms, while an empty
+// elicitation declaration ({}) is legacy and means form support.
 func clientSupportsElicitation(req *mcp.CallToolRequest) bool {
 	if req == nil || req.Session == nil {
 		return false
 	}
 	ip := req.Session.InitializeParams()
-	return ip != nil && ip.Capabilities != nil && ip.Capabilities.Elicitation != nil
+	if ip == nil || ip.Capabilities == nil || ip.Capabilities.Elicitation == nil {
+		return false
+	}
+	caps := ip.Capabilities.Elicitation
+	return caps.Form != nil || caps.URL == nil
 }
 
 // confirmationMessage renders the jobs and source for the confirmation form.
@@ -245,7 +251,7 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 		}
 
 		// Show a real select box when the client supports elicitation.
-		if req != nil && req.Session != nil {
+		if clientSupportsElicitation(req) {
 			res, err := req.Session.Elicit(ctx, &mcp.ElicitParams{
 				Message: "Select the newspaper this image came from. " + noMatchingSourceMessage,
 				RequestedSchema: map[string]any{
