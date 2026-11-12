@@ -11,6 +11,7 @@ import (
 
 	"marketlens-go-backend/internal/models"
 	"marketlens-go-backend/internal/repositories"
+	"marketlens-go-backend/internal/testutil"
 )
 
 // ---------- GetJobsByBucketKeys ----------
@@ -21,7 +22,7 @@ func TestStore_GetJobsByBucketKeys(t *testing.T) {
 	//   other - active job with bucket_b
 	//   ended - ended job with bucket_a
 	//   multi - active job with three buckets
-	db := SetupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	store := repositories.NewStore(db)
 	sourceID := seedSource(t, db, "Rooster")
 	runID := seedCrawlerRun(t, db)
@@ -94,7 +95,7 @@ func newJobToSave(role string) *models.JobPost {
 
 // Not part of the table below: it checks every field of one saved job.
 func TestStore_SaveOneJob_PersistsJobWithLookupsAndLshRecords(t *testing.T) {
-	db := SetupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	store := repositories.NewStore(db)
 	geoID := seedProvince(t, db, "Western")
 	sourceID := seedSource(t, db, "Rooster")
@@ -154,7 +155,7 @@ func TestStore_SaveOneJob_PersistsJobWithLookupsAndLshRecords(t *testing.T) {
 
 // Not part of the table below: it needs two saves in a row.
 func TestStore_SaveOneJob_ReusesExistingLookupRows(t *testing.T) {
-	db := SetupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	store := repositories.NewStore(db)
 	seedProvince(t, db, "Western")
 	seedSource(t, db, "Rooster")
@@ -311,7 +312,7 @@ func TestStore_SaveOneJob(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db := SetupTestDB(t)
+			db := testutil.SetupTestDB(t)
 			store := repositories.NewStore(db)
 			if tt.seedProvince {
 				seedProvince(t, db, "Western")
@@ -382,7 +383,7 @@ func TestStore_UpdateDuplicateJob(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db := SetupTestDB(t)
+			db := testutil.SetupTestDB(t)
 			store := repositories.NewStore(db)
 			sourceID := seedSource(t, db, "Rooster")
 			oldRunID := seedCrawlerRun(t, db)
@@ -510,7 +511,7 @@ func TestStore_ReconcileStaleVacancies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db := SetupTestDB(t)
+			db := testutil.SetupTestDB(t)
 			store := repositories.NewStore(db)
 
 			roosterID := seedSource(t, db, "Rooster")

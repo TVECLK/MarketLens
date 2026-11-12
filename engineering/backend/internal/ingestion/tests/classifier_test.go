@@ -2,102 +2,120 @@ package ingestion_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"marketlens-go-backend/internal/ingestion"
 	"marketlens-go-backend/internal/ingestion/mocks"
+	"marketlens-go-backend/internal/llm"
+	"marketlens-go-backend/internal/service"
 )
 
-func TestIndustryClassifier_WalksToLeaf(t *testing.T) {
-	repo := mocks.NewMockRepository()
-	llm := mocks.NewMockDeepSeek(t, func(prompt string) string {
-		id := mocks.FirstListedID(prompt)
-		return `{"id": ` + itoa(id) + `}`
-	})
+// pickFirstListed answers every classifier prompt with the first option
+// it was offered, so a walk reaches a real leaf id.
+func pickFirstListed(prompt string) string {
+	return `{"id": ` + itoa(mocks.FirstListedID(prompt)) + `}`
+}
 
-	classifier := ingestion.NewIndustryClassifier(repo, llm)
+func TestClassifier_WalksToLeaf(t *testing.T) {
+	const jobText = "Backend engineer building Go microservices"
 
-	id, err := classifier.Classify(context.Background(), "Backend engineer building Go microservices")
-	if err != nil {
-		t.Fatalf("Classify() error: %v", err)
+	tests := []struct {
+		name     string
+		classify func(ctx context.Context, svcs *service.Services, client *llm.Client, jobText string) (uint, error)
+		wantID   uint
+	}{
+		{
+			name: "industry classifier reaches the subclass",
+			classify: func(ctx context.Context, svcs *service.Services, client *llm.Client, jobText string) (uint, error) {
+				return newIndustryClassifier(svcs, client).Classify(ctx, jobText)
+			},
+			wantID: 62011,
+		},
+		{
+			name: "occupation classifier reaches the occupation group",
+			classify: func(ctx context.Context, svcs *service.Services, client *llm.Client, jobText string) (uint, error) {
+				return newOccupationClassifier(svcs, client).Classify(ctx, jobText)
+			},
+			wantID: 25121,
+		},
 	}
-	if id != 62011 {
-		t.Errorf("expected leaf industry_subclass_id 62011, got %d", id)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svcs := newServices(setupDB(t))
+			client := mocks.NewMockLLM(t, pickFirstListed)
+
+			id, err := tt.classify(context.Background(), svcs, client, jobText)
+			if err != nil {
+				t.Fatalf("Classify() error: %v", err)
+			}
+			if id != tt.wantID {
+				t.Errorf("expected leaf id %d, got %d", tt.wantID, id)
+			}
+		})
 	}
 }
 
-func TestOccupationClassifier_WalksToLeaf(t *testing.T) {
-	repo := mocks.NewMockRepository()
-	llm := mocks.NewMockDeepSeek(t, func(prompt string) string {
-		id := mocks.FirstListedID(prompt)
-		return `{"id": ` + itoa(id) + `}`
-	})
+func TestAskToPick(t *testing.T) {
+	tests := []struct {
+		name    string
+		options []ingestion.Option
+		content string // what the mock LLM answers, whatever is asked
+		wantID  uint
+		wantErr error
+	}{
+		{
+			name:    "accepts an id that was among the options",
+			options: []ingestion.Option{{ID: 1, Name: "First"}, {ID: 2, Name: "Second"}},
+			content: `{"id": 2}`,
+			wantID:  2,
+		},
+		{
+			// A fabricated id is treated as "no match", not trusted: it would
+			// otherwise pass through as a plausible but invalid foreign key.
+			name:    "rejects a hallucinated id not among the options",
+			options: []ingestion.Option{{ID: 1, Name: "First"}, {ID: 2, Name: "Second"}},
+			content: `{"id": 999}`,
+			wantID:  0,
+		},
+		{
+			name:    "handles a markdown-fenced response",
+			options: []ingestion.Option{{ID: 7, Name: "Match"}},
+			content: "```json\n{\"id\": 7}\n```",
+			wantID:  7,
+		},
+		{
+			name:    "unparseable content is a transient failure",
+			options: []ingestion.Option{{ID: 1, Name: "First"}},
+			content: "not json at all",
+			wantErr: ingestion.ErrTransientExtractionFailure,
+		},
+		{
+			name:    "no options means no LLM call and no match",
+			options: nil,
+			content: `{"id": 1}`,
+			wantID:  0,
+		},
+	}
 
-	classifier := ingestion.NewOccupationClassifier(repo, llm)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := mocks.NewMockLLM(t, func(string) string { return tt.content })
 
-	id, err := classifier.Classify(context.Background(), "Backend engineer building Go microservices")
-	if err != nil {
-		t.Fatalf("Classify() error: %v", err)
+			id, err := ingestion.AskToPick(context.Background(), client, "some job", tt.options, "Test Level")
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("expected error %v, got %v", tt.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if id != tt.wantID {
+				t.Errorf("expected id %d, got %d", tt.wantID, id)
+			}
+		})
 	}
-	if id != 25121 {
-		t.Errorf("expected leaf occupation_group_id 25121, got %d", id)
-	}
-}
-
-func TestAskToPick_RejectsHallucinatedIDNotInOptions(t *testing.T) {
-	// The mock always answers with a fabricated id that was never
-	// among the options offered, regardless of what's actually asked.
-	llm := mocks.NewMockDeepSeek(t, func(prompt string) string {
-		return `{"id": 999}`
-	})
-
-	options := []ingestion.Option{{ID: 1, Name: "First"}, {ID: 2, Name: "Second"}}
-	id, err := llm.AskToPick(context.Background(), "some job", options, "Test Level")
-	if err != nil {
-		t.Fatalf("AskToPick returned an error instead of treating the hallucination as no-match: %v", err)
-	}
-	if id != 0 {
-		t.Errorf("expected hallucinated id 999 to be rejected (id=0), got %d", id)
-	}
-}
-
-func TestAskToPick_AcceptsIDActuallyInOptions(t *testing.T) {
-	llm := mocks.NewMockDeepSeek(t, func(prompt string) string {
-		return `{"id": 2}`
-	})
-
-	options := []ingestion.Option{{ID: 1, Name: "First"}, {ID: 2, Name: "Second"}}
-	id, err := llm.AskToPick(context.Background(), "some job", options, "Test Level")
-	if err != nil {
-		t.Fatalf("AskToPick failed on a genuinely valid pick: %v", err)
-	}
-	if id != 2 {
-		t.Errorf("expected valid id 2 to be accepted, got %d", id)
-	}
-}
-
-func TestAskToPick_HandlesMarkdownFencedResponse(t *testing.T) {
-	llm := mocks.NewMockDeepSeek(t, func(prompt string) string {
-		return "```json\n{\"id\": 7}\n```"
-	})
-
-	id, err := llm.AskToPick(context.Background(), "some job", []ingestion.Option{{ID: 7, Name: "Match"}}, "Test Level")
-	if err != nil {
-		t.Fatalf("AskToPick failed on fenced response: %v", err)
-	}
-	if id != 7 {
-		t.Errorf("expected id 7, got %d", id)
-	}
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var digits []byte
-	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
-		n /= 10
-	}
-	return string(digits)
 }

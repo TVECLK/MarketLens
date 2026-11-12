@@ -1,143 +1,174 @@
 package ingestion_test
 
 import (
+	"context"
 	"testing"
 
 	"marketlens-go-backend/internal/ingestion"
-	"marketlens-go-backend/internal/ingestion/mocks"
 )
 
-func TestGenerateMinHashAndLSH_SameInputSameOutput(t *testing.T) {
-	job := ingestion.JobData{Employer: "Acme", JobRole: "Engineer", Location: "Colombo", Description: "Build things"}
+const (
+	numPerm  = 128
+	numBands = 8
+)
 
-	sig1, lsh1 := ingestion.GenerateMinHashAndLSH(job, 128, 8)
-	sig2, lsh2 := ingestion.GenerateMinHashAndLSH(job, 128, 8)
+func TestGenerateMinHashAndLSH(t *testing.T) {
+	acme := ingestion.JobData{Employer: "Acme", JobRole: "Engineer", Location: "Colombo", Description: "Build things"}
 
-	if len(sig1) != 128 {
-		t.Fatalf("expected signature length 128, got %d", len(sig1))
+	tests := []struct {
+		name string
+		a, b ingestion.JobData
+		// Bounds on how many of the 128 signature positions the two jobs
+		// share.
+		minMatches, maxMatches int
+		wantSameBuckets        bool
+	}{
+		{
+			name:            "same input gives the same signature and bucket keys",
+			a:               acme,
+			b:               acme,
+			minMatches:      numPerm,
+			maxMatches:      numPerm,
+			wantSameBuckets: true,
+		},
+		{
+			name:       "unrelated jobs give largely different signatures",
+			a:          ingestion.JobData{Employer: "Acme", JobRole: "Engineer", Location: "Colombo", Description: "Build backend services"},
+			b:          ingestion.JobData{Employer: "Globex", JobRole: "Store Manager", Location: "Kandy", Description: "Manage retail operations"},
+			minMatches: 0,
+			maxMatches: 20,
+		},
 	}
-	for i := range sig1 {
-		if sig1[i] != sig2[i] {
-			t.Fatalf("signature not deterministic at index %d: %d != %d", i, sig1[i], sig2[i])
-		}
-	}
-	if len(lsh1) != 8 {
-		t.Fatalf("expected 8 LSH bands, got %d", len(lsh1))
-	}
-	for i := range lsh1 {
-		if lsh1[i].BucketKey != lsh2[i].BucketKey {
-			t.Fatalf("bucket key not deterministic at band %d", i)
-		}
-	}
-}
 
-func TestGenerateMinHashAndLSH_DifferentJobsDifferentSignatures(t *testing.T) {
-	jobA := ingestion.JobData{Employer: "Acme", JobRole: "Engineer", Location: "Colombo", Description: "Build backend services"}
-	jobB := ingestion.JobData{Employer: "Globex", JobRole: "Store Manager", Location: "Kandy", Description: "Manage retail operations"}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sigA, lshA := ingestion.GenerateMinHashAndLSH(tt.a, numPerm, numBands)
+			sigB, lshB := ingestion.GenerateMinHashAndLSH(tt.b, numPerm, numBands)
 
-	sigA, _ := ingestion.GenerateMinHashAndLSH(jobA, 128, 8)
-	sigB, _ := ingestion.GenerateMinHashAndLSH(jobB, 128, 8)
+			if len(sigA) != numPerm {
+				t.Fatalf("expected signature length %d, got %d", numPerm, len(sigA))
+			}
+			if len(lshA) != numBands {
+				t.Fatalf("expected %d LSH bands, got %d", numBands, len(lshA))
+			}
 
-	matches := 0
-	for i := range sigA {
-		if sigA[i] == sigB[i] {
-			matches++
-		}
-	}
-	if matches > 20 {
-		t.Errorf("expected largely different signatures for unrelated jobs, got %d/128 matching positions", matches)
+			matches := 0
+			for i := range sigA {
+				if sigA[i] == sigB[i] {
+					matches++
+				}
+			}
+			if matches < tt.minMatches || matches > tt.maxMatches {
+				t.Errorf("expected between %d and %d matching positions, got %d", tt.minMatches, tt.maxMatches, matches)
+			}
+
+			sameBuckets := true
+			for i := range lshA {
+				if lshA[i].BucketKey != lshB[i].BucketKey {
+					sameBuckets = false
+				}
+			}
+			if sameBuckets != tt.wantSameBuckets {
+				t.Errorf("expected same bucket keys=%t, got %t", tt.wantSameBuckets, sameBuckets)
+			}
+		})
 	}
 }
 
 func TestPQArrayRoundTrip(t *testing.T) {
-	job := ingestion.JobData{Employer: "Acme", JobRole: "Engineer", Location: "Colombo", Description: "Build things"}
-	sig, _ := ingestion.GenerateMinHashAndLSH(job, 128, 8)
+	generated, _ := ingestion.GenerateMinHashAndLSH(
+		ingestion.JobData{Employer: "Acme", JobRole: "Engineer", Location: "Colombo", Description: "Build things"},
+		numPerm, numBands,
+	)
 
-	stored := ingestion.ToPQArray(sig)
-	recovered := ingestion.FromPQArray(stored)
-
-	if len(recovered) != len(sig) {
-		t.Fatalf("length mismatch: got %d, want %d", len(recovered), len(sig))
+	tests := []struct {
+		name string
+		sig  []uint32
+	}{
+		{"generated signature", generated},
+		// Every value FNV-32 can produce (0 to 2^32-1) must survive the
+		// round-trip through int32 without silently changing meaning.
+		{"values at the int32 boundaries", []uint32{0, 1, 1 << 31, (1 << 32) - 1, 2147483647, 2147483648}},
+		{"empty signature", []uint32{}},
 	}
-	for i := range sig {
-		if sig[i] != recovered[i] {
-			t.Fatalf("round-trip mismatch at index %d: got %d, want %d", i, recovered[i], sig[i])
-		}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recovered := ingestion.FromPQArray(ingestion.ToPQArray(tt.sig))
+
+			if len(recovered) != len(tt.sig) {
+				t.Fatalf("length mismatch: got %d, want %d", len(recovered), len(tt.sig))
+			}
+			for i, want := range tt.sig {
+				if recovered[i] != want {
+					t.Errorf("index %d: got %d after round-trip, want %d", i, recovered[i], want)
+				}
+			}
+		})
 	}
 }
 
-func TestPQArrayFitsSignedInt32Range(t *testing.T) {
-	// Every value FNV-32 can produce (0 to 2^32-1) must survive the
-	// round-trip through int32 without silently changing meaning.
-	extremes := []uint32{0, 1, 1 << 31, (1 << 32) - 1, 2147483647, 2147483648}
-	stored := ingestion.ToPQArray(extremes)
-	recovered := ingestion.FromPQArray(stored)
-	for i, want := range extremes {
-		if recovered[i] != want {
-			t.Errorf("value %d: got %d after round-trip", want, recovered[i])
-		}
-	}
-}
-
-func TestCheckDuplicate_CatchesNearDuplicate(t *testing.T) {
-	repo := mocks.NewMockRepository()
-
+func TestCheckDuplicate(t *testing.T) {
 	original := ingestion.JobData{
 		Employer:    "Ceylon Software Solutions",
 		JobRole:     "Senior Backend Engineer",
 		Location:    "Colombo 03, Sri Lanka",
 		Description: "Go, PostgreSQL and Docker experience required for our growing backend team.",
 	}
-	sig, lsh := ingestion.GenerateMinHashAndLSH(original, 128, 8)
-	bucketKeys := make([]string, len(lsh))
-	for i, l := range lsh {
-		bucketKeys[i] = l.BucketKey
-	}
-	repo.SeedJob(1, original.Location, sig, bucketKeys)
 
-	reworded := ingestion.JobData{
-		Employer:    "Ceylon Software Solutions",
-		JobRole:     "Senior Backend Engineer",
-		Location:    "Colombo 03",
-		Description: "Go, PostgreSQL, and Docker experience required for our growing backend team!",
+	tests := []struct {
+		name          string
+		incoming      ingestion.JobData
+		wantDuplicate bool
+	}{
+		{
+			name: "reworded repost is caught as a near-duplicate",
+			incoming: ingestion.JobData{
+				Employer:    "Ceylon Software Solutions",
+				JobRole:     "Senior Backend Engineer",
+				Location:    "Colombo 03",
+				Description: "Go, PostgreSQL, and Docker experience required for our growing backend team!",
+			},
+			wantDuplicate: true,
+		},
+		{
+			name: "unrelated job is left alone",
+			incoming: ingestion.JobData{
+				Employer:    "Lanka Retail Group",
+				JobRole:     "Store Manager",
+				Location:    "Kandy, Sri Lanka",
+				Description: "Manage daily operations, staff scheduling, and inventory.",
+			},
+			wantDuplicate: false,
+		},
 	}
-	newSig, newLSH := ingestion.GenerateMinHashAndLSH(reworded, 128, 8)
 
-	isDuplicate, matchedID := ingestion.CheckDuplicate(repo, newLSH, newSig, reworded.Location, 0.65)
-	if !isDuplicate {
-		t.Fatal("expected near-duplicate job to be caught")
-	}
-	if matchedID != 1 {
-		t.Errorf("expected matched job ID 1, got %d", matchedID)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupDB(t)
+			svcs := newServices(db)
 
-func TestCheckDuplicate_LeavesUnrelatedJobsAlone(t *testing.T) {
-	repo := mocks.NewMockRepository()
+			sig, lsh := ingestion.GenerateMinHashAndLSH(original, numPerm, numBands)
+			bucketKeys := make([]string, len(lsh))
+			for i, l := range lsh {
+				bucketKeys[i] = l.BucketKey
+			}
+			seededID := seedJob(t, db, original.Location, sig, bucketKeys)
 
-	original := ingestion.JobData{
-		Employer:    "Ceylon Software Solutions",
-		JobRole:     "Senior Backend Engineer",
-		Location:    "Colombo 03, Sri Lanka",
-		Description: "Go, PostgreSQL and Docker experience required for our growing backend team.",
-	}
-	sig, lsh := ingestion.GenerateMinHashAndLSH(original, 128, 8)
-	bucketKeys := make([]string, len(lsh))
-	for i, l := range lsh {
-		bucketKeys[i] = l.BucketKey
-	}
-	repo.SeedJob(1, original.Location, sig, bucketKeys)
-
-	different := ingestion.JobData{
-		Employer:    "Lanka Retail Group",
-		JobRole:     "Store Manager",
-		Location:    "Kandy, Sri Lanka",
-		Description: "Manage daily operations, staff scheduling, and inventory.",
-	}
-	newSig, newLSH := ingestion.GenerateMinHashAndLSH(different, 128, 8)
-
-	isDuplicate, _ := ingestion.CheckDuplicate(repo, newLSH, newSig, different.Location, 0.65)
-	if isDuplicate {
-		t.Fatal("expected unrelated job NOT to be flagged as a duplicate")
+			newSig, newLSH := ingestion.GenerateMinHashAndLSH(tt.incoming, numPerm, numBands)
+			isDuplicate, matchedID, err := ingestion.CheckDuplicate(context.Background(), svcs.JobPosts, newLSH, newSig, tt.incoming.Location, 0.65)
+			if err != nil {
+				t.Fatalf("CheckDuplicate() error: %v", err)
+			}
+			if isDuplicate != tt.wantDuplicate {
+				t.Fatalf("expected duplicate=%t, got %t", tt.wantDuplicate, isDuplicate)
+			}
+			if tt.wantDuplicate && matchedID != int64(seededID) {
+				t.Errorf("expected matched job ID %d, got %d", seededID, matchedID)
+			}
+			if !tt.wantDuplicate && matchedID != 0 {
+				t.Errorf("expected no matched job ID, got %d", matchedID)
+			}
+		})
 	}
 }
