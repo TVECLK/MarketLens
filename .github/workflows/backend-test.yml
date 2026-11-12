@@ -1,0 +1,208 @@
+name: Backend - Test
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "engineering/backend/**"
+      - ".github/workflows/backend-test.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "engineering/backend/**"
+      - ".github/workflows/backend-test.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engineering/backend
+
+    # The Go tests use in-memory SQLite and need no database. This Postgres
+    # is only here so the API container below has a database to connect to
+    # when it boots; it needs no schema, since the health checks only ping.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: ci_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci_user -d ci_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: engineering/backend/go.mod
+          cache: true
+          cache-dependency-path: engineering/backend/go.sum
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      # go-sqlite3 needs CGO, which ubuntu-latest provides.
+      - name: Run tests
+        run: go test -race -count=1 ./...
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend API image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./engineering/backend
+          file: ./engineering/backend/Dockerfile.backend
+          target: api
+          push: false
+          load: true
+          tags: backend-api:latest
+          cache-from: type=gha,scope=backend-api
+          cache-to: type=gha,mode=max,scope=backend-api
+
+      # The MCP image is only built, not run: it needs MCP_RESOURCE_ID and
+      # its own auth setup on top of what the API container gets below.
+      - name: Build backend MCP image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./engineering/backend
+          file: ./engineering/backend/Dockerfile.backend
+          target: mcp
+          push: false
+          load: true
+          tags: backend-mcp:latest
+          cache-from: type=gha,scope=backend-mcp
+          cache-to: type=gha,mode=max,scope=backend-mcp
+
+      - name: Verify docker images
+        run: |
+          docker images | grep backend-api || (echo "API image build failed" && exit 1)
+          docker images | grep backend-mcp || (echo "MCP image build failed" && exit 1)
+
+      - name: Run docker container
+        run: |
+          # Host networking so the container reaches the Postgres service on
+          # localhost:5432. Dummy (non-secret) values for CI only: auth and LLM
+          # settings only have to be non-empty, because the JWKS is fetched
+          # lazily and no LLM call is made at startup.
+          docker run -d --name backend-api \
+            --network host \
+            -e PORT=8080 \
+            -e GIN_MODE=release \
+            -e DB_HOST=localhost \
+            -e DB_PORT=5432 \
+            -e DB_USER=ci_user \
+            -e DB_PASSWORD=ci_password \
+            -e DB_NAME=ci_db \
+            -e THUNDER_BASE_URL=https://localhost:8090 \
+            -e THUNDER_ISSUER=https://localhost:8090 \
+            -e THUNDER_AUDIENCE=ci-audience \
+            -e THUNDER_INSECURE_TLS=true \
+            -e LLM_API_KEY=ci-api-key \
+            -e LLM_API_URL=http://localhost:9999/v1/chat/completions \
+            -e LLM_MODEL=ci-model \
+            backend-api:latest
+
+          # wait for 3 seconds
+          sleep 3
+
+          if [ "$(docker inspect -f '{{.State.Running}}' backend-api)" == "true" ]; then
+            echo "Success: Container is running."
+          else
+            echo "Error: Container crashed. Showing logs below:"
+            docker logs backend-api
+            exit 1
+          fi
+
+      - name: Verify container health
+        timeout-minutes: 3
+        run: |
+          # /healthz proves the server is up; /readyz also pings the database.
+          for endpoint in healthz readyz; do
+            ok=false
+            for i in $(seq 1 15); do
+              CURL_EXIT=0
+              STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+                --connect-timeout 2 --max-time 5 \
+                "http://localhost:8080/$endpoint") || CURL_EXIT=$?
+
+              if [ "$CURL_EXIT" -eq 0 ] && [[ "$STATUS" =~ ^2[0-9]{2}$ ]]; then
+                echo "/$endpoint responded with HTTP $STATUS"
+                ok=true
+                break
+              fi
+              echo "Waiting for /$endpoint... (attempt $i, status $STATUS, curl exit $CURL_EXIT)"
+              sleep 2
+            done
+
+            if [ "$ok" != "true" ]; then
+              echo "Error: /$endpoint did not return a 2xx status (last status $STATUS, curl exit $CURL_EXIT). Showing logs below:"
+              docker logs backend-api
+              exit 1
+            fi
+          done
+
+          echo "Container is running successfully"
+
+      - name: Stop docker container
+        run: |
+          docker stop backend-api
+
+          # check the status
+          if [ "$(docker inspect -f '{{.State.Status}}' backend-api)" == "exited" ]; then
+            echo "Success: Container stopped."
+          else
+            echo "Error: Container stop failed. Showing logs below:"
+            docker logs backend-api
+            exit 1
+          fi
+
+      - name: Remove docker container
+        if: always()
+        run: |
+          docker rm -f backend-api || true
+
+          # Check if the container ID still exists
+          if [ -z "$(docker ps -aq -f name=^backend-api$)" ]; then
+            echo "Container removed successfully"
+          else
+            echo "Container removal failed"
+            exit 1
+          fi
+
+      - name: Remove docker images
+        if: always()
+        run: |
+          docker rmi -f backend-api:latest backend-mcp:latest || true
+
+          # Check if either image still exists
+          if [ -z "$(docker images -q --filter "reference=backend-api:latest" --filter "reference=backend-mcp:latest")" ]; then
+            echo "Images removed successfully"
+          else
+            echo "Image removal failed"
+            docker images
+            exit 1
+          fi
