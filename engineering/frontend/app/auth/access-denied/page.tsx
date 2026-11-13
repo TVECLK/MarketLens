@@ -7,7 +7,8 @@ import { useThunderID } from "@thunderid/nextjs";
 const MESSAGE_MIN_VISIBLE_MS = 3000;
 
 /**
- * Where the proxy sends a signed-in user without app access (`kpis:access`). Signs them out with the
+ * Where the proxy sends a signed-in user without app access (none of the page scopes, e.g.
+ * `kpis:access` or `datasource:access`). Signs them out with the
  * SDK's own sign-out, which clears this app's session and ends the Thunder session too (so the next
  * "Sign in" asks for a password again), then lands them on the public home page.
  */

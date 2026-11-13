@@ -4,7 +4,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import QueryProvider from "@/providers/query-provider";
 import AppShell from "@/components/layout/AppShell";
-import { PAGE_SCOPES, scopeString } from "../lib/scopes";
+import { PAGE_SCOPES, scopeString, type PageAccess } from "../lib/scopes";
 import { hasServerPermission } from "@/lib/server-permissions";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,10 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   // Read on the server (AppShell is a client component and can't read the session cookie).
-  const canAccessKpis = await hasServerPermission(PAGE_SCOPES.kpis);
+  const pageAccess: PageAccess = {
+    kpis: await hasServerPermission(PAGE_SCOPES.kpis),
+    datasource: await hasServerPermission(PAGE_SCOPES.datasource),
+  };
 
   return (
     <html lang="en">
@@ -35,7 +38,7 @@ export default async function RootLayout({
         >
           {/* Wrap your entire application structure with the query cache context provider */}
           <QueryProvider>
-            <AppShell canAccessKpis={canAccessKpis}>{children}</AppShell>
+            <AppShell pageAccess={pageAccess}>{children}</AppShell>
           </QueryProvider>
         </ThunderIDProvider>
       </body>

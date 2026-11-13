@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appScopes, CRUD_ACTIONS, PAGE_SCOPES, RESOURCE_SCOPES, scopeFor, scopeString } from "@/lib/scopes";
+import { appScopes, CRUD_ACTIONS, PAGE_SCOPES, READ_SCOPES, RESOURCE_SCOPES, scopeFor, scopeString } from "@/lib/scopes";
 
 describe("scopeFor", () => {
   it("builds the permission string the backend checks", () => {
@@ -8,16 +8,18 @@ describe("scopeFor", () => {
 });
 
 describe("appScopes", () => {
-  it("requests the OIDC scopes, every action for every resource, and the page scopes", () => {
+  it("requests the OIDC scopes, every action for every resource, the page scopes and the read scopes", () => {
     const resources = Object.values(RESOURCE_SCOPES);
     const actions = Object.values(CRUD_ACTIONS);
     const pages = Object.values(PAGE_SCOPES);
+    const reads = Object.values(READ_SCOPES);
     expect(appScopes.slice(0, 2)).toEqual(["openid", "profile"]);
-    expect(appScopes).toHaveLength(2 + resources.length * actions.length + pages.length);
+    expect(appScopes).toHaveLength(2 + resources.length * actions.length + pages.length + reads.length);
     for (const resource of resources) {
       expect(appScopes).toEqual(expect.arrayContaining(actions.map((action) => scopeFor(resource, action))));
     }
     expect(appScopes).toEqual(expect.arrayContaining(["kpis:access"]));
+    expect(appScopes).toEqual(expect.arrayContaining(["sources:read", "sources:create", "sources:update", "sources:delete"]));
   });
 
   it("has no duplicates", () => {
