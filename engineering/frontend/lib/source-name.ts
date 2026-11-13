@@ -11,8 +11,8 @@ export function normalizeSourceName(raw: string): string {
 
 /** Whether saving will strip whitespace from the start or end of what was typed. */
 export function hasOuterWhitespace(raw: string): boolean {
-  const trimmed = raw.trim();
-  return trimmed !== "" && trimmed !== raw;
+  const saved = normalizeSourceName(raw);
+  return saved !== "" && saved !== raw;
 }
 
 /** Whether the saved name contains whitespace, which rarely belongs in a crawler's SOURCE_NAME. */
@@ -44,5 +44,5 @@ export function findCaseOnlyNameMatch<T extends { name: string }>(raw: string, s
 
 /** Whether what the admin typed confirms deleting `name`: an exact, case-sensitive match. */
 export function confirmsSourceName(typed: string, name: string): boolean {
-  return typed.trim() === name;
+  return normalizeSourceName(typed) === name;
 }
