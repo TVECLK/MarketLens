@@ -15,6 +15,7 @@ from crawlers import (
 )
 from models import RawJobInput
 from parsers import BaseJobParser
+from crawlers.source_names import GOVERNMENTJOBS, IKMAN, ROOSTER, TOPJOBS, XPRESSJOBS
 
 ROOSTER_URL = "https://api.rooster.jobs/jobSearch/jobs/search"
 
@@ -25,7 +26,7 @@ class _FakeParser(BaseJobParser):
 
 
 class _Crawler(BaseJobCrawler):
-    SOURCE_NAME = "Fake"
+    SOURCE_NAME = "fake"
 
     def __init__(self):
         super().__init__()
@@ -58,7 +59,7 @@ def test_finish_crawl_returns_a_result_with_the_crawl_counts():
     result = crawler._finish_crawl(usable_jobs=9)
 
     assert result == CrawlResult(
-        source_name="Fake", jobs_attempted=10, jobs_failed=1, usable_jobs=9
+        source_name="fake", jobs_attempted=10, jobs_failed=1, usable_jobs=9
     )
 
 
@@ -88,7 +89,7 @@ def test_all_page_failures_are_reported_together():
 
 
 def test_error_message_names_the_source():
-    with pytest.raises(CrawlIncompleteError, match="^Fake:"):
+    with pytest.raises(CrawlIncompleteError, match="^fake:"):
         _Crawler()._finish_crawl(usable_jobs=0)
 
 
@@ -182,7 +183,7 @@ async def test_rooster_clean_crawl_succeeds_and_saves_jobs():
 
     assert sum(len(batch) for batch in client.batches) == 2
     assert result == CrawlResult(
-        source_name="Rooster", jobs_attempted=2, jobs_failed=0, usable_jobs=2
+        source_name=ROOSTER, jobs_attempted=2, jobs_failed=0, usable_jobs=2
     )
 
 
@@ -391,11 +392,11 @@ def test_crawler_with_an_invalid_source_name_raises(bad_name):
 @pytest.mark.parametrize(
     "crawler_class, expected",
     [
-        (RoosterCrawler, "Rooster"),
-        (IkmanCrawler, "Ikman"),
-        (TopJobsCrawler, "TopJobs"),
-        (GovernmentJobsCrawler, "GovernmentJobs"),
-        (XpressJobsCrawler, "XpressJobs"),
+        (RoosterCrawler, ROOSTER),
+        (IkmanCrawler, IKMAN),
+        (TopJobsCrawler, TOPJOBS),
+        (GovernmentJobsCrawler, GOVERNMENTJOBS),
+        (XpressJobsCrawler, XPRESSJOBS),
     ],
 )
 def test_crawlers_pass_their_source_name_to_their_parser(crawler_class, expected):

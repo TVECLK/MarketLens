@@ -6,6 +6,7 @@ from typing import List
 from bs4 import BeautifulSoup
 from pydantic import ValidationError
 from .base_crawler import BaseJobCrawler, CrawlResult
+from .source_names import XPRESSJOBS
 from utils import ThunderAuth
 from parsers import XpressJobsParser
 from models import RawJobInput
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class XpressJobsCrawler(BaseJobCrawler):
-    SOURCE_NAME = "XpressJobs"
+    SOURCE_NAME = XPRESSJOBS
 
     def __init__(self):
         super().__init__()
