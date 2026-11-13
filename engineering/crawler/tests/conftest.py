@@ -8,7 +8,7 @@ from utils import ThunderIDClient
 from utils.crawler_run_manager import CrawlerManager
 from crawlers import BaseJobCrawler
 from parsers import BaseJobParser
-from crawlers.source_names import IKMAN, ROOSTER, TOPJOBS
+from fake_sources import SOURCE_A, SOURCE_B, SOURCE_C
 
 
 class _ConcreteCrawler(BaseJobCrawler):
@@ -98,12 +98,12 @@ def make_crawler_class():
 
 @pytest.fixture
 def crawlers(make_crawler_class):
-    """The active crawlers: two that succeed (rooster, ikman) and one that raises
-    (topjobs)."""
+    """The active crawlers: two that succeed (source a, b) and one that raises
+    (source c)."""
     return {
-        ROOSTER: make_crawler_class(ROOSTER),
-        IKMAN: make_crawler_class(IKMAN),
-        TOPJOBS: make_crawler_class(TOPJOBS, error=RuntimeError("site down")),
+        SOURCE_A: make_crawler_class(SOURCE_A),
+        SOURCE_B: make_crawler_class(SOURCE_B),
+        SOURCE_C: make_crawler_class(SOURCE_C, error=RuntimeError("site down")),
     }
 
 

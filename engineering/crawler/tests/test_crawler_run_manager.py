@@ -5,9 +5,8 @@ import httpx
 import pytest
 
 import main
-from crawlers.registry import CRAWLER_REGISTRY
 from utils.crawler_run_manager import CrawlerManager
-from crawlers.source_names import IKMAN, ROOSTER, TOPJOBS
+from fake_sources import SOURCE_A, SOURCE_B, SOURCE_C, UNREGISTERED_SOURCE
 
 
 def http_response(status_code: int) -> httpx.Response:
@@ -25,25 +24,25 @@ def completions(client) -> list:
 
 
 async def test_run_crawler_returns_source_name_on_success(manager):
-    result = await manager._run_crawler(ROOSTER, 1, MagicMock())
-    assert result == ROOSTER
+    result = await manager._run_crawler(SOURCE_A, 1, MagicMock())
+    assert result == SOURCE_A
 
 
 @pytest.mark.parametrize(
-    "returned", [None, ROOSTER, True], ids=["nothing", "a string", "a bool"]
+    "returned", [None, SOURCE_A, True], ids=["nothing", "a string", "a bool"]
 )
 async def test_run_crawler_returns_none_when_crawler_returns_no_crawl_result(
     manager, returned, make_crawler_class
 ):
-    manager._registry = {ROOSTER: make_crawler_class(ROOSTER, result=returned)}
+    manager._registry = {SOURCE_A: make_crawler_class(SOURCE_A, result=returned)}
 
-    result = await manager._run_crawler(ROOSTER, 1, MagicMock())
+    result = await manager._run_crawler(SOURCE_A, 1, MagicMock())
 
     assert result is None
 
 
 async def test_run_crawler_returns_none_when_crawler_raises(manager):
-    result = await manager._run_crawler(TOPJOBS, 1, MagicMock())
+    result = await manager._run_crawler(SOURCE_C, 1, MagicMock())
     assert result is None
 
 
@@ -62,11 +61,11 @@ async def test_run_all_crawlers_returns_only_the_succeeded_sources(manager, conc
 
     result = await manager.run_all_crawlers(concurrent=concurrent)
 
-    assert sorted(result) == [IKMAN, ROOSTER]
+    assert sorted(result) == [SOURCE_A, SOURCE_B]
     manager._finalize_run.assert_awaited_once()
     _, run_id, sources = manager._finalize_run.await_args.args
     assert run_id == 7
-    assert sorted(sources) == [IKMAN, ROOSTER]
+    assert sorted(sources) == [SOURCE_A, SOURCE_B]
 
 
 @pytest.mark.parametrize("concurrent", [True, False])
@@ -74,8 +73,8 @@ async def test_run_all_crawlers_returns_an_empty_list_when_all_fail(
     manager, concurrent, make_crawler_class
 ):
     manager.fetch_active_crawlers.return_value = {
-        TOPJOBS: make_crawler_class(TOPJOBS, error=RuntimeError("down")),
-        IKMAN: make_crawler_class(IKMAN, error=ValueError("layout changed")),
+        SOURCE_C: make_crawler_class(SOURCE_C, error=RuntimeError("down")),
+        SOURCE_B: make_crawler_class(SOURCE_B, error=ValueError("layout changed")),
     }
     manager._start_run = AsyncMock(return_value=7)
     manager._finalize_run = AsyncMock()
@@ -113,13 +112,15 @@ async def test_run_all_crawlers_runs_nothing_when_the_run_cannot_be_started(
 async def test_run_all_crawlers_runs_only_the_active_crawlers(
     manager, make_crawler_class
 ):
-    manager.fetch_active_crawlers.return_value = {IKMAN: make_crawler_class(IKMAN)}
+    manager.fetch_active_crawlers.return_value = {
+        SOURCE_B: make_crawler_class(SOURCE_B)
+    }
     manager._start_run = AsyncMock(return_value=7)
     manager._finalize_run = AsyncMock()
 
     result = await manager.run_all_crawlers(concurrent=True)
 
-    assert result == [IKMAN]
+    assert result == [SOURCE_B]
 
 
 @pytest.mark.parametrize("concurrent", [True, False])
@@ -154,9 +155,11 @@ async def test_run_all_crawlers_creates_no_run_when_the_sources_cannot_be_fetche
 SOURCES_URL = "http://backend.test/api/v1/crawler/sources"
 
 
-# The `manager` fixture mocks fetch_active_crawlers, so these use the real method
+# The `manager` fixture mocks fetch_active_crawlers, so these use the real method,
+# with `crawlers` as the crawlers that exist (the registry of all crawlers)
 @pytest.fixture
-def real_manager(backend_url):
+def real_manager(backend_url, crawlers, monkeypatch):
+    monkeypatch.setattr("utils.crawler_run_manager.CRAWLER_REGISTRY", crawlers)
     return CrawlerManager()
 
 
@@ -178,36 +181,36 @@ def make_sources_client(names=None, error=None, status_code=200):
 
 
 async def test_fetch_active_crawlers_returns_only_the_crawlers_of_active_sources(
-    real_manager,
+    real_manager, crawlers
 ):
-    client = make_sources_client([ROOSTER, IKMAN])
+    client = make_sources_client([SOURCE_A, SOURCE_B])
 
     result = await real_manager.fetch_active_crawlers(client)
 
     assert result == {
-        ROOSTER: CRAWLER_REGISTRY[ROOSTER],
-        IKMAN: CRAWLER_REGISTRY[IKMAN],
+        SOURCE_A: crawlers[SOURCE_A],
+        SOURCE_B: crawlers[SOURCE_B],
     }
 
 
 async def test_fetch_active_crawlers_normalizes_case_and_whitespace(real_manager):
-    client = make_sources_client([f"  {ROOSTER.title()} ", IKMAN.upper()])
+    client = make_sources_client([f"  {SOURCE_A.title()} ", SOURCE_B.upper()])
 
     result = await real_manager.fetch_active_crawlers(client)
 
-    assert set(result) == {ROOSTER, IKMAN}
+    assert set(result) == {SOURCE_A, SOURCE_B}
 
 
 async def test_fetch_active_crawlers_ignores_active_sources_without_a_crawler(
     real_manager, caplog
 ):
-    client = make_sources_client([ROOSTER, "newspaper"])
+    client = make_sources_client([SOURCE_A, UNREGISTERED_SOURCE])
 
     with caplog.at_level(logging.WARNING):
         result = await real_manager.fetch_active_crawlers(client)
 
-    assert set(result) == {ROOSTER}
-    assert "newspaper" in caplog.text
+    assert set(result) == {SOURCE_A}
+    assert UNREGISTERED_SOURCE in caplog.text
 
 
 async def test_fetch_active_crawlers_returns_nothing_when_no_source_is_active(
@@ -219,7 +222,7 @@ async def test_fetch_active_crawlers_returns_nothing_when_no_source_is_active(
 async def test_fetch_active_crawlers_requests_the_sources_endpoint_with_auth(
     real_manager,
 ):
-    client = make_sources_client([ROOSTER])
+    client = make_sources_client([SOURCE_A])
 
     await real_manager.fetch_active_crawlers(client)
 
@@ -252,7 +255,7 @@ async def test_finalize_run_reconciles_then_completes_when_a_source_succeeded(
 ):
     client = make_client()
 
-    await manager._finalize_run(client, 7, [ROOSTER, IKMAN])
+    await manager._finalize_run(client, 7, [SOURCE_A, SOURCE_B])
 
     assert [call.path for call in client.calls] == [
         "/jobs/reconcile",
@@ -260,7 +263,7 @@ async def test_finalize_run_reconciles_then_completes_when_a_source_succeeded(
     ]
     assert client.calls[0].body == {
         "crawler_run_id": 7,
-        "sources": [ROOSTER, IKMAN],
+        "sources": [SOURCE_A, SOURCE_B],
     }
     assert client.calls[1].body["status"] == "COMPLETED"
 
@@ -291,7 +294,7 @@ async def test_finalize_run_marks_the_run_failed_once_when_reconcile_fails(
     client = make_client({"/jobs/reconcile": reconcile_failure()})
 
     with pytest.raises((httpx.ConnectError, httpx.HTTPStatusError)):
-        await manager._finalize_run(client, 7, [ROOSTER])
+        await manager._finalize_run(client, 7, [SOURCE_A])
 
     sent = completions(client)
     assert len(sent) == 1
@@ -311,7 +314,7 @@ async def test_finalize_run_raises_the_reconcile_error_when_marking_failed_also_
 
     with caplog.at_level(logging.ERROR, logger="utils.crawler_run_manager"):
         with pytest.raises(httpx.ConnectError, match="reconcile down"):
-            await manager._finalize_run(client, 7, [ROOSTER])
+            await manager._finalize_run(client, 7, [SOURCE_A])
 
     # the second failure is not raised, but it is logged
     assert "Could not mark crawler run 7 as FAILED" in caplog.text
@@ -326,7 +329,7 @@ async def test_finalize_run_raises_when_completing_the_run_fails(
 
     with caplog.at_level(logging.ERROR, logger="utils.crawler_run_manager"):
         with pytest.raises(httpx.ConnectError, match="complete down"):
-            await manager._finalize_run(client, 7, [ROOSTER])
+            await manager._finalize_run(client, 7, [SOURCE_A])
 
     assert "Failed to finalize crawler run 7" in caplog.text
     reconciles = [call for call in client.calls if call.path == "/jobs/reconcile"]
@@ -337,7 +340,7 @@ async def test_finalize_run_raises_when_completing_the_run_fails(
 
 @pytest.mark.parametrize(
     "succeeded_sources, expected_status",
-    [([ROOSTER], "COMPLETED"), ([], "FAILED")],
+    [([SOURCE_A], "COMPLETED"), ([], "FAILED")],
     ids=["COMPLETED", "FAILED"],
 )
 async def test_finalize_run_sends_the_expected_complete_request(
@@ -358,7 +361,7 @@ async def test_finalize_run_sends_the_thunder_auth_with_the_reconcile_request(
 ):
     client = make_client()
 
-    await manager._finalize_run(client, 7, [ROOSTER])
+    await manager._finalize_run(client, 7, [SOURCE_A])
 
     assert client.calls[0].auth is manager._thunder_auth
 
@@ -377,7 +380,7 @@ def patch_manager(monkeypatch, returned=None, error=None):
 
 
 async def test_crawl_job_does_not_exit_when_a_source_succeeded(monkeypatch):
-    fake_manager = patch_manager(monkeypatch, returned=[ROOSTER])
+    fake_manager = patch_manager(monkeypatch, returned=[SOURCE_A])
 
     await main.crawl_job()  # a SystemExit here would fail the test
 
