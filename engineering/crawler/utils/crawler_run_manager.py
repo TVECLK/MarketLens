@@ -180,9 +180,10 @@ class CrawlerManager:
             logger.error(f"Crawler '{name}' failed: {e}", exc_info=True)
             return None
 
-    # This function calls the all crawlers one by one and send it to _run_crawler function.
-    # It returns the sources that crawled successfully, or None if no source is active
-    # (nothing to crawl, so no run is created)
+    # This function runs the crawlers of the active sources: it fetches them from the
+    # backend, starts a run, sends each crawler to _run_crawler (concurrently or one by
+    # one) and finalizes the run. It returns the sources that crawled successfully, or
+    # None if no source is active (nothing to crawl, so no run is created)
     async def run_all_crawlers(self, concurrent: bool = False) -> Optional[List[str]]:
         async with httpx.AsyncClient(timeout=HTTP_CLIENT_TIMEOUT_SECONDS) as client:
             # Fetched before the run starts, so a failure leaves no half-created run
