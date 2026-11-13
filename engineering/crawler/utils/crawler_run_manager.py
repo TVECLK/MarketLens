@@ -8,6 +8,7 @@ from config import BACKEND_BASE_URL
 
 from crawlers import BaseJobCrawler, CrawlResult
 from crawlers.registry import CRAWLER_REGISTRY
+from .email_alert import EmailAlertService, FailedCrawler
 from .thunder_id_client import ThunderAuth, ThunderIDClient
 
 logger = logging.getLogger(__name__)
@@ -16,8 +17,10 @@ HTTP_CLIENT_TIMEOUT_SECONDS = 300.0
 
 
 class CrawlerManager:
-    def __init__(self):
+    def __init__(self, alert_service: EmailAlertService):
+        self._alert_service = alert_service
         self._registry: Dict[str, Type[BaseJobCrawler]] = {}
+        self._failure_reasons: Dict[str, str] = {}
         self._thunder_client = ThunderIDClient()
         self._thunder_auth = ThunderAuth(self._thunder_client)
 
@@ -153,6 +156,7 @@ class CrawlerManager:
         crawler_class = self._registry.get(name)
         if not crawler_class:
             logger.warning(f"Crawler '{name}' not found in registry.")
+            self._failure_reasons[name] = "No crawler found for this source"
             return None
 
         try:
@@ -170,6 +174,9 @@ class CrawlerManager:
                     f"Crawler '{name}' returned {type(result).__name__} instead of a "
                     "CrawlResult, treating it as failed."
                 )
+                self._failure_reasons[name] = (
+                    "Crawler finished without reporting a result"
+                )
                 return None
             logger.info(
                 f"--- Finished crawler: {name} ({result.jobs_attempted} jobs attempted, "
@@ -178,6 +185,7 @@ class CrawlerManager:
             return result.source_name
         except Exception as e:
             logger.error(f"Crawler '{name}' failed: {e}", exc_info=True)
+            self._failure_reasons[name] = f"{type(e).__name__}: {e}"
             return None
 
     # This function runs the crawlers of the active sources: it fetches them from the
@@ -193,6 +201,7 @@ class CrawlerManager:
                 return None
 
             crawler_run_id = await self._start_run(client)
+            self._failure_reasons = {}
 
             tasks = [
                 self._run_crawler(name, crawler_run_id, client)
@@ -207,5 +216,19 @@ class CrawlerManager:
             succeeded_sources = [r for r in results if isinstance(r, str)]
 
             await self._finalize_run(client, crawler_run_id, succeeded_sources)
+
+            # The active crawlers that did not succeed. The email is only sent when
+            # there is at least one, and after the run is recorded
+            failed_crawlers = [
+                FailedCrawler(
+                    name, self._failure_reasons.get(name, "Crawler did not succeed")
+                )
+                for name in self._registry
+                if name not in succeeded_sources
+            ]
+            await self._alert_service.send_failure_alert(
+                failed_crawlers, crawler_run_id
+            )
+
             logger.info("Scraper execution pipeline concluded.")
             return succeeded_sources

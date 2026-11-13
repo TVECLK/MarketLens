@@ -240,13 +240,6 @@ async def test_rooster_a_few_empty_jobs_do_not_fail_the_crawl():
 # ---------- per-job failure threshold ----------
 
 
-@pytest.fixture
-def limits(monkeypatch):
-    """Pin the thresholds so the tests don't depend on the configured values."""
-    monkeypatch.setattr("crawlers.base_crawler.MAX_JOB_FAILURE_RATIO", 0.2)
-    monkeypatch.setattr("crawlers.base_crawler.MIN_JOBS_FOR_FAILURE", 20)
-
-
 def test_failures_under_the_ratio_do_not_raise(limits):
     crawler = _Crawler()
     crawler._count_jobs(attempted=100, failed=20)  # exactly 20%: not over the limit
