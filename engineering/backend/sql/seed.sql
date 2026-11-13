@@ -8046,11 +8046,13 @@ INSERT INTO public.occupation_group (id, unit_group_id, name, code, created_at, 
 -- name must match the crawler parsers' `source=` value.
 --
 
-INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (1, 'Ikman', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
-INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (2, 'XpressJobs', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
-INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (3, 'TopJobs', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
-INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (4, 'Rooster', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
-INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (5, 'GovernmentJobs', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (1, 'ikman', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (2, 'xpressjobs', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (3, 'topjobs', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (4, 'rooster', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (5, 'governmentjobs', 'auto', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (6, 'daily news', 'manual', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
+INSERT INTO public.source (id, name, type, is_active, created_at, updated_at, deleted_at) VALUES (7, 'lankadeepa', 'manual', true, '2026-11-09 00:00:00+00', '2026-11-09 00:00:00+00', NULL);
 
 
 --
@@ -8218,7 +8220,7 @@ SELECT pg_catalog.setval('public.sub_major_group_id_seq', 44, true);
 -- Name: source_id_seq; Type: SEQUENCE SET; Schema: public; Owner: app_user
 --
 
-SELECT pg_catalog.setval('public.source_id_seq', 5, true);
+SELECT pg_catalog.setval('public.source_id_seq', 7, true);
 
 
 --
