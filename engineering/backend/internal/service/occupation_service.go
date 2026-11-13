@@ -91,5 +91,6 @@ func NewOccupationGroupService(store *repositories.Store) *CRUDService[models.Oc
 			}
 			return store.GetOccupationGroupsByUnitGroup(ctx, parentID)
 		}),
+		WithPagination[models.OccupationGroup](DefaultPageLimit, MaxPageLimit),
 	)
 }

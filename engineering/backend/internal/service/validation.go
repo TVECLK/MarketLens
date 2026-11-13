@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"marketlens-go-backend/internal/models"
 )
 
 // validateDateRange is the one shared "to must not be before from" rule
@@ -78,34 +80,11 @@ func validateNameAndCode(name, code string) error {
 	return nil
 }
 
-// validOccupationLevels / validIndustryLevels / leafLevels
-var validOccupationLevels = map[string]bool{
-	"major-group":      true,
-	"sub-major-group":  true,
-	"minor-group":      true,
-	"unit-group":       true,
-	"occupation-group": true,
-}
-
-var validIndustryLevels = map[string]bool{
-	"industry-sector":   true,
-	"industry-division": true,
-	"industry-group":    true,
-	"industry-class":    true,
-	"industry-subclass": true,
-}
-
-// leafLevels marks the bottom of each hierarchy, which has no children to return.
-var leafLevels = map[string]bool{
-	"occupation-group":  true,
-	"industry-subclass": true,
-}
-
 // validateStandard checks that standard is "occupation" or "industry", for
 // endpoints scoped to a whole hierarchy rather than one specific level
 // within it.
 func validateStandard(standard string) error {
-	if standard != "occupation" && standard != "industry" {
+	if standard != models.StandardOccupation && standard != models.StandardIndustry {
 		return ValidationErrorf("invalid standard %q, must be 'occupation' or 'industry'", standard)
 	}
 	return nil
@@ -117,15 +96,8 @@ func validateStandardAndLevel(standard, level string) error {
 	if err := validateStandard(standard); err != nil {
 		return err
 	}
-	switch standard {
-	case "occupation":
-		if !validOccupationLevels[level] {
-			return ValidationErrorf("invalid level %q for standard 'occupation'", level)
-		}
-	case "industry":
-		if !validIndustryLevels[level] {
-			return ValidationErrorf("invalid level %q for standard 'industry'", level)
-		}
+	if !models.IsValidLevel(standard, level) {
+		return ValidationErrorf("invalid level %q for standard '%s'", level, standard)
 	}
 	return nil
 }

@@ -19,6 +19,18 @@ func NewAnalyticsService(store *repositories.Store) *AnalyticsService {
 	return &AnalyticsService{store: store}
 }
 
+// HiringEmployersLimit is the limit GetHiringEmployersByOccupationLevel will
+// actually use for a requested one (0 = not given).
+func (s *AnalyticsService) HiringEmployersLimit(requested int) int {
+	return pageLimit(requested, DefaultHiringEmployersLimit, MaxPageLimit)
+}
+
+// SkillsPageLimit is the limit GetAllSkillsByOccupationLevel will actually
+// use for a requested one (0 = not given).
+func (s *AnalyticsService) SkillsPageLimit(requested int) int {
+	return pageLimit(requested, DefaultPageLimit, MaxPageLimit)
+}
+
 func (s *AnalyticsService) GetHiringEmployersByOccupationLevel(ctx context.Context, level string, id uint, fromDate, toDate time.Time, limit int) ([]models.EmployerDemand, error) {
 	if err := validateStandardAndLevel("occupation", level); err != nil {
 		return nil, err
@@ -26,7 +38,7 @@ func (s *AnalyticsService) GetHiringEmployersByOccupationLevel(ctx context.Conte
 	if err := validateDateRange(fromDate, toDate); err != nil {
 		return nil, err
 	}
-	return s.store.GetHiringEmployersByOccupationLevel(ctx, level, id, fromDate, toDate, limit)
+	return s.store.GetHiringEmployersByOccupationLevel(ctx, level, id, fromDate, toDate, s.HiringEmployersLimit(limit))
 }
 
 func (s *AnalyticsService) GetAllSkillsByOccupationLevel(ctx context.Context, level string, id uint, fromDate, toDate time.Time, limit, offset int) ([]models.SkillDemand, int64, error) {
@@ -36,7 +48,7 @@ func (s *AnalyticsService) GetAllSkillsByOccupationLevel(ctx context.Context, le
 	if err := validateDateRange(fromDate, toDate); err != nil {
 		return nil, 0, err
 	}
-	return s.store.GetAllSkillsByOccupationLevel(ctx, level, id, fromDate, toDate, limit, offset)
+	return s.store.GetAllSkillsByOccupationLevel(ctx, level, id, fromDate, toDate, s.SkillsPageLimit(limit), pageOffset(offset))
 }
 
 func (s *AnalyticsService) GetJobTypeByLevel(ctx context.Context, standard, level string, id uint, fromDate, toDate time.Time) ([]models.JobTypeJobCount, error) {
@@ -133,7 +145,7 @@ func (s *AnalyticsService) GetLevelChildren(ctx context.Context, standard, level
 	if err := validateStandardAndLevel(standard, level); err != nil {
 		return nil, "", err
 	}
-	if leafLevels[level] {
+	if models.IsLeafLevel(level) {
 		return nil, "", ValidationErrorf("'%s' is a leaf level and has no children", level)
 	}
 	if err := validateDateRange(fromDate, toDate); err != nil {

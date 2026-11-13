@@ -16,9 +16,36 @@ type CRUDService[T any] struct {
 	getByParent func(ctx context.Context, parentID uint, fromDate, toDate *time.Time) ([]T, error)
 
 	validate func(ctx context.Context, item *T) error
+
+	// paginated is set by WithPagination; pageDefault/pageMax are then the
+	// limit used when none is given and the largest limit allowed.
+	paginated   bool
+	pageDefault int
+	pageMax     int
 }
 
 type CRUDOption[T any] func(*CRUDService[T])
+
+// WithPagination makes GetAll apply a default and a maximum page size, for
+// resources too large to ever return whole (occupation groups, industry
+// subclasses). Without it GetAll leaves limit alone, and limit=0 means "all
+// rows", which the small lookup tables rely on.
+func WithPagination[T any](defaultLimit, maxLimit int) CRUDOption[T] {
+	return func(s *CRUDService[T]) {
+		s.paginated = true
+		s.pageDefault = defaultLimit
+		s.pageMax = maxLimit
+	}
+}
+
+// PageLimit returns the limit GetAll will actually use for a requested one,
+// so callers can echo it back in their response.
+func (s *CRUDService[T]) PageLimit(requested int) int {
+	if !s.paginated {
+		return requested
+	}
+	return pageLimit(requested, s.pageDefault, s.pageMax)
+}
 
 // WithParentLookups gives a hierarchy child-level entity its
 // "children of a parent id" reads.
@@ -73,6 +100,10 @@ func (s *CRUDService[T]) GetAll(ctx context.Context, limit, offset int, fromDate
 		if err := validateDateRange(*fromDate, *toDate); err != nil {
 			return nil, 0, err
 		}
+	}
+	if s.paginated {
+		limit = s.PageLimit(limit)
+		offset = pageOffset(offset)
 	}
 	return s.getAll(ctx, limit, offset, fromDate, toDate)
 }

@@ -30,12 +30,11 @@ func (h *Handler) GetHiringEmployersByOccupationLevelHandler(c *gin.Context) {
 		return
 	}
 
-	limit := 5
+	// Parsing only: 0 means "not given". The default and maximum are
+	// applied by the service.
+	limit := 0
 	if l := c.Query("limit"); l != "" {
 		if v, err := strconv.Atoi(l); err == nil && v > 0 {
-			if v > 100 {
-				v = 100
-			}
 			limit = v
 		}
 	}
@@ -74,14 +73,11 @@ func (h *Handler) GetAllSkillsByOccupationLevelHandler(c *gin.Context) {
 		return
 	}
 
-	limit := 20
-	offset := 0
-
+	// Parsing only: 0 means "not given". The default and maximum page size
+	// are applied by the service.
+	limit, offset := 0, 0
 	if l := c.Query("limit"); l != "" {
 		if v, err := strconv.Atoi(l); err == nil && v > 0 {
-			if v > 100 {
-				v = 100
-			}
 			limit = v
 		}
 	}
@@ -97,7 +93,7 @@ func (h *Handler) GetAllSkillsByOccupationLevelHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, skillsPaginatedResponse{Level: level, ID: id, FromDate: dr.FromStr, ToDate: dr.ToStr, Count: len(results), Total: total, Limit: limit, Offset: offset, Skills: results})
+	c.JSON(http.StatusOK, skillsPaginatedResponse{Level: level, ID: id, FromDate: dr.FromStr, ToDate: dr.ToStr, Count: len(results), Total: total, Limit: h.Analytics.SkillsPageLimit(limit), Offset: offset, Skills: results})
 }
 
 type jobTypeByLevelResponse struct {

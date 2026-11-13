@@ -5,6 +5,7 @@ import (
 
 	"marketlens-go-backend/internal/auth"
 	"marketlens-go-backend/internal/config"
+	"marketlens-go-backend/internal/ingestion"
 	"marketlens-go-backend/internal/mcpserver"
 	"marketlens-go-backend/internal/repositories"
 	"marketlens-go-backend/internal/service"
@@ -34,7 +35,17 @@ func main() {
 	}
 	mcpVerifier := auth.NewVerifier(mcpAuthCfg)
 
-	mcpServer := mcpserver.New(services)
+	// Only newspaper vacancy submission needs the LLM. If it isn't configured,
+	// start anyway so the read-only tools keep working; the submit tool then
+	// reports that it is unavailable.
+	var ingestionSvc *ingestion.IngestionService
+	if err := cfg.LLM.Validate(); err != nil {
+		log.Printf("llm not configured, newspaper vacancy submission is disabled: %v", err)
+	} else {
+		ingestionSvc = ingestion.NewServiceFromConfig(services, cfg.LLM, cfg.Ingestion)
+	}
+
+	mcpServer := mcpserver.New(services, ingestionSvc)
 
 	meta := mcpserver.Metadata{
 		ResourceID:    cfg.MCP.ResourceID,
