@@ -8,6 +8,7 @@ from crawl4ai import AsyncWebCrawler
 from bs4 import BeautifulSoup
 from PIL import Image
 from .base_crawler import BaseJobCrawler, CrawlResult
+from .source_names import GOVERNMENTJOBS
 from utils import ThunderAuth
 from parsers import GovernmentJobsParser
 from config import BATCH_SIZE
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 class GovernmentJobsCrawler(BaseJobCrawler):
-    SOURCE_NAME = "GovernmentJobs"
+    SOURCE_NAME = GOVERNMENTJOBS
 
     def __init__(self):
         super().__init__()

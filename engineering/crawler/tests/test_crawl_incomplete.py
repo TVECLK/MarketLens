@@ -7,14 +7,11 @@ from crawlers import (
     BaseJobCrawler,
     CrawlIncompleteError,
     CrawlResult,
-    GovernmentJobsCrawler,
-    IkmanCrawler,
     RoosterCrawler,
-    TopJobsCrawler,
-    XpressJobsCrawler,
 )
 from models import RawJobInput
 from parsers import BaseJobParser
+from crawlers.registry import CRAWLER_REGISTRY
 
 ROOSTER_URL = "https://api.rooster.jobs/jobSearch/jobs/search"
 
@@ -25,7 +22,7 @@ class _FakeParser(BaseJobParser):
 
 
 class _Crawler(BaseJobCrawler):
-    SOURCE_NAME = "Fake"
+    SOURCE_NAME = "fake"
 
     def __init__(self):
         super().__init__()
@@ -58,7 +55,7 @@ def test_finish_crawl_returns_a_result_with_the_crawl_counts():
     result = crawler._finish_crawl(usable_jobs=9)
 
     assert result == CrawlResult(
-        source_name="Fake", jobs_attempted=10, jobs_failed=1, usable_jobs=9
+        source_name="fake", jobs_attempted=10, jobs_failed=1, usable_jobs=9
     )
 
 
@@ -88,7 +85,7 @@ def test_all_page_failures_are_reported_together():
 
 
 def test_error_message_names_the_source():
-    with pytest.raises(CrawlIncompleteError, match="^Fake:"):
+    with pytest.raises(CrawlIncompleteError, match="^fake:"):
         _Crawler()._finish_crawl(usable_jobs=0)
 
 
@@ -182,7 +179,10 @@ async def test_rooster_clean_crawl_succeeds_and_saves_jobs():
 
     assert sum(len(batch) for batch in client.batches) == 2
     assert result == CrawlResult(
-        source_name="Rooster", jobs_attempted=2, jobs_failed=0, usable_jobs=2
+        source_name=RoosterCrawler.SOURCE_NAME,
+        jobs_attempted=2,
+        jobs_failed=0,
+        usable_jobs=2,
     )
 
 
@@ -387,19 +387,9 @@ def test_crawler_with_an_invalid_source_name_raises(bad_name):
         _BadCrawler()
 
 
-# These names must match the rows in the backend's `source` table
-@pytest.mark.parametrize(
-    "crawler_class, expected",
-    [
-        (RoosterCrawler, "Rooster"),
-        (IkmanCrawler, "Ikman"),
-        (TopJobsCrawler, "TopJobs"),
-        (GovernmentJobsCrawler, "GovernmentJobs"),
-        (XpressJobsCrawler, "XpressJobs"),
-    ],
-)
-def test_crawlers_pass_their_source_name_to_their_parser(crawler_class, expected):
+@pytest.mark.parametrize("name, crawler_class", CRAWLER_REGISTRY.items())
+def test_crawlers_pass_their_source_name_to_their_parser(name, crawler_class):
     crawler = crawler_class()
 
-    assert crawler.source_name == expected
-    assert crawler._parser._source_name == expected
+    assert crawler.source_name == name
+    assert crawler._parser._source_name == name

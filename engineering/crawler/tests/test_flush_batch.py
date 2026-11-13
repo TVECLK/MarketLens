@@ -7,6 +7,7 @@ import pytest
 from crawlers.base_crawler import MAX_RETRIES, RETRYABLE_STATUS_CODES
 from models import RawJobInput
 from utils import ThunderTokenError
+from fake_sources import SOURCE_A
 
 
 def make_job(job_id: str = "job-1", crawler_run_id: int = 1) -> RawJobInput:
@@ -17,7 +18,7 @@ def make_job(job_id: str = "job-1", crawler_run_id: int = 1) -> RawJobInput:
         location="Colombo",
         description="desc",
         crawler_run_id=crawler_run_id,
-        source="ikman",
+        source=SOURCE_A,
     )
 
 

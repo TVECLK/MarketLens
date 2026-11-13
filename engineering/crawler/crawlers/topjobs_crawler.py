@@ -11,6 +11,7 @@ from PIL import Image
 from playwright.async_api import async_playwright
 from pydantic import ValidationError
 from .base_crawler import BaseJobCrawler, CrawlResult
+from .source_names import TOPJOBS
 from utils import ThunderAuth
 from parsers import TopJobsParser
 from models import RawJobInput
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 class TopJobsCrawler(BaseJobCrawler):
-    SOURCE_NAME = "TopJobs"
+    SOURCE_NAME = TOPJOBS
 
     def __init__(self):
         super().__init__()

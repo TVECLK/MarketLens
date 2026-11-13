@@ -20,6 +20,11 @@ async def crawl_job():
         logger.exception("CRITICAL ERROR encountered during execution lifecycle")
         sys.exit(1)
 
+    # No active source is not a failure, there was just nothing to crawl
+    if succeeded_sources is None:
+        logger.info("--- Crawling Skipped: no active sources ---")
+        return
+
     # A run where no crawler succeeded must not look like a success to the scheduler
     if not succeeded_sources:
         logger.error("--- Crawling Failed: no crawler completed successfully ---")

@@ -8,13 +8,14 @@ from utils import ThunderIDClient
 from utils.crawler_run_manager import CrawlerManager
 from crawlers import BaseJobCrawler
 from parsers import BaseJobParser
+from fake_sources import SOURCE_A, SOURCE_B, SOURCE_C
 
 
 class _ConcreteCrawler(BaseJobCrawler):
     """BaseJobCrawler is abstract; _flush_batch is what we're testing and
     doesn't need a real crawl_jobs implementation behind it."""
 
-    SOURCE_NAME = "Fake"
+    SOURCE_NAME = "fake"
 
     async def crawl_jobs(self, crawler_run_id, async_client, thunder_auth):
         raise NotImplementedError
@@ -96,15 +97,23 @@ def make_crawler_class():
 
 
 @pytest.fixture
-def manager(backend_url, make_crawler_class):
-    """A CrawlerManager with two crawlers that succeed (Rooster, Ikman) and one
-    that raises (TopJobs)."""
-    manager = CrawlerManager()
-    manager._registry = {
-        "rooster": make_crawler_class("Rooster"),
-        "ikman": make_crawler_class("Ikman"),
-        "topjobs": make_crawler_class("TopJobs", error=RuntimeError("site down")),
+def crawlers(make_crawler_class):
+    """The active crawlers: two that succeed (source a, b) and one that raises
+    (source c)."""
+    return {
+        SOURCE_A: make_crawler_class(SOURCE_A),
+        SOURCE_B: make_crawler_class(SOURCE_B),
+        SOURCE_C: make_crawler_class(SOURCE_C, error=RuntimeError("site down")),
     }
+
+
+@pytest.fixture
+def manager(backend_url, crawlers):
+    """A CrawlerManager that has `crawlers` as its registry, and whose backend
+    reports them as the active ones."""
+    manager = CrawlerManager()
+    manager._registry = crawlers
+    manager.fetch_active_crawlers = AsyncMock(return_value=crawlers)
     return manager
 
 

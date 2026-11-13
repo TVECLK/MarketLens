@@ -5,6 +5,7 @@ import math
 from typing import List
 
 from .base_crawler import BaseJobCrawler, CrawlResult
+from .source_names import IKMAN
 from parsers import IkmanParser
 from utils import ThunderAuth
 from pydantic import ValidationError
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class IkmanCrawler(BaseJobCrawler):
-    SOURCE_NAME = "Ikman"
+    SOURCE_NAME = IKMAN
 
     def __init__(self):
         super().__init__()

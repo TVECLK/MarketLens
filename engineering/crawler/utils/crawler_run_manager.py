@@ -6,15 +6,8 @@ from typing import Dict, List, Optional, Type
 
 from config import BACKEND_BASE_URL
 
-from crawlers import (
-    BaseJobCrawler,
-    CrawlResult,
-    IkmanCrawler,
-    XpressJobsCrawler,
-    TopJobsCrawler,
-    RoosterCrawler,
-    GovernmentJobsCrawler,
-)
+from crawlers import BaseJobCrawler, CrawlResult
+from crawlers.registry import CRAWLER_REGISTRY
 from .thunder_id_client import ThunderAuth, ThunderIDClient
 
 logger = logging.getLogger(__name__)
@@ -24,15 +17,35 @@ HTTP_CLIENT_TIMEOUT_SECONDS = 300.0
 
 class CrawlerManager:
     def __init__(self):
-        self._registry: Dict[str, Type[BaseJobCrawler]] = {
-            "rooster": RoosterCrawler,
-            "xpress": XpressJobsCrawler,
-            "topjobs": TopJobsCrawler,
-            "governmentjobs": GovernmentJobsCrawler,
-            "ikman": IkmanCrawler,
-        }
+        self._registry: Dict[str, Type[BaseJobCrawler]] = {}
         self._thunder_client = ThunderIDClient()
         self._thunder_auth = ThunderAuth(self._thunder_client)
+
+    # This function asks the backend for the active sources and returns the crawlers
+    # of those sources, keyed by source name. It raises if the backend cannot be
+    # reached, so a failure never turns into crawling sources that were disabled
+    async def fetch_active_crawlers(
+        self, client: httpx.AsyncClient
+    ) -> Dict[str, Type[BaseJobCrawler]]:
+        response = await client.get(
+            f"{BACKEND_BASE_URL}/sources", auth=self._thunder_auth
+        )
+        response.raise_for_status()
+
+        active_names = {
+            source["name"].strip().lower() for source in response.json()["sources"]
+        }
+
+        for name in sorted(active_names - CRAWLER_REGISTRY.keys()):
+            logger.warning(f"Crawler: Active source '{name}' has no crawler, skipping.")
+        for name in sorted(CRAWLER_REGISTRY.keys() - active_names):
+            logger.info(f"Crawler: Source '{name}' is not active, skipping.")
+
+        return {
+            name: crawler_class
+            for name, crawler_class in CRAWLER_REGISTRY.items()
+            if name in active_names
+        }
 
     # This function created the new crawler session and return the new crawler run id
     async def _start_run(self, client: httpx.AsyncClient) -> int:
@@ -167,20 +180,23 @@ class CrawlerManager:
             logger.error(f"Crawler '{name}' failed: {e}", exc_info=True)
             return None
 
-    # This function calls the all crawlers one by one and send it to _run_crawler function.
-    # It returns the sources that crawled successfully
-    async def run_all_crawlers(
-        self, crawler_names: Optional[List[str]] = None, concurrent: bool = False
-    ) -> List[str]:
-        names = crawler_names or list(self._registry.keys())
-
+    # This function runs the crawlers of the active sources: it fetches them from the
+    # backend, starts a run, sends each crawler to _run_crawler (concurrently or one by
+    # one) and finalizes the run. It returns the sources that crawled successfully, or
+    # None if no source is active (nothing to crawl, so no run is created)
+    async def run_all_crawlers(self, concurrent: bool = False) -> Optional[List[str]]:
         async with httpx.AsyncClient(timeout=HTTP_CLIENT_TIMEOUT_SECONDS) as client:
+            # Fetched before the run starts, so a failure leaves no half-created run
+            self._registry = await self.fetch_active_crawlers(client)
+            if not self._registry:
+                logger.warning("Crawler: No active sources, nothing to crawl.")
+                return None
+
             crawler_run_id = await self._start_run(client)
 
             tasks = [
                 self._run_crawler(name, crawler_run_id, client)
-                for name in names
-                if name in self._registry
+                for name in self._registry
             ]
 
             if concurrent:

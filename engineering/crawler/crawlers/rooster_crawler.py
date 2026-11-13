@@ -8,6 +8,7 @@ from utils import ThunderAuth
 from config import BATCH_SIZE
 
 from .base_crawler import BaseJobCrawler, CrawlResult
+from .source_names import ROOSTER
 from parsers import RoosterParser
 from models import RawJobInput
 
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class RoosterCrawler(BaseJobCrawler):
-    SOURCE_NAME = "Rooster"
+    SOURCE_NAME = ROOSTER
 
     def __init__(self):
         super().__init__()
