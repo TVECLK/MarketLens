@@ -357,7 +357,7 @@ export default function SourcesPanel() {
                         <>
                           <RowAction
                             kind="edit"
-                            label="Update"
+                            label="Edit"
                             subject={source.name}
                             onClick={() => startEdit(source)}
                             disabled={renameDisabled}
