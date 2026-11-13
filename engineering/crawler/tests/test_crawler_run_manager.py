@@ -5,7 +5,6 @@ import httpx
 import pytest
 
 import main
-from utils.crawler_run_manager import CrawlerManager
 from fake_sources import SOURCE_A, SOURCE_B, SOURCE_C, UNREGISTERED_SOURCE
 
 
@@ -153,14 +152,6 @@ async def test_run_all_crawlers_creates_no_run_when_the_sources_cannot_be_fetche
 # ---------- fetch_active_crawlers ----------
 
 SOURCES_URL = "http://backend.test/api/v1/crawler/sources"
-
-
-# The `manager` fixture mocks fetch_active_crawlers, so these use the real method,
-# with `crawlers` as the crawlers that exist (the registry of all crawlers)
-@pytest.fixture
-def real_manager(backend_url, crawlers, monkeypatch):
-    monkeypatch.setattr("utils.crawler_run_manager.CRAWLER_REGISTRY", crawlers)
-    return CrawlerManager()
 
 
 def make_sources_client(names=None, error=None, status_code=200):
@@ -375,7 +366,10 @@ def patch_manager(monkeypatch, returned=None, error=None):
     `error`."""
     fake_manager = MagicMock()
     fake_manager.run_all_crawlers = AsyncMock(return_value=returned, side_effect=error)
-    monkeypatch.setattr(main, "CrawlerManager", lambda: fake_manager)
+    monkeypatch.setattr(main, "CrawlerManager", lambda alert_service: fake_manager)
+    fake_alert_service = AsyncMock()
+    monkeypatch.setattr(main, "EmailAlertService", lambda: fake_alert_service)
+    fake_manager.alert_service = fake_alert_service
     return fake_manager
 
 
@@ -397,12 +391,23 @@ async def test_crawl_job_exits_with_1_when_no_source_succeeded(monkeypatch):
 
 
 async def test_crawl_job_exits_with_1_when_the_run_raises(monkeypatch):
-    patch_manager(monkeypatch, error=RuntimeError("backend down"))
+    fake_manager = patch_manager(monkeypatch, error=RuntimeError("backend down"))
 
     with pytest.raises(SystemExit) as exit_info:
         await main.crawl_job()
 
     assert exit_info.value.code == 1
+    fake_manager.alert_service.send_crash_alert.assert_awaited_once()
+    error = fake_manager.alert_service.send_crash_alert.await_args.args[0]
+    assert str(error) == "backend down"
+
+
+async def test_crawl_job_sends_no_crash_alert_when_the_run_does_not_crash(monkeypatch):
+    fake_manager = patch_manager(monkeypatch, returned=[SOURCE_A])
+
+    await main.crawl_job()
+
+    fake_manager.alert_service.send_crash_alert.assert_not_awaited()
 
 
 async def test_crawl_job_does_not_exit_when_no_source_is_active(monkeypatch):
