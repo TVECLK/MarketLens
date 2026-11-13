@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import SourceDialog from "@/components/sources/SourceDialog";
-import { confirmsSourceName } from "@/lib/source-name";
+import { confirmsSourceName, displaySourceName } from "@/lib/source-name";
 import { THEME } from "@/lib/theme";
 import type { Source } from "@/types/source";
 
@@ -21,11 +21,12 @@ interface DeleteSourceModalProps {
 export default function DeleteSourceModal({ source, isPending, error, onCancel, onConfirm }: DeleteSourceModalProps) {
   const [typed, setTyped] = useState("");
   const isAuto = source.type === "auto";
+  const displayName = displaySourceName(source.name);
   const canConfirm = !isPending && (!isAuto || confirmsSourceName(typed, source.name));
 
   return (
     <SourceDialog
-      title={isAuto ? `Delete automatic source "${source.name}"?` : `Delete "${source.name}"?`}
+      title={isAuto ? `Delete automatic source "${displayName}"?` : `Delete "${displayName}"?`}
       onClose={onCancel}
       onSubmit={() => canConfirm && onConfirm()}
       size={isAuto ? "md" : "sm"}
@@ -54,8 +55,8 @@ export default function DeleteSourceModal({ source, isPending, error, onCancel, 
             <p className="font-bold">This affects automatic collection.</p>
             <ul className="list-disc pl-4 space-y-1">
               <li>
-                Jobs collected for {source.name} will be <strong>rejected</strong> until a source named exactly{" "}
-                <code className="font-mono bg-white/70 px-1 rounded">{source.name}</code> exists again.
+                Jobs collected for {displayName} will be <strong>rejected</strong> until a source named{" "}
+                <code className="font-mono bg-white/70 px-1 rounded">{displayName}</code> exists again.
               </li>
               <li>
                 Its open jobs <strong>stay open</strong> and won&apos;t be closed automatically.
@@ -68,7 +69,7 @@ export default function DeleteSourceModal({ source, isPending, error, onCancel, 
           </p>
           <div>
             <label htmlFor="confirm-source-name" className={THEME.form.label}>
-              Type <span className="font-mono normal-case text-gray-700">{source.name}</span> to confirm
+              Type <span className="font-mono normal-case text-gray-700">{displayName}</span> to confirm
             </label>
             <input
               id="confirm-source-name"

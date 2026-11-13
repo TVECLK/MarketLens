@@ -1,6 +1,7 @@
 "use client";
 
 import SourceDialog from "@/components/sources/SourceDialog";
+import { displaySourceName } from "@/lib/source-name";
 import { THEME } from "@/lib/theme";
 import type { Source } from "@/types/source";
 
@@ -13,9 +14,10 @@ interface DisableSourceModalProps {
 
 /** Confirms turning a source off, explaining what that does for its type. */
 export default function DisableSourceModal({ source, isPending, onCancel, onConfirm }: DisableSourceModalProps) {
+  const displayName = displaySourceName(source.name);
   return (
     <SourceDialog
-      title={`Disable "${source.name}"?`}
+      title={`Disable "${displayName}"?`}
       onClose={onCancel}
       footer={
         <>
@@ -40,7 +42,7 @@ export default function DisableSourceModal({ source, isPending, onCancel, onConf
       {source.type === "auto" ? (
         <ul className="list-disc pl-4 space-y-1">
           <li>
-            Automatic collection from <strong className="text-gray-800">{source.name}</strong> stops from the next
+            Automatic collection from <strong className="text-gray-800">{displayName}</strong> stops from the next
             run, and any jobs still collected for it are rejected.
           </li>
           <li>Its open jobs stay open until you enable it again.</li>
@@ -48,7 +50,7 @@ export default function DisableSourceModal({ source, isPending, onCancel, onConf
       ) : (
         <ul className="list-disc pl-4 space-y-1">
           <li>
-            New uploads from <strong className="text-gray-800">{source.name}</strong> will be rejected.
+            New uploads from <strong className="text-gray-800">{displayName}</strong> will be rejected.
           </li>
           <li>Existing jobs are kept.</li>
         </ul>

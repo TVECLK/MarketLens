@@ -20,6 +20,7 @@ import DeleteSourceModal from "@/components/sources/DeleteSourceModal";
 import DisableSourceModal from "@/components/sources/DisableSourceModal";
 import SourceStatusSwitch from "@/components/sources/SourceStatusSwitch";
 import { getErrorMessage } from "@/lib/errors";
+import { displaySourceName, normalizeSourceName } from "@/lib/source-name";
 import { CRUD_ACTIONS, RESOURCE_SCOPES } from "@/lib/scopes";
 import { THEME } from "@/lib/theme";
 import { SOURCE_TYPE_LABELS, SOURCE_TYPES, type Source, type SourceType } from "@/types/source";
@@ -35,7 +36,7 @@ const FILTER_TABS: { key: TypeFilter; label: string }[] = [
 ];
 
 const LINKED_NAME_HINT =
-  "Linked to a data collector. The name must match exactly (case-sensitive), or new jobs from it are rejected.";
+  "Linked to a data collector. The name must match it, or new jobs from it are rejected.";
 const AUTO_RENAME_HINT = "Automatic sources can't be renamed: the name must match its data collector exactly.";
 
 /** Automatic sources first, then by name. */
@@ -94,11 +95,11 @@ export default function SourcesPanel() {
       {
         onSuccess: () => {
           setDisableTarget(null);
-          flashToast(`"${source.name}" ${isActive ? "enabled" : "disabled"}`);
+          flashToast(`"${displaySourceName(source.name)}" ${isActive ? "enabled" : "disabled"}`);
         },
         onError: (err) => {
           setDisableTarget(null);
-          flashToast(getErrorMessage(err, `Couldn't update "${source.name}".`));
+          flashToast(getErrorMessage(err, `Couldn't update "${displaySourceName(source.name)}".`));
         },
       },
     );
@@ -129,7 +130,7 @@ export default function SourcesPanel() {
     // One rename at a time: overlapping requests could save an older name last. Enter in the input
     // reaches here even while the Save button is disabled.
     if (renameMut.isPending) return;
-    const name = editName.trim();
+    const name = normalizeSourceName(editName);
     if (!name) return setEditError("Name is required.");
     if (name === source.name) return cancelEdit();
     // The editor that sent this request. If another one has been opened (or this one closed) by the
@@ -141,11 +142,11 @@ export default function SourcesPanel() {
       {
         onSuccess: () => {
           if (isSameEditor()) cancelEdit();
-          flashToast(`Renamed to "${name}"`);
+          flashToast(`Renamed to "${displaySourceName(name)}"`);
         },
         onError: (err) => {
           if (!isSameEditor()) {
-            flashToast(getErrorMessage(err, `Couldn't rename "${source.name}".`));
+            flashToast(getErrorMessage(err, `Couldn't rename "${displaySourceName(source.name)}".`));
             return;
           }
           const message = getErrorMessage(err, "Failed to rename source.");
@@ -293,7 +294,7 @@ export default function SourcesPanel() {
                           value={editName}
                           onChange={(e) => setEditName(e.target.value)}
                           onKeyDown={(e) => onEditKey(e, source)}
-                          aria-label={`New name for ${source.name}`}
+                          aria-label={`New name for ${displaySourceName(source.name)}`}
                           disabled={renameMut.isPending}
                           className="w-full bg-gray-50 rounded-lg p-2 text-xs font-semibold border border-gray-200 outline-none focus:ring-2 focus:ring-offset-0 disabled:opacity-60 disabled:cursor-not-allowed"
                           autoFocus
@@ -302,7 +303,7 @@ export default function SourcesPanel() {
                       </>
                     ) : (
                       <div className={`flex items-center gap-2 ${source.is_active ? "" : "opacity-50"}`}>
-                        <span className={`font-bold text-gray-800 ${isAuto ? "font-mono" : ""}`}>{source.name}</span>
+                        <span className={`font-bold text-gray-800 ${isAuto ? "font-mono" : ""}`}>{displaySourceName(source.name)}</span>
                         {isAuto && (
                           <span
                             title={LINKED_NAME_HINT}
@@ -322,7 +323,7 @@ export default function SourcesPanel() {
                     <div className="flex items-center gap-2">
                       <SourceStatusSwitch
                         checked={source.is_active}
-                        label={source.name}
+                        label={displaySourceName(source.name)}
                         onChange={(next) => onToggle(source, next)}
                         disabled={updateProps.disabled || statusBusy}
                         title={updateProps.title}
@@ -358,7 +359,7 @@ export default function SourcesPanel() {
                           <RowAction
                             kind="edit"
                             label="Edit"
-                            subject={source.name}
+                            subject={displaySourceName(source.name)}
                             onClick={() => startEdit(source)}
                             disabled={renameDisabled}
                             title={updateProps.title ?? (isAuto ? AUTO_RENAME_HINT : undefined)}
@@ -367,7 +368,7 @@ export default function SourcesPanel() {
                           <RowAction
                             kind="delete"
                             label="Delete"
-                            subject={source.name}
+                            subject={displaySourceName(source.name)}
                             onClick={() => requestDelete(source)}
                             {...deleteProps}
                           />
@@ -390,7 +391,7 @@ export default function SourcesPanel() {
           onCancel={() => setShowAdd(false)}
           onCreated={(source) => {
             setShowAdd(false);
-            flashToast(`"${source.name}" added`);
+            flashToast(`"${displaySourceName(source.name)}" added`);
           }}
         />
       )}

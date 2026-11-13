@@ -1,68 +1,88 @@
 import { describe, expect, it } from "vitest";
 import {
   confirmsSourceName,
-  findCaseOnlyNameMatch,
+  displaySourceName,
   findExactNameMatch,
   hasInnerWhitespace,
   hasOuterWhitespace,
+  hasUppercase,
   normalizeSourceName,
   visibleWhitespace,
 } from "@/lib/source-name";
 
-const sources = [{ name: "Ikman" }, { name: "TopJobs" }, { name: "Daily News" }];
+const sources = [{ name: "ikman" }, { name: "TopJobs" }, { name: "daily news" }];
 
 describe("normalizeSourceName", () => {
-  it("trims like the backend does", () => {
-    expect(normalizeSourceName("  Ikman \t")).toBe("Ikman");
+  it("trims and lowercases", () => {
+    expect(normalizeSourceName("  Ikman \t")).toBe("ikman");
+    expect(normalizeSourceName("JobSiteLK")).toBe("jobsitelk");
+  });
+});
+
+describe("displaySourceName", () => {
+  it("capitalizes the first letter", () => {
+    expect(displaySourceName("ikman")).toBe("Ikman");
+    expect(displaySourceName("daily news")).toBe("Daily news");
+  });
+
+  it("leaves the rest and empty names alone", () => {
+    expect(displaySourceName("TopJobs")).toBe("TopJobs");
+    expect(displaySourceName("")).toBe("");
   });
 });
 
 describe("hasOuterWhitespace", () => {
   it("is true when saving would trim something", () => {
-    expect(hasOuterWhitespace(" Ikman")).toBe(true);
-    expect(hasOuterWhitespace("Ikman ")).toBe(true);
+    expect(hasOuterWhitespace(" ikman")).toBe(true);
+    expect(hasOuterWhitespace("ikman ")).toBe(true);
   });
 
-  it("is false for a clean name or blank input", () => {
+  it("is false for a clean name, whatever its case, or blank input", () => {
     expect(hasOuterWhitespace("Ikman")).toBe(false);
     expect(hasOuterWhitespace("   ")).toBe(false);
+  });
+});
+
+describe("hasUppercase", () => {
+  it("is true when saving would lowercase something", () => {
+    expect(hasUppercase(" Ikman ")).toBe(true);
+  });
+
+  it("is false for lowercase or blank input", () => {
+    expect(hasUppercase(" ikman ")).toBe(false);
+    expect(hasUppercase("")).toBe(false);
   });
 });
 
 describe("hasInnerWhitespace / visibleWhitespace", () => {
   it("flags and shows spaces inside the saved name only", () => {
     expect(hasInnerWhitespace("  New Crawler ")).toBe(true);
-    expect(visibleWhitespace("  New Crawler ")).toBe("New·Crawler");
+    expect(visibleWhitespace("  New Crawler ")).toBe("new·crawler");
     expect(hasInnerWhitespace(" Ikman ")).toBe(false);
-    expect(visibleWhitespace(" Ikman ")).toBe("Ikman");
+    expect(visibleWhitespace(" Ikman ")).toBe("ikman");
   });
 });
 
 describe("findExactNameMatch", () => {
-  it("matches the saved name exactly", () => {
-    expect(findExactNameMatch(" Ikman ", sources)).toEqual({ name: "Ikman" });
-    expect(findExactNameMatch("ikman", sources)).toBeUndefined();
-  });
-});
-
-describe("findCaseOnlyNameMatch", () => {
-  it("finds a name that differs only in letter case", () => {
-    expect(findCaseOnlyNameMatch("ikman", sources)).toEqual({ name: "Ikman" });
-    expect(findCaseOnlyNameMatch(" TOPJOBS ", sources)).toEqual({ name: "TopJobs" });
+  it("matches the saved name, ignoring case", () => {
+    expect(findExactNameMatch(" Ikman ", sources)).toEqual({ name: "ikman" });
+    expect(findExactNameMatch("DAILY NEWS", sources)).toEqual({ name: "daily news" });
   });
 
-  it("ignores an exact match, a different name and blank input", () => {
-    expect(findCaseOnlyNameMatch("Ikman", sources)).toBeUndefined();
-    expect(findCaseOnlyNameMatch("Rooster", sources)).toBeUndefined();
-    expect(findCaseOnlyNameMatch("  ", sources)).toBeUndefined();
+  it("still finds names saved before lowercasing", () => {
+    expect(findExactNameMatch("topjobs", sources)).toEqual({ name: "TopJobs" });
+  });
+
+  it("finds nothing for a different name", () => {
+    expect(findExactNameMatch("rooster", sources)).toBeUndefined();
   });
 });
 
 describe("confirmsSourceName", () => {
-  it("needs the exact, case-sensitive name", () => {
-    expect(confirmsSourceName("Ikman", "Ikman")).toBe(true);
-    expect(confirmsSourceName(" Ikman ", "Ikman")).toBe(true);
-    expect(confirmsSourceName("ikman", "Ikman")).toBe(false);
-    expect(confirmsSourceName("Ikma", "Ikman")).toBe(false);
+  it("needs the same name, ignoring case and outer spaces", () => {
+    expect(confirmsSourceName("ikman", "ikman")).toBe(true);
+    expect(confirmsSourceName(" Ikman ", "ikman")).toBe(true);
+    expect(confirmsSourceName("topjobs", "TopJobs")).toBe(true);
+    expect(confirmsSourceName("ikma", "ikman")).toBe(false);
   });
 });

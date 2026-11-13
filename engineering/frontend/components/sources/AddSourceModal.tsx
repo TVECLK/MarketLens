@@ -5,10 +5,11 @@ import { LockClosedIcon } from "@heroicons/react/16/solid";
 import SourceDialog from "@/components/sources/SourceDialog";
 import { getErrorMessage } from "@/lib/errors";
 import {
-  findCaseOnlyNameMatch,
+  displaySourceName,
   findExactNameMatch,
   hasInnerWhitespace,
   hasOuterWhitespace,
+  hasUppercase,
   normalizeSourceName,
   visibleWhitespace,
 } from "@/lib/source-name";
@@ -29,9 +30,9 @@ const TYPE_CARDS: { type: SourceType; title: string; description: string }[] = [
 ];
 
 /**
- * Adds a source. One form that adapts to the type: an auto source's name must exactly match its
- * crawler's SOURCE_NAME, so for auto the name is shown exactly as it will be saved, mistakes that
- * break the match are flagged, and the admin confirms before adding.
+ * Adds a source. Names are saved in lowercase. One form that adapts to the type: an auto source's
+ * name must match its crawler's SOURCE_NAME, so for auto the name is shown exactly as it will be
+ * saved, mistakes that break the match are flagged, and the admin confirms before adding.
  */
 export default function AddSourceModal({ existing, create, isPending, onCancel, onCreated }: AddSourceModalProps) {
   const [type, setType] = useState<SourceType>("manual");
@@ -45,7 +46,6 @@ export default function AddSourceModal({ existing, create, isPending, onCancel, 
   const isAuto = type === "auto";
   const saved = normalizeSourceName(name);
   const taken = findExactNameMatch(name, existing);
-  const caseOnlyMatch = findCaseOnlyNameMatch(name, existing);
   const canSubmit = !isPending && saved !== "" && !taken && (!isAuto || confirmed);
 
   // A confirmation is for one exact name and type: changing either asks again.
@@ -145,19 +145,15 @@ export default function AddSourceModal({ existing, create, isPending, onCancel, 
           className={`${THEME.form.input} ${isAuto ? "font-mono" : ""}`}
         />
         {taken && (
-          <p className="text-[11px] font-bold text-red-500 mt-1.5">A source named &quot;{taken.name}&quot; already exists.</p>
-        )}
-        {!taken && caseOnlyMatch && (
-          <p className="text-[11px] font-bold text-amber-700 mt-1.5">
-            Similar to existing source &quot;{caseOnlyMatch.name}&quot;. Names are case-sensitive, so this would be a
-            separate source.
+          <p className="text-[11px] font-bold text-red-500 mt-1.5">
+            A source named &quot;{displaySourceName(taken.name)}&quot; already exists.
           </p>
         )}
       </div>
 
       {isAuto && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2 text-amber-900">
-          <p className="font-bold">Must match the crawler exactly</p>
+          <p className="font-bold">Must match the crawler</p>
           <p className="text-[11px]">
             Use the exact name configured in the crawler (<code className="font-mono">SOURCE_NAME</code>),
             or the jobs it collects will be rejected.
@@ -169,7 +165,8 @@ export default function AddSourceModal({ existing, create, isPending, onCancel, 
             </code>
           </p>
           <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
-            <li>Case-sensitive: &quot;jobsitelk&quot; and &quot;JobSiteLK&quot; are different names.</li>
+            <li>Names are saved in lowercase: &quot;JobSiteLK&quot; is saved as &quot;jobsitelk&quot;.</li>
+            {hasUppercase(name) && <li className="font-bold">Capital letters will be saved as lowercase.</li>}
             {hasOuterWhitespace(name) && <li className="font-bold">Leading/trailing spaces will be removed.</li>}
             {hasInnerWhitespace(name) && (
               <li className="font-bold">Contains spaces (shown as ·). Check the crawler&apos;s name has them too.</li>
@@ -184,7 +181,7 @@ export default function AddSourceModal({ existing, create, isPending, onCancel, 
               disabled={!saved}
               className="mt-0.5 cursor-pointer disabled:cursor-not-allowed"
             />
-            <span className="font-semibold">I&apos;ve confirmed the crawler uses exactly this name.</span>
+            <span className="font-semibold">I&apos;ve confirmed the crawler uses this name.</span>
           </label>
         </div>
       )}
