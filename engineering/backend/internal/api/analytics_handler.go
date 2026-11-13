@@ -30,6 +30,8 @@ func (h *Handler) GetHiringEmployersByOccupationLevelHandler(c *gin.Context) {
 		return
 	}
 
+	// Part of 8 (see occupation_handler.go): move this limit clamp into the
+	// service layer so MCP gets it too.
 	limit := 5
 	if l := c.Query("limit"); l != "" {
 		if v, err := strconv.Atoi(l); err == nil && v > 0 {
@@ -74,6 +76,8 @@ func (h *Handler) GetAllSkillsByOccupationLevelHandler(c *gin.Context) {
 		return
 	}
 
+	// Part of 8 (see occupation_handler.go): move this limit clamp into the
+	// service layer so MCP gets it too.
 	limit := 20
 	offset := 0
 

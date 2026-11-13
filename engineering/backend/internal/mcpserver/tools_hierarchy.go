@@ -31,10 +31,23 @@ func registerHierarchyTools(server *mcp.Server, svcs *service.Services) {
 		svcs.UnitGroups.GetByID)
 
 	// Paginated
+	// 10. Tell the model to prefer drilling down over paging: e.g. "To find
+	// a specific occupation group, drill down with get_hierarchy_children
+	// from get_major_groups instead of paging through this list." Paging
+	// through every leaf row to find one item costs many calls and tokens;
+	// drilling down is ~5 small calls. Also say how to page: "returns total;
+	// next page is offset + limit, stop when offset >= total."
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_occupation_groups",
 		Description: "List occupation groups (leaf level of the SLSO hierarchy), paginated.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in struct {
+		// 9. Add ",omitempty" to the limit and offset json tags. Without it,
+		// jsonschema-go marks these fields as required (infer.go:343) and the
+		// SDK rejects calls that leave them out - so the model always has to
+		// pick a limit itself (often a big one) and the "default 20" below
+		// never kicks in. Same for get_industry_subclasses,
+		// get_all_skills_by_occupation and
+		// get_top_hiring_employers_by_occupation (marked "part of 9").
 		Limit  int `json:"limit" jsonschema:"max rows to return, default 20"`
 		Offset int `json:"offset" jsonschema:"rows to skip, default 0"`
 	}) (*mcp.CallToolResult, any, error) {
@@ -72,10 +85,13 @@ func registerHierarchyTools(server *mcp.Server, svcs *service.Services) {
 		svcs.IndustryClasses.GetByID)
 
 	// Paginated
+	// Part of 10: point to drilling down with get_hierarchy_children from
+	// get_industry_sectors instead of paging, and say how to page.
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_industry_subclasses",
 		Description: "List industry subclasses (leaf level of the SLSIC hierarchy), paginated.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in struct {
+		// Part of 9: add ",omitempty" to limit and offset.
 		Limit  int `json:"limit" jsonschema:"max rows to return, default 20"`
 		Offset int `json:"offset" jsonschema:"rows to skip, default 0"`
 	}) (*mcp.CallToolResult, any, error) {
@@ -129,6 +145,10 @@ func registerHierarchyTools(server *mcp.Server, svcs *service.Services) {
 // from/to date query params every breakdown endpoint requires.
 type levelInput struct {
 	Standard string `json:"standard" jsonschema:"'occupation' or 'industry'"`
+	// 2. List all ten valid level values here (5 occupation, 5 industry) and
+	// say the level must match the standard - right now the model only sees
+	// two examples and has to guess the rest. This struct is shared by all
+	// the *_by_level tools and get_hierarchy_children, so one edit fixes 11 tools.
 	Level    string `json:"level" jsonschema:"the hierarchy level name, e.g. 'major-group' or 'industry-sector'"`
 	ID       uint   `json:"id" jsonschema:"the numeric id at that level"`
 	FromDate string `json:"from_date" jsonschema:"start date, format YYYY-MM-DD"`

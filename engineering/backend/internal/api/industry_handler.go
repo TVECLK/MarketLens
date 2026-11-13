@@ -531,6 +531,8 @@ func (h *Handler) CreateIndustrySubclassHandler(c *gin.Context) {
 }
 
 func (h *Handler) GetAllIndustrySubclassesHandler(c *gin.Context) {
+	// Part of 8 (see occupation_handler.go): move this limit clamp into the
+	// service layer so MCP gets it too.
 	limit := 20
 	offset := 0
 

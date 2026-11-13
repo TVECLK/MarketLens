@@ -81,6 +81,8 @@ func New(svcs *service.Services) *mcp.Server {
 		Version: "v1.0.0",
 	}, nil)
 
+	// 1. Lets pass in server instructions too so the server has a
+	// good idea of how tools are connected and related to each other.
 	registerLookupTools(server, svcs)
 	registerHierarchyTools(server, svcs)
 	registerAnalysisTools(server, svcs)
@@ -186,6 +188,11 @@ func plainGetAll[T any](getAll func(ctx context.Context, limit, offset int, from
 }
 
 func registerLookupTools(server *mcp.Server, svcs *service.Services) {
+	// 5. Make each description say it's a reference list only (no counts)
+	// and point to the matching get_*_by_level tool for counts, e.g.
+	// get_provinces -> get_province_by_level. Also swap hardcoded value
+	// lists like "(Full Time, Part Time, ...)" for short "e.g." examples
+	// so they don't go stale when the DB changes.
 	registerNoArgTool(server, "get_experiences", "List all experience levels.",
 		plainGetAll(svcs.Experiences.GetAll))
 
