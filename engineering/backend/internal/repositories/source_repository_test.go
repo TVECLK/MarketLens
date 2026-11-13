@@ -9,6 +9,7 @@ import (
 
 	"marketlens-go-backend/internal/models"
 	"marketlens-go-backend/internal/repositories"
+	"marketlens-go-backend/internal/testutil"
 )
 
 // loadSourceUnscoped reads a source including soft-deleted rows.
@@ -101,7 +102,7 @@ func TestStore_CreateSource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db := SetupTestDB(t)
+			db := testutil.SetupTestDB(t)
 			store := repositories.NewStore(db)
 
 			var reuseID uint
@@ -148,7 +149,7 @@ func TestStore_CreateSource(t *testing.T) {
 
 // A restored source keeps its id, so jobs saved before the delete still point at it.
 func TestStore_CreateSource_RestoreKeepsJobsLinked(t *testing.T) {
-	db := SetupTestDB(t)
+	db := testutil.SetupTestDB(t)
 	store := repositories.NewStore(db)
 	ctx := context.Background()
 
@@ -189,7 +190,7 @@ func TestStore_Sources_Delete(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db := SetupTestDB(t)
+			db := testutil.SetupTestDB(t)
 			store := repositories.NewStore(db)
 			ctx := context.Background()
 
