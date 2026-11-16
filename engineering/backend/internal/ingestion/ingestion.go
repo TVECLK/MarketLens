@@ -172,7 +172,7 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 			continue
 		}
 		if isDuplicate {
-			if err := s.jobPosts.UpdateDuplicateJob(ctx, uint(matchedJobID), raw.CrawlerRunID); err != nil {
+			if err := s.jobPosts.UpdateDuplicateJob(ctx, matchedJobID, raw.CrawlerRunID); err != nil {
 				failures = append(failures, FailedJob{
 					JobID:      raw.JobID,
 					StatusCode: http.StatusServiceUnavailable,

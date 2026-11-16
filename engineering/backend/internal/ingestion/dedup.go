@@ -180,7 +180,7 @@ func CheckDuplicate(
 	currentSig []uint32,
 	incomingLocation string,
 	jaccardThreshold float64,
-) (bool, int64, error) {
+) (bool, uint, error) {
 	bucketKeys := make([]string, len(lshIndexes))
 	for i, idx := range lshIndexes {
 		bucketKeys[i] = idx.BucketKey
@@ -219,7 +219,7 @@ func CheckDuplicate(
 
 		if jaccardValue >= jaccardThreshold {
 			log.Printf("duplicate found: jaccard=%.2f matched_job_id=%d", jaccardValue, job.ID)
-			return true, int64(job.ID), nil
+			return true, job.ID, nil
 		}
 	}
 

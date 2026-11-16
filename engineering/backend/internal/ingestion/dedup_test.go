@@ -218,7 +218,7 @@ func TestCheckDuplicate(t *testing.T) {
 			if isDuplicate != tt.wantDuplicate {
 				t.Fatalf("expected duplicate=%t, got %t", tt.wantDuplicate, isDuplicate)
 			}
-			if tt.wantDuplicate && matchedID != int64(seededID) {
+			if tt.wantDuplicate && matchedID != seededID {
 				t.Errorf("expected matched job ID %d, got %d", seededID, matchedID)
 			}
 			if !tt.wantDuplicate && matchedID != 0 {
