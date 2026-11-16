@@ -400,3 +400,52 @@ func TestProcessBatch_Failures(t *testing.T) {
 		})
 	}
 }
+
+// TestProcessBatch_LLMRejectsRequests checks that an LLM API rejecting
+// every call is reported by status: a bad key or endpoint (401, 403, 404)
+// or an outage is 503, so the crawler retries and keeps the job, while the
+// LLM refusing the prompt itself (400) stays a 422 that the crawler drops.
+func TestProcessBatch_LLMRejectsRequests(t *testing.T) {
+	tests := []struct {
+		name       string
+		llmStatus  int
+		wantStatus int
+	}{
+		{"401 bad or expired key is retryable", http.StatusUnauthorized, http.StatusServiceUnavailable},
+		{"403 key without access is retryable", http.StatusForbidden, http.StatusServiceUnavailable},
+		{"404 wrong URL or model is retryable", http.StatusNotFound, http.StatusServiceUnavailable},
+		{"429 rate limit is retryable", http.StatusTooManyRequests, http.StatusServiceUnavailable},
+		{"500 server error is retryable", http.StatusInternalServerError, http.StatusServiceUnavailable},
+		{"400 rejected prompt is the job's fault", http.StatusBadRequest, http.StatusUnprocessableEntity},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupDB(t)
+			svcs := newServices(db)
+			client := mocks.NewMockLLMStatus(t, tt.llmStatus)
+			svc := ingestion.NewIngestionService(
+				svcs.JobPosts,
+				svcs.Sources,
+				client,
+				"test-model",
+				newIndustryClassifier(svcs, client),
+				newOccupationClassifier(svcs, client),
+				newMetadataBuilder(svcs, 0),
+				0.65,
+			)
+
+			failed := svc.ProcessBatch(context.Background(), []ingestion.RawJobInput{ceylonJob})
+
+			if len(failed) != 1 {
+				t.Fatalf("expected 1 failure, got %d (%+v)", len(failed), failed)
+			}
+			if failed[0].StatusCode != tt.wantStatus {
+				t.Errorf("expected status %d, got %d (%s)", tt.wantStatus, failed[0].StatusCode, failed[0].Error)
+			}
+			if n := countRows(t, db, &models.JobPost{}); n != 0 {
+				t.Errorf("expected no job saved, got %d", n)
+			}
+		})
+	}
+}

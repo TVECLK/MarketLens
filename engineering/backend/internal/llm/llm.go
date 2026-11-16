@@ -11,9 +11,11 @@ import (
 )
 
 // ErrTransient marks a failure as retryable: a network problem, the LLM
-// timing out (408) or rate limiting (429) or erroring (5xx), or the LLM
-// responding with unparseable/empty content. None of these are about the
-// prompt's own content — a retry later should succeed.
+// timing out (408) or rate limiting (429) or erroring (5xx), the LLM
+// responding with unparseable/empty content, or a rejected key or
+// endpoint (401, 403, 404). None of these are about the prompt's own
+// content: a retry later should succeed, once the service recovers or an
+// operator fixes the key, URL or model.
 var ErrTransient = errors.New("transient llm failure")
 
 // Config holds the chat-completion provider's settings, loaded once from
@@ -117,7 +119,7 @@ func (c *Client) Chat(ctx context.Context, prompt string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+	if isTransientStatus(resp.StatusCode) {
 		return "", fmt.Errorf("%w: llm returned status %d", ErrTransient, resp.StatusCode)
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -133,4 +135,18 @@ func (c *Client) Chat(ctx context.Context, prompt string) (string, error) {
 	}
 
 	return parsed.Choices[0].Message.Content, nil
+}
+
+// isTransientStatus reports whether an HTTP status says the problem is
+// the LLM service or our configuration of it, not the prompt. 401, 403
+// and 404 (bad or expired key, key without access, wrong LLM_API_URL or
+// model) are included: they affect every job alike, so they must not be
+// reported as the job's own fault, which would make the crawler drop it.
+func isTransientStatus(status int) bool {
+	switch status {
+	case http.StatusRequestTimeout, http.StatusTooManyRequests,
+		http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
+		return true
+	}
+	return status >= 500
 }
