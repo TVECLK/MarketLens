@@ -51,7 +51,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: engineering/backend/go.mod
+          go-version: "1.26"
           cache: true
           cache-dependency-path: engineering/backend/go.sum
 
