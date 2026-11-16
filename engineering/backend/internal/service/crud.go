@@ -67,7 +67,7 @@ func (s *CRUDService[T]) Create(ctx context.Context, item *T) error {
 	}
 	return s.create(ctx, item)
 }
- 
+
 func (s *CRUDService[T]) GetAll(ctx context.Context, limit, offset int, fromDate, toDate *time.Time) ([]T, int64, error) {
 	if fromDate != nil && toDate != nil {
 		if err := validateDateRange(*fromDate, *toDate); err != nil {

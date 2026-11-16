@@ -16,7 +16,7 @@ type updateEmploymentSectorInput struct {
 }
 
 type employmentSectorListResponse struct {
-	Count             int                        `json:"count"`
+	Count             int                       `json:"count"`
 	EmploymentSectors []models.EmploymentSector `json:"employment_sectors"`
 }
 

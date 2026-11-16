@@ -101,12 +101,12 @@ func (h *Handler) GetAllSkillsByOccupationLevelHandler(c *gin.Context) {
 }
 
 type jobTypeByLevelResponse struct {
-	Standard string                     `json:"standard"`
-	Level    string                     `json:"level"`
-	ID       uint                       `json:"id"`
-	FromDate string                     `json:"from_date"`
-	ToDate   string                     `json:"to_date"`
-	Count    int                        `json:"count"`
+	Standard string                   `json:"standard"`
+	Level    string                   `json:"level"`
+	ID       uint                     `json:"id"`
+	FromDate string                   `json:"from_date"`
+	ToDate   string                   `json:"to_date"`
+	Count    int                      `json:"count"`
 	JobTypes []models.JobTypeJobCount `json:"job_types"`
 }
 
@@ -134,12 +134,12 @@ func (h *Handler) GetJobTypeByLevelHandler(c *gin.Context) {
 }
 
 type remoteOnSiteHybridResponse struct {
-	Standard                string                          `json:"standard"`
-	Level                   string                          `json:"level"`
-	ID                      uint                            `json:"id"`
-	FromDate                string                          `json:"from_date"`
-	ToDate                  string                          `json:"to_date"`
-	RemoteVsOnsiteVsHybrid  models.RemoteOnSiteHybridCount `json:"remote_vs_onsite_vs_hybrid"`
+	Standard               string                         `json:"standard"`
+	Level                  string                         `json:"level"`
+	ID                     uint                           `json:"id"`
+	FromDate               string                         `json:"from_date"`
+	ToDate                 string                         `json:"to_date"`
+	RemoteVsOnsiteVsHybrid models.RemoteOnSiteHybridCount `json:"remote_vs_onsite_vs_hybrid"`
 }
 
 // This function returns remote vs on-site job counts for a given occupation/industry
@@ -166,12 +166,12 @@ func (h *Handler) GetRemoteOnSiteHybridByLevelHandler(c *gin.Context) {
 }
 
 type vocationalEducationByLevelResponse struct {
-	Standard              string                                `json:"standard"`
-	Level                 string                                `json:"level"`
-	ID                    uint                                  `json:"id"`
-	FromDate              string                                `json:"from_date"`
-	ToDate                string                                `json:"to_date"`
-	Count                 int                                   `json:"count"`
+	Standard             string                               `json:"standard"`
+	Level                string                               `json:"level"`
+	ID                   uint                                 `json:"id"`
+	FromDate             string                               `json:"from_date"`
+	ToDate               string                               `json:"to_date"`
+	Count                int                                  `json:"count"`
 	VocationalEducations []models.VocationalEducationJobCount `json:"vocational_educations"`
 }
 
@@ -199,12 +199,12 @@ func (h *Handler) GetVocationalEducationByLevelHandler(c *gin.Context) {
 }
 
 type genderByLevelResponse struct {
-	Standard string                   `json:"standard"`
-	Level    string                   `json:"level"`
-	ID       uint                     `json:"id"`
-	FromDate string                   `json:"from_date"`
-	ToDate   string                   `json:"to_date"`
-	Count    int                      `json:"count"`
+	Standard string                  `json:"standard"`
+	Level    string                  `json:"level"`
+	ID       uint                    `json:"id"`
+	FromDate string                  `json:"from_date"`
+	ToDate   string                  `json:"to_date"`
+	Count    int                     `json:"count"`
 	Genders  []models.GenderJobCount `json:"genders"`
 }
 
@@ -232,12 +232,12 @@ func (h *Handler) GetGenderByLevelHandler(c *gin.Context) {
 }
 
 type formalityByLevelResponse struct {
-	Standard    string                      `json:"standard"`
-	Level       string                      `json:"level"`
-	ID          uint                        `json:"id"`
-	FromDate    string                      `json:"from_date"`
-	ToDate      string                      `json:"to_date"`
-	Count       int                         `json:"count"`
+	Standard    string                     `json:"standard"`
+	Level       string                     `json:"level"`
+	ID          uint                       `json:"id"`
+	FromDate    string                     `json:"from_date"`
+	ToDate      string                     `json:"to_date"`
+	Count       int                        `json:"count"`
 	Formalities []models.FormalityJobCount `json:"formalities"`
 }
 
@@ -265,12 +265,12 @@ func (h *Handler) GetFormalityByLevelHandler(c *gin.Context) {
 }
 
 type educationLevelByLevelResponse struct {
-	Standard         string                           `json:"standard"`
-	Level            string                           `json:"level"`
-	ID               uint                             `json:"id"`
-	FromDate         string                           `json:"from_date"`
-	ToDate           string                           `json:"to_date"`
-	Count            int                              `json:"count"`
+	Standard        string                          `json:"standard"`
+	Level           string                          `json:"level"`
+	ID              uint                            `json:"id"`
+	FromDate        string                          `json:"from_date"`
+	ToDate          string                          `json:"to_date"`
+	Count           int                             `json:"count"`
 	EducationLevels []models.EducationLevelJobCount `json:"education_levels"`
 }
 
@@ -298,12 +298,12 @@ func (h *Handler) GetEducationLevelByLevelHandler(c *gin.Context) {
 }
 
 type provinceByLevelResponse struct {
-	Standard  string                     `json:"standard"`
-	Level     string                     `json:"level"`
-	ID        uint                       `json:"id"`
-	FromDate  string                     `json:"from_date"`
-	ToDate    string                     `json:"to_date"`
-	Count     int                        `json:"count"`
+	Standard  string                    `json:"standard"`
+	Level     string                    `json:"level"`
+	ID        uint                      `json:"id"`
+	FromDate  string                    `json:"from_date"`
+	ToDate    string                    `json:"to_date"`
+	Count     int                       `json:"count"`
 	Provinces []models.ProvinceJobCount `json:"provinces"`
 }
 
@@ -331,12 +331,12 @@ func (h *Handler) GetProvinceByLevelHandler(c *gin.Context) {
 }
 
 type experienceByLevelResponse struct {
-	Standard    string                       `json:"standard"`
-	Level       string                       `json:"level"`
-	ID          uint                         `json:"id"`
-	FromDate    string                       `json:"from_date"`
-	ToDate      string                       `json:"to_date"`
-	Count       int                          `json:"count"`
+	Standard    string                      `json:"standard"`
+	Level       string                      `json:"level"`
+	ID          uint                        `json:"id"`
+	FromDate    string                      `json:"from_date"`
+	ToDate      string                      `json:"to_date"`
+	Count       int                         `json:"count"`
 	Experiences []models.ExperienceJobCount `json:"experiences"`
 }
 
@@ -364,12 +364,12 @@ func (h *Handler) GetExperienceByLevelHandler(c *gin.Context) {
 }
 
 type employmentSectorByLevelResponse struct {
-	Standard           string                               `json:"standard"`
-	Level              string                               `json:"level"`
-	ID                 uint                                 `json:"id"`
-	FromDate           string                               `json:"from_date"`
-	ToDate             string                               `json:"to_date"`
-	Count              int                                  `json:"count"`
+	Standard          string                            `json:"standard"`
+	Level             string                            `json:"level"`
+	ID                uint                              `json:"id"`
+	FromDate          string                            `json:"from_date"`
+	ToDate            string                            `json:"to_date"`
+	Count             int                               `json:"count"`
 	EmploymentSectors []models.EmploymentSectorJobCount `json:"employment_sectors"`
 }
 
@@ -397,13 +397,13 @@ func (h *Handler) GetEmploymentSectorByLevelHandler(c *gin.Context) {
 }
 
 type levelChildrenResponse struct {
-	Standard   string                        `json:"standard"`
-	Level      string                        `json:"level"`
-	ID         uint                          `json:"id"`
-	ChildLevel string                        `json:"child_level"`
-	FromDate   string                        `json:"from_date"`
-	ToDate     string                        `json:"to_date"`
-	Count      int                           `json:"count"`
+	Standard   string                      `json:"standard"`
+	Level      string                      `json:"level"`
+	ID         uint                        `json:"id"`
+	ChildLevel string                      `json:"child_level"`
+	FromDate   string                      `json:"from_date"`
+	ToDate     string                      `json:"to_date"`
+	Count      int                         `json:"count"`
 	Children   []models.LevelChildJobCount `json:"children"`
 }
 
@@ -516,10 +516,10 @@ func (h *Handler) GetTotalVacancyCountHandler(c *gin.Context) {
 }
 
 type vacancyTrendResponse struct {
-	FromDate    string                        `json:"from_date"`
-	ToDate      string                        `json:"to_date"`
-	Granularity string                        `json:"granularity"`
-	Count       int                           `json:"count"`
+	FromDate    string                     `json:"from_date"`
+	ToDate      string                     `json:"to_date"`
+	Granularity string                     `json:"granularity"`
+	Count       int                        `json:"count"`
 	Data        []models.VacancyTrendPoint `json:"data"`
 }
 

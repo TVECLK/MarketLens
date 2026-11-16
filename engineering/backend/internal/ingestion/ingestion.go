@@ -313,7 +313,7 @@ func (s *IngestionService) extractAndClassify(ctx context.Context, raw RawJobInp
 
 	workMode := extracted.WorkMode
 	if workMode == "" {
-		workMode = string(models.WorkModeOnsite) 
+		workMode = string(models.WorkModeOnsite)
 	}
 
 	return models.JobPost{

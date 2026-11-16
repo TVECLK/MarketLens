@@ -130,7 +130,7 @@ func TestTranslatePublicKeyFromJWK_OversizedExponent(t *testing.T) {
 	}
 }
 
-// findJWK 
+// findJWK
 
 func TestFindJWK(t *testing.T) {
 	keys := []jwk{{Kid: "a"}, {Kid: "b"}}

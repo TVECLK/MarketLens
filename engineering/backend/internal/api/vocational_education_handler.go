@@ -16,7 +16,7 @@ type updateVocationalEducationInput struct {
 }
 
 type vocationalEducationListResponse struct {
-	Count                 int                           `json:"count"`
+	Count                int                          `json:"count"`
 	VocationalEducations []models.VocationalEducation `json:"vocational_educations"`
 }
 

@@ -139,7 +139,7 @@ func wordSet(s string, stop map[string]struct{}) map[string]struct{} {
 	return out
 }
 
-// ToPQArray converts a []uint32 signature into a pq.Int64Array 
+// ToPQArray converts a []uint32 signature into a pq.Int64Array
 func ToPQArray(sig []uint32) pq.Int64Array {
 	out := make(pq.Int64Array, len(sig))
 	for i, v := range sig {

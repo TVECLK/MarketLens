@@ -16,7 +16,7 @@ type updateFormalityInput struct {
 }
 
 type formalityListResponse struct {
-	Count       int                 `json:"count"`
+	Count       int                `json:"count"`
 	Formalities []models.Formality `json:"formalities"`
 }
 
