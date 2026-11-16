@@ -117,6 +117,16 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 			continue
 		}
 
+		if raw.CrawlerRunID == 0 {
+			log.Printf("ingestion: job %s rejected: no crawler_run_id", raw.JobID)
+			failures = append(failures, FailedJob{
+				JobID:      raw.JobID,
+				StatusCode: http.StatusBadRequest,
+				Error:      "job has no crawler_run_id",
+			})
+			continue
+		}
+
 		// Checked before dedup and the LLM so a disabled or unknown source
 		// costs nothing and never touches existing jobs.
 		check, cached := sourceChecks[raw.Source]

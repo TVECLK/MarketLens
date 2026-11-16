@@ -347,6 +347,15 @@ func TestProcessBatch_Failures(t *testing.T) {
 			wantJobs:     0,
 		},
 		{
+			name: "job with no crawler_run_id is 400 and does not stop the rest of the batch",
+			batch: []ingestion.RawJobInput{
+				rawJob("job-1", "Lanka Retail Group", "Store Manager", "Kandy", "Manage daily operations.", "Test", 0),
+				rawJob("job-2", "Ceylon Tea Traders", "Accountant", "Galle", "Maintain the books.", "Test", 1),
+			},
+			wantFailures: map[string]int{"job-1": http.StatusBadRequest},
+			wantJobs:     1,
+		},
+		{
 			// Under one shingle of text has no signature, so it must be
 			// rejected rather than matched as a duplicate of the first such
 			// job. Neither short job may be saved or merged into the other.
