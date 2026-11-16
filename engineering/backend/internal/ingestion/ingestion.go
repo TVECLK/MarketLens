@@ -112,7 +112,7 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 			failures = append(failures, FailedJob{
 				JobID:      raw.JobID,
 				StatusCode: http.StatusBadRequest,
-				Error:      "job has no usable text content",
+				Error:      "job has no text: employer, job_role, location and description are all empty",
 			})
 			continue
 		}
