@@ -5,12 +5,14 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"log"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"marketlens-go-backend/internal/service"
 
@@ -35,13 +37,21 @@ type LSHIndex struct {
 	BucketKey string
 }
 
+// ErrTooLittleText means a job's normalized text is shorter than one
+// shingle, so it has no MinHash signature to compare.
+var ErrTooLittleText = errors.New("too little text to fingerprint")
+
 // GenerateMinHashAndLSH computes the MinHash signature and LSH bucket
 // keys for a job.
-func GenerateMinHashAndLSH(job JobData, numPerm, numBands int) ([]uint32, []LSHIndex) {
+func GenerateMinHashAndLSH(job JobData, numPerm, numBands int) ([]uint32, []LSHIndex, error) {
 	text := strings.ToLower(strings.Join([]string{
 		job.Employer, job.JobRole, job.Location, job.Description,
 	}, " "))
 	text = strings.Join(strings.Fields(text), " ")
+
+	if utf8.RuneCountInString(text) < shingleSize {
+		return nil, nil, ErrTooLittleText
+	}
 
 	shingles := shingle(text, shingleSize)
 
@@ -74,7 +84,7 @@ func GenerateMinHashAndLSH(job JobData, numPerm, numBands int) ([]uint32, []LSHI
 		lshIndexes = append(lshIndexes, LSHIndex{BandNo: band, BucketKey: bucketKey})
 	}
 
-	return sig, lshIndexes
+	return sig, lshIndexes, nil
 }
 
 // seededHash32 gives MinHash num_perm independent hash functions by

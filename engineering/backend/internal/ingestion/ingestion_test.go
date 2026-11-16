@@ -346,6 +346,18 @@ func TestProcessBatch_Failures(t *testing.T) {
 			wantFailures: map[string]int{"job-1": http.StatusBadRequest},
 			wantJobs:     0,
 		},
+		{
+			// Under one shingle of text has no signature, so it must be
+			// rejected rather than matched as a duplicate of the first such
+			// job. Neither short job may be saved or merged into the other.
+			name: "job with less text than one shingle is 400 and never a duplicate",
+			batch: []ingestion.RawJobInput{
+				rawJob("job-1", "A", "", "", "", "Test", 1),
+				rawJob("job-2", "B", "", "", "", "Test", 1),
+			},
+			wantFailures: map[string]int{"job-1": http.StatusBadRequest, "job-2": http.StatusBadRequest},
+			wantJobs:     0,
+		},
 	}
 
 	for _, tt := range tests {

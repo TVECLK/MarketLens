@@ -141,7 +141,16 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 			Location:    raw.Location,
 			Description: raw.Description,
 		}
-		sig, lshIndexes := GenerateMinHashAndLSH(jobData, s.numPerm, s.numBands)
+		sig, lshIndexes, err := GenerateMinHashAndLSH(jobData, s.numPerm, s.numBands)
+		if err != nil {
+			log.Printf("ingestion: job %s rejected: %v", raw.JobID, err)
+			failures = append(failures, FailedJob{
+				JobID:      raw.JobID,
+				StatusCode: http.StatusBadRequest,
+				Error:      fmt.Sprintf("job has too little text: employer, job_role, location and description together are under %d characters", shingleSize),
+			})
+			continue
+		}
 
 		isDuplicate, matchedJobID, err := CheckDuplicate(ctx, s.jobPosts, lshIndexes, sig, raw.Location, s.jaccardThreshold)
 		if err != nil {

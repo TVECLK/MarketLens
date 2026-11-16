@@ -2,6 +2,7 @@ package ingestion_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"marketlens-go-backend/internal/ingestion"
@@ -42,8 +43,14 @@ func TestGenerateMinHashAndLSH(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sigA, lshA := ingestion.GenerateMinHashAndLSH(tt.a, numPerm, numBands)
-			sigB, lshB := ingestion.GenerateMinHashAndLSH(tt.b, numPerm, numBands)
+			sigA, lshA, err := ingestion.GenerateMinHashAndLSH(tt.a, numPerm, numBands)
+			if err != nil {
+				t.Fatalf("GenerateMinHashAndLSH(a) error: %v", err)
+			}
+			sigB, lshB, err := ingestion.GenerateMinHashAndLSH(tt.b, numPerm, numBands)
+			if err != nil {
+				t.Fatalf("GenerateMinHashAndLSH(b) error: %v", err)
+			}
 
 			if len(sigA) != numPerm {
 				t.Fatalf("expected signature length %d, got %d", numPerm, len(sigA))
@@ -75,11 +82,53 @@ func TestGenerateMinHashAndLSH(t *testing.T) {
 	}
 }
 
+func TestGenerateMinHashAndLSH_TooLittleText(t *testing.T) {
+	tests := []struct {
+		name    string
+		job     ingestion.JobData
+		wantErr bool
+	}{
+		{"all fields empty", ingestion.JobData{}, true},
+		{"only whitespace", ingestion.JobData{Employer: "  ", Description: "\n\t"}, true},
+		{"one character", ingestion.JobData{Employer: "A"}, true},
+		{"two characters", ingestion.JobData{Employer: "AB"}, true},
+		{"two multi-byte runes", ingestion.JobData{Employer: "සි"}, true},
+		{"exactly one shingle", ingestion.JobData{Employer: "abc"}, false},
+		// The separator space between fields counts toward the length.
+		{"one shingle from several fields", ingestion.JobData{Employer: "a", JobRole: "b"}, false},
+		{"three multi-byte runes", ingestion.JobData{Employer: "සිං"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sig, lsh, err := ingestion.GenerateMinHashAndLSH(tt.job, numPerm, numBands)
+			if tt.wantErr {
+				if !errors.Is(err, ingestion.ErrTooLittleText) {
+					t.Fatalf("expected ErrTooLittleText, got %v", err)
+				}
+				if sig != nil || lsh != nil {
+					t.Errorf("expected nil signature and LSH on error, got sig=%v lsh=%v", sig, lsh)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(sig) != numPerm || len(lsh) != numBands {
+				t.Errorf("expected %d perms and %d bands, got %d and %d", numPerm, numBands, len(sig), len(lsh))
+			}
+		})
+	}
+}
+
 func TestPQArrayRoundTrip(t *testing.T) {
-	generated, _ := ingestion.GenerateMinHashAndLSH(
+	generated, _, err := ingestion.GenerateMinHashAndLSH(
 		ingestion.JobData{Employer: "Acme", JobRole: "Engineer", Location: "Colombo", Description: "Build things"},
 		numPerm, numBands,
 	)
+	if err != nil {
+		t.Fatalf("GenerateMinHashAndLSH() error: %v", err)
+	}
 
 	tests := []struct {
 		name string
@@ -148,14 +197,20 @@ func TestCheckDuplicate(t *testing.T) {
 			db := setupDB(t)
 			svcs := newServices(db)
 
-			sig, lsh := ingestion.GenerateMinHashAndLSH(original, numPerm, numBands)
+			sig, lsh, err := ingestion.GenerateMinHashAndLSH(original, numPerm, numBands)
+			if err != nil {
+				t.Fatalf("GenerateMinHashAndLSH(original) error: %v", err)
+			}
 			bucketKeys := make([]string, len(lsh))
 			for i, l := range lsh {
 				bucketKeys[i] = l.BucketKey
 			}
 			seededID := seedJob(t, db, original.Location, sig, bucketKeys)
 
-			newSig, newLSH := ingestion.GenerateMinHashAndLSH(tt.incoming, numPerm, numBands)
+			newSig, newLSH, err := ingestion.GenerateMinHashAndLSH(tt.incoming, numPerm, numBands)
+			if err != nil {
+				t.Fatalf("GenerateMinHashAndLSH(incoming) error: %v", err)
+			}
 			isDuplicate, matchedID, err := ingestion.CheckDuplicate(context.Background(), svcs.JobPosts, newLSH, newSig, tt.incoming.Location, 0.65)
 			if err != nil {
 				t.Fatalf("CheckDuplicate() error: %v", err)
