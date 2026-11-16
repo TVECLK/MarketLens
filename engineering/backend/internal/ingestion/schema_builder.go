@@ -123,7 +123,7 @@ func (b *MetadataBuilder) getOptions(ctx context.Context) (*optionSet, error) {
 		}
 		return res.Val.(*optionSet), nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, fmt.Errorf("%w: waiting for reference data refresh: %w", ErrTransientExtractionFailure, ctx.Err())
 	}
 }
 
