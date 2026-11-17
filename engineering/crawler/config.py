@@ -30,4 +30,4 @@ ALERT_RECIPIENTS = [
     if email.strip()
 ]
 # The page the "Open Data Sources Dashboard" button of the email opens
-DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:3000/")
+DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:3000/data-sources")
