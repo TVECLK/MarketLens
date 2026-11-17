@@ -49,12 +49,10 @@ export default function ChartCard({
           headerRight && "justify-between",
         )}
       >
-        <div className="mb-32">
-          <div className="w-3xl">
-          <h4 className="text-3xl font-normal text-zinc-900 whitespace-pre-line leading-snug">{title}</h4>
-          </div>
+        <div>
+          <h4 className="text-sm font-bold text-zinc-900">{title}</h4>
           {subtitle && <p className="text-[11px] text-zinc-400">{subtitle}</p>}
-        </div> 
+        </div>
         {headerRight}
       </div>
       <div className={clsx("flex-1 mt-4 min-w-0", bodyClassName)}>

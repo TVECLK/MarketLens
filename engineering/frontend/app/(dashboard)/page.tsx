@@ -24,6 +24,7 @@ export default function DashboardPage() {
     isError || Boolean(overview?.errors[section]);
 
   const trendData = useMemo(() => overview?.vacancy_trend?.data ?? [], [overview]);
+  const granularity = overview?.vacancy_trend?.granularity;
   const totalInRange = overview?.vacancy_total?.total_vacancies;
 
   const occData = useMemo(
@@ -55,9 +56,8 @@ export default function DashboardPage() {
 
       <VacancyTrendChart
         data={trendData}
+        granularity={granularity}
         totalVacancies={totalInRange}
-        fromDate={fromDate}
-        toDate={toDate}
         isLoading={isLoading}
         isError={sectionFailed("vacancy_trend")}
       />
