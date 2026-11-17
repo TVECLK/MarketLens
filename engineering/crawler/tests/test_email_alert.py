@@ -1,3 +1,4 @@
+import ssl
 from unittest.mock import AsyncMock
 
 import pytest
@@ -37,6 +38,9 @@ async def test_sends_one_email_listing_the_failed_crawlers(smtp, service):
     assert 'href="http://app.test/data-sources"' in html
     assert "ikman" in message.get_body(("plain",)).get_content()
     smtp.starttls.assert_called_once()
+    # The TLS connection must verify the certificate and hostname of the server
+    context = smtp.starttls.call_args.kwargs["context"]
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
     smtp.login.assert_called_once_with("bot@test.lk", "secret")
 
 

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import smtplib
+import ssl
 from dataclasses import dataclass
 from datetime import datetime
 from email.message import EmailMessage
@@ -150,7 +151,7 @@ class EmailAlertService:
         with smtplib.SMTP(
             self._smtp_host, self._smtp_port, timeout=SMTP_TIMEOUT_SECONDS
         ) as server:
-            server.starttls()
+            server.starttls(context=ssl.create_default_context())
             server.login(self._smtp_username, self._smtp_password)
             server.send_message(message)
 
