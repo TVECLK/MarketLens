@@ -18,6 +18,7 @@ from config import (
     SMTP_HOST,
     SMTP_PASSWORD,
     SMTP_PORT,
+    SMTP_SECURITY,
     SMTP_USERNAME,
 )
 
@@ -25,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 MAX_REASON_LENGTH = 200
 SMTP_TIMEOUT_SECONDS = 30
+# The port used when SMTP_PORT is not set, by the way the connection is secured
+DEFAULT_SMTP_PORTS = {"starttls": 587, "ssl": 465, "none": 25}
 
 # Colors of the frontend theme (frontend/app/globals.css)
 COLOR_DARK = "#1e1e2e"
@@ -122,6 +125,7 @@ class EmailAlertService:
         enabled: Optional[bool] = None,
         smtp_host: Optional[str] = None,
         smtp_port: Optional[int] = None,
+        smtp_security: Optional[str] = None,
         smtp_username: Optional[str] = None,
         smtp_password: Optional[str] = None,
         from_email: Optional[str] = None,
@@ -131,7 +135,10 @@ class EmailAlertService:
     ):
         self._enabled = ALERT_EMAILS_ENABLED if enabled is None else enabled
         self._smtp_host = smtp_host or SMTP_HOST
-        self._smtp_port = smtp_port or SMTP_PORT
+        self._smtp_security = (smtp_security or SMTP_SECURITY).strip().lower()
+        self._smtp_port = (
+            smtp_port or SMTP_PORT or DEFAULT_SMTP_PORTS.get(self._smtp_security)
+        )
         self._smtp_username = smtp_username or SMTP_USERNAME
         self._smtp_password = smtp_password or SMTP_PASSWORD
         self._from_email = from_email or ALERT_FROM_EMAIL
@@ -143,14 +150,27 @@ class EmailAlertService:
         if not self._enabled:
             logger.info("Email alert: Alert emails are disabled, skipping.")
             return False
+        if self._smtp_security not in DEFAULT_SMTP_PORTS:
+            logger.error(
+                f"Email alert: SMTP_SECURITY '{self._smtp_security}' is not one of "
+                f"{', '.join(DEFAULT_SMTP_PORTS)}, skipping."
+            )
+            return False
         if not (
             self._smtp_host
-            and self._smtp_username
-            and self._smtp_password
             and self._recipients
+            and (self._from_email or self._smtp_username)
         ):
             logger.warning(
-                "Email alert: SMTP settings or recipients are missing, skipping."
+                "Email alert: SMTP host, sender or recipients are missing, skipping."
+            )
+            return False
+        # The login is optional, but a username without a password (or the other way
+        # round) is a mistake
+        if bool(self._smtp_username) != bool(self._smtp_password):
+            logger.warning(
+                "Email alert: SMTP_USERNAME and SMTP_PASSWORD must be set together, "
+                "skipping."
             )
             return False
         return True
@@ -159,11 +179,25 @@ class EmailAlertService:
     # server refused (address -> (code, reason)), which is empty when all were
     # accepted. smtplib only raises when every recipient is refused.
     def _send_message(self, message: EmailMessage) -> Dict[str, Tuple[int, bytes]]:
-        with smtplib.SMTP(
-            self._smtp_host, self._smtp_port, timeout=SMTP_TIMEOUT_SECONDS
-        ) as server:
-            server.starttls(context=ssl.create_default_context())
-            server.login(self._smtp_username, self._smtp_password)
+        # A default context verifies the server certificate and hostname, so the
+        # credentials of login() are never sent to an impostor
+        context = ssl.create_default_context()
+        if self._smtp_security == "ssl":
+            connection = smtplib.SMTP_SSL(
+                self._smtp_host,
+                self._smtp_port,
+                timeout=SMTP_TIMEOUT_SECONDS,
+                context=context,
+            )
+        else:
+            connection = smtplib.SMTP(
+                self._smtp_host, self._smtp_port, timeout=SMTP_TIMEOUT_SECONDS
+            )
+        with connection as server:
+            if self._smtp_security == "starttls":
+                server.starttls(context=context)
+            if self._smtp_username:
+                server.login(self._smtp_username, self._smtp_password)
             return server.send_message(message)
 
     # The domain of "Name <user@domain>" or "user@domain", None if it has none

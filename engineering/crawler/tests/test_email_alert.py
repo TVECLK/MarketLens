@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from utils import email_alert
 from utils.email_alert import FailedCrawler
 
 
@@ -122,7 +123,7 @@ async def test_skips_when_disabled(smtp, make_service):
         {"smtp_username": ""},
         {"recipients": []},
     ],
-    ids=["host", "password", "username", "recipients"],
+    ids=["host", "password-only-username", "username-only-password", "recipients"],
 )
 async def test_skips_when_the_settings_are_missing(
     smtp, make_service, monkeypatch, missing
@@ -134,6 +135,79 @@ async def test_skips_when_the_settings_are_missing(
     await make_service(**missing).send_failure_alert(
         [FailedCrawler("ikman", "down")], 1
     )
+    smtp.send_message.assert_not_called()
+
+
+async def test_ssl_security_connects_with_tls_from_the_start(
+    smtp, make_service, no_configured_port
+):
+    service = make_service(smtp_security="ssl", smtp_port=None)
+
+    await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
+    # The default port of ssl, and a context that verifies the server
+    args, kwargs = email_alert.smtplib.SMTP_SSL.call_args
+    assert args == ("smtp.test", 465)
+    assert kwargs["context"].check_hostname
+    email_alert.smtplib.SMTP.assert_not_called()
+    smtp.starttls.assert_not_called()
+    smtp.login.assert_called_once_with("bot@test.lk", "secret")
+    sent_message(smtp)
+
+
+async def test_none_security_sends_without_encryption(
+    smtp, make_service, no_configured_port
+):
+    service = make_service(smtp_security="none", smtp_port=None)
+
+    await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
+    assert email_alert.smtplib.SMTP.call_args.args == ("smtp.test", 25)
+    smtp.starttls.assert_not_called()
+    sent_message(smtp)
+
+
+async def test_starttls_is_the_security_by_default(
+    smtp, make_service, no_configured_port
+):
+    service = make_service(smtp_security=None, smtp_port=None)
+
+    await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
+    assert email_alert.smtplib.SMTP.call_args.args == ("smtp.test", 587)
+    smtp.starttls.assert_called_once()
+
+
+async def test_a_server_without_login_gets_the_email_without_logging_in(
+    smtp, make_service, monkeypatch
+):
+    monkeypatch.setattr("utils.email_alert.SMTP_USERNAME", None)
+    monkeypatch.setattr("utils.email_alert.SMTP_PASSWORD", None)
+    service = make_service(smtp_username=None, smtp_password=None)
+
+    await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
+    smtp.login.assert_not_called()
+    assert sent_message(smtp)["From"] == "bot@test.lk"
+
+
+async def test_skips_an_unknown_security(smtp, make_service, caplog):
+    service = make_service(smtp_security="tls")
+
+    with caplog.at_level(logging.ERROR):
+        await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
+    smtp.send_message.assert_not_called()
+    assert "'tls'" in caplog.text
+
+
+async def test_skips_when_there_is_no_sender(smtp, make_service, monkeypatch):
+    monkeypatch.setattr("utils.email_alert.SMTP_USERNAME", None)
+    monkeypatch.setattr("utils.email_alert.ALERT_FROM_EMAIL", None)
+    service = make_service(smtp_username=None, smtp_password=None, from_email=None)
+
+    await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
     smtp.send_message.assert_not_called()
 
 

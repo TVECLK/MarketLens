@@ -170,6 +170,9 @@ def smtp(monkeypatch):
     monkeypatch.setattr(
         "utils.email_alert.smtplib.SMTP", MagicMock(return_value=server)
     )
+    monkeypatch.setattr(
+        "utils.email_alert.smtplib.SMTP_SSL", MagicMock(return_value=server)
+    )
     return server
 
 
@@ -183,6 +186,7 @@ def make_service():
             enabled=True,
             smtp_host="smtp.test",
             smtp_port=587,
+            smtp_security="starttls",
             smtp_username="bot@test.lk",
             smtp_password="secret",
             from_email="bot@test.lk",
@@ -194,6 +198,14 @@ def make_service():
         return EmailAlertService(**settings)
 
     return _make
+
+
+@pytest.fixture
+def no_configured_port(monkeypatch):
+    """The service falls back to config.py for a port and a security that are not
+    given, which can come from a local .env, so these are cleared."""
+    monkeypatch.setattr("utils.email_alert.SMTP_PORT", None)
+    monkeypatch.setattr("utils.email_alert.SMTP_SECURITY", "starttls")
 
 
 @pytest.fixture
