@@ -106,7 +106,7 @@ def _failure_body(failed: List[FailedCrawler], run_id: int) -> str:
         for f in failed
     )
     return f"""\
-<p style="font-size:14px;color:#374151;margin:0 0 12px 0;">Crawler run <strong>#{escape(str(run_id))}</strong> finished with the failed crawlers below.</p>
+<p style="font-size:14px;color:#374151;margin:0 0 12px 0;">Crawler run <strong>#{escape(str(run_id))}</strong> finished with the failed {"crawlers" if len(failed) > 1 else "crawler"} below.</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;border-collapse:separate;">
   <tr style="background-color:#f9fafb;">
     <th align="left" style="padding:10px 12px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Source</th>
@@ -238,12 +238,20 @@ class EmailAlertService:
         if not failed:
             return
 
-        count = len(failed)
-        title = f"{count} crawler{'s' if count > 1 else ''} failed"
-        note = (
-            "Please deactivate the failed source(s) in the dashboard "
-            "until the issue is fixed, then activate them again."
-        )
+        if len(failed) > 1:
+            title = f"{len(failed)} crawlers failed"
+            intro = "Some crawlers did not finish successfully in the latest run."
+            note = (
+                "Please deactivate the failed sources in the dashboard until the "
+                "issues are fixed, then activate them again."
+            )
+        else:
+            title = "1 crawler failed"
+            intro = "A crawler did not finish successfully in the latest run."
+            note = (
+                "Please deactivate the failed source in the dashboard until the "
+                "issue is fixed, then activate it again."
+            )
         text = "\n".join(
             [
                 f"{self._app_name}: {title} in crawler run #{run_id}",
@@ -257,7 +265,7 @@ class EmailAlertService:
         html = _render_html(
             self._app_name,
             title,
-            "Some crawlers did not finish successfully in the latest run.",
+            intro,
             _failure_body(failed, run_id),
             note,
             self._dashboard_url,

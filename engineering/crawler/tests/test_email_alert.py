@@ -38,7 +38,9 @@ async def test_sends_one_email_listing_the_failed_crawlers(smtp, service):
     assert "Test App" in message.get_body(("plain",)).get_content()
     html = html_of(message)
     assert "ikman" in html and "rooster" in html and "RuntimeError: site down" in html
-    assert "deactivate the failed source(s)" in html
+    assert "Some crawlers did not finish" in html
+    assert "deactivate the failed sources" in html and "issues are fixed" in html
+    assert "failed crawlers below" in html
     assert 'href="http://app.test/data-sources"' in html
     assert "ikman" in message.get_body(("plain",)).get_content()
     smtp.starttls.assert_called_once()
@@ -69,6 +71,20 @@ async def test_every_email_gets_its_own_message_id(smtp, service):
     await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
 
     assert sent_message(smtp)["Message-ID"] != first
+
+
+async def test_the_wording_is_singular_for_one_failed_crawler(smtp, service):
+    await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
+    message = sent_message(smtp)
+    html = html_of(message)
+    assert message["Subject"].startswith("[Test App] 1 crawler failed")
+    assert "A crawler did not finish" in html
+    assert "deactivate the failed source in the dashboard" in html
+    assert "the issue is fixed, then activate it again" in html
+    assert "failed crawler below" in html
+    for plural in ("Some crawlers", "failed sources", "issues", "them", "(s)"):
+        assert plural not in html
 
 
 async def test_escapes_html_and_truncates_long_reasons(smtp, service):
