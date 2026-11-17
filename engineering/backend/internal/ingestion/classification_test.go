@@ -3,6 +3,7 @@ package ingestion_test
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"marketlens-go-backend/internal/ingestion"
@@ -64,46 +65,60 @@ func TestAskToPick(t *testing.T) {
 		content string // what the mock LLM answers, whatever is asked
 		wantID  uint
 		wantErr error
+		wantCount int
 	}{
 		{
-			name:    "accepts an id that was among the options",
-			options: []ingestion.Option{{ID: 1, Name: "First"}, {ID: 2, Name: "Second"}},
-			content: `{"id": 2}`,
-			wantID:  2,
+			name:      "accepts an id that was among the options",
+			options:   []ingestion.Option{{ID: 1, Name: "First"}, {ID: 2, Name: "Second"}},
+			content:   `{"id": 2}`,
+			wantID:    2,
+			wantCount: 1,
 		},
 		{
 			// A fabricated id is treated as "no match", not trusted: it would
 			// otherwise pass through as a plausible but invalid foreign key.
-			name:    "rejects a hallucinated id not among the options",
-			options: []ingestion.Option{{ID: 1, Name: "First"}, {ID: 2, Name: "Second"}},
-			content: `{"id": 999}`,
-			wantID:  0,
+			name:      "rejects a hallucinated id not among the options",
+			options:   []ingestion.Option{{ID: 1, Name: "First"}, {ID: 2, Name: "Second"}},
+			content:   `{"id": 999}`,
+			wantID:    0,
+			wantCount: 1,
 		},
 		{
-			name:    "handles a markdown-fenced response",
-			options: []ingestion.Option{{ID: 7, Name: "Match"}},
-			content: "```json\n{\"id\": 7}\n```",
-			wantID:  7,
+			name:      "handles a markdown-fenced response",
+			options:   []ingestion.Option{{ID: 7, Name: "Match"}},
+			content:   "```json\n{\"id\": 7}\n```",
+			wantID:    7,
+			wantCount: 1,
 		},
 		{
-			name:    "unparseable content is a transient failure",
-			options: []ingestion.Option{{ID: 1, Name: "First"}},
-			content: "not json at all",
-			wantErr: ingestion.ErrTransientExtractionFailure,
+			name:      "unparseable content is a transient failure",
+			options:   []ingestion.Option{{ID: 1, Name: "First"}},
+			content:   "not json at all",
+			wantErr:   ingestion.ErrTransientExtractionFailure,
+			wantCount: 1,
 		},
 		{
-			name:    "no options means no LLM call and no match",
-			options: nil,
-			content: `{"id": 1}`,
-			wantID:  0,
+			name:      "no options means no LLM call and no match",
+			options:   nil,
+			content:   `{"id": 1}`,
+			wantID:    0,
+			wantCount: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := mocks.NewMockLLM(t, func(string) string { return tt.content })
+			var calls atomic.Int64
+			client := mocks.NewMockLLM(t, func(string) string {
+				calls.Add(1)
+				return tt.content
+			})
 
 			id, err := ingestion.AskToPick(context.Background(), client, "some job", tt.options, "Test Level")
+			// Checked before the error branch so failing cases are counted too.
+			if got := calls.Load(); got != int64(tt.wantCount) {
+				t.Errorf("expected %d LLM call(s), got %d", tt.wantCount, got)
+			}
 			if tt.wantErr != nil {
 				if !errors.Is(err, tt.wantErr) {
 					t.Fatalf("expected error %v, got %v", tt.wantErr, err)
