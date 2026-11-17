@@ -1,7 +1,7 @@
 import logging
 import ssl
 from email.utils import parsedate_to_datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -221,6 +221,38 @@ async def test_the_sender_falls_back_to_the_username(smtp, make_service):
     await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
 
     assert sent_message(smtp)["From"] == "user@test.lk"
+
+
+async def test_an_error_while_building_the_email_does_not_raise(
+    smtp, service, monkeypatch, caplog
+):
+    def broken(*args, **kwargs):
+        raise ValueError("template broke")
+
+    monkeypatch.setattr("utils.email_alert._failure_body", broken)
+
+    with caplog.at_level(logging.ERROR):
+        await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
+    smtp.send_message.assert_not_called()
+    assert "template broke" in caplog.text
+
+
+async def test_the_run_completes_when_the_alert_cannot_be_built(
+    manager, smtp, make_service, monkeypatch
+):
+    manager._start_run = AsyncMock(return_value=7)
+    manager._finalize_run = AsyncMock()
+    service = make_service()
+    broken = MagicMock(side_effect=ValueError("template broke"))
+    monkeypatch.setattr(service, "_failure_email", broken)
+    manager._alert_service = service
+
+    result = await manager.run_all_crawlers(concurrent=True)
+
+    broken.assert_called_once()  # it was reached, and its error was contained
+    smtp.send_message.assert_not_called()
+    assert sorted(result) == ["source_a", "source_b"]
 
 
 async def test_crash_alert_describes_the_error(smtp, service):

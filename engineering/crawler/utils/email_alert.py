@@ -7,7 +7,7 @@ from datetime import datetime
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid, parseaddr
 from html import escape
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from config import (
     APP_NAME,
@@ -196,12 +196,16 @@ class EmailAlertService:
             return reason.decode("utf-8", errors="replace")
         return str(reason)
 
-    # Best effort: it never raises, so a mail problem cannot change or hide the
-    # outcome of the crawl
-    async def _deliver(self, subject: str, text: str, html: str) -> None:
-        if not self._is_ready():
-            return
+    # Best effort: nothing in here can raise, building the email included, so a mail
+    # problem cannot change or hide the outcome of the crawl. build_email returns the
+    # subject, the plain text and the HTML.
+    async def _deliver(
+        self, label: str, build_email: Callable[[], Tuple[str, str, str]]
+    ) -> None:
         try:
+            if not self._is_ready():
+                return
+            subject, text, html = build_email()
             message = EmailMessage()
             message["Subject"] = subject
             message["From"] = self._from_email
@@ -228,16 +232,11 @@ class EmailAlertService:
             if accepted > 0:
                 logger.info(f"Email alert: Sent '{subject}' to {accepted} admin(s).")
         except Exception as e:
-            logger.error(f"Email alert: Could not send '{subject}': {e}")
+            logger.error(f"Email alert: Could not send the {label}: {e}")
 
-    # This function emails the admins about the crawlers that failed in a run. It
-    # does nothing when no crawler failed
-    async def send_failure_alert(
+    def _failure_email(
         self, failed: List[FailedCrawler], run_id: int
-    ) -> None:
-        if not failed:
-            return
-
+    ) -> Tuple[str, str, str]:
         if len(failed) > 1:
             title = f"{len(failed)} crawlers failed"
             intro = "Some crawlers did not finish successfully in the latest run."
@@ -270,15 +269,9 @@ class EmailAlertService:
             note,
             self._dashboard_url,
         )
-        await self._deliver(
-            f"[{self._app_name}] {title} in crawler run #{run_id}",
-            text,
-            html,
-        )
+        return f"[{self._app_name}] {title} in crawler run #{run_id}", text, html
 
-    # This function send and email that the whole crawler run crashed before the
-    # crawlers could finish, so there is no list of failed crawlers
-    async def send_crash_alert(self, error: Optional[BaseException]) -> None:
+    def _crash_email(self, error: Optional[BaseException]) -> Tuple[str, str, str]:
         reason = (
             _truncate(f"{type(error).__name__}: {error}") if error else "Unknown error"
         )
@@ -313,4 +306,20 @@ class EmailAlertService:
             note,
             self._dashboard_url,
         )
-        await self._deliver(f"[{self._app_name}] {title}", text, html)
+        return f"[{self._app_name}] {title}", text, html
+
+    # This function emails the admins about the crawlers that failed in a run. It
+    # does nothing when no crawler failed, and it never raises
+    async def send_failure_alert(
+        self, failed: List[FailedCrawler], run_id: int
+    ) -> None:
+        if not failed:
+            return
+        await self._deliver(
+            "failure alert", lambda: self._failure_email(failed, run_id)
+        )
+
+    # This function sends an email that the whole crawler run crashed before the
+    # crawlers could finish, so there is no list of failed crawlers. It never raises
+    async def send_crash_alert(self, error: Optional[BaseException]) -> None:
+        await self._deliver("crash alert", lambda: self._crash_email(error))
