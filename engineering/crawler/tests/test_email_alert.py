@@ -124,11 +124,14 @@ async def test_a_smtp_failure_does_not_raise(smtp, service):
     await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
 
 
-async def test_skips_when_disabled(smtp, make_service):
-    await make_service(enabled=False).send_failure_alert(
-        [FailedCrawler("ikman", "down")], 1
-    )
+async def test_skips_quietly_when_disabled(smtp, make_service, caplog):
+    with caplog.at_level(logging.DEBUG):
+        await make_service(enabled=False).send_failure_alert(
+            [FailedCrawler("ikman", "down")], 1
+        )
+
     smtp.send_message.assert_not_called()
+    assert caplog.records == []
 
 
 @pytest.mark.parametrize(
