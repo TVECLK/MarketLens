@@ -21,6 +21,8 @@ class CrawlerManager:
         self._alert_service = alert_service
         self._registry: Dict[str, Type[BaseJobCrawler]] = {}
         self._failure_reasons: Dict[str, str] = {}
+        # The active sources of the last fetch that have no crawler written
+        self._sources_without_crawler: List[str] = []
         self._thunder_client = ThunderIDClient()
         self._thunder_auth = ThunderAuth(self._thunder_client)
 
@@ -39,7 +41,8 @@ class CrawlerManager:
             source["name"].strip().lower() for source in response.json()["sources"]
         }
 
-        for name in sorted(active_names - CRAWLER_REGISTRY.keys()):
+        self._sources_without_crawler = sorted(active_names - CRAWLER_REGISTRY.keys())
+        for name in self._sources_without_crawler:
             logger.warning(f"Crawler: Active source '{name}' has no crawler, skipping.")
         for name in sorted(CRAWLER_REGISTRY.keys() - active_names):
             logger.info(f"Crawler: Source '{name}' is not active, skipping.")
@@ -196,6 +199,13 @@ class CrawlerManager:
         async with httpx.AsyncClient(timeout=HTTP_CLIENT_TIMEOUT_SECONDS) as client:
             # Fetched before the run starts, so a failure leaves no half-created run
             self._registry = await self.fetch_active_crawlers(client)
+
+            # Such sources are never crawled, so the users are told even when there
+            # is nothing else to crawl
+            await self._alert_service.send_missing_crawlers_alert(
+                self._sources_without_crawler
+            )
+
             if not self._registry:
                 logger.warning("Crawler: No active sources, nothing to crawl.")
                 return None

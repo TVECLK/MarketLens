@@ -202,6 +202,7 @@ async def test_fetch_active_crawlers_ignores_active_sources_without_a_crawler(
 
     assert set(result) == {SOURCE_A}
     assert UNREGISTERED_SOURCE in caplog.text
+    assert real_manager._sources_without_crawler == [UNREGISTERED_SOURCE]
 
 
 async def test_fetch_active_crawlers_returns_nothing_when_no_source_is_active(

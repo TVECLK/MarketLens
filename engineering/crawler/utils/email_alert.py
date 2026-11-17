@@ -116,6 +116,23 @@ def _failure_body(failed: List[FailedCrawler], run_id: int) -> str:
 </table>"""
 
 
+def _missing_crawlers_body(names: List[str]) -> str:
+    rows = "".join(
+        f"""\
+<tr>
+  <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;font-weight:bold;color:#111827;">{escape(name)}</td>
+</tr>"""
+        for name in names
+    )
+    return f"""\
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;border-collapse:separate;">
+  <tr style="background-color:#f9fafb;">
+    <th align="left" style="padding:10px 12px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Source</th>
+  </tr>
+  {rows}
+</table>"""
+
+
 class EmailAlertService:
     """Send emails when crawlers fail. The settings come from config.py, which reads
     the environment once, when it is imported."""
@@ -271,6 +288,41 @@ class EmailAlertService:
         )
         return f"[{self._app_name}] {title} in crawler run #{run_id}", text, html
 
+    def _missing_crawlers_email(self, names: List[str]) -> Tuple[str, str, str]:
+        if len(names) > 1:
+            title = f"{len(names)} active sources have no crawler"
+            intro = "The sources below are active, but no crawler is written for them."
+            note = (
+                "No jobs are collected from these sources. Please deactivate them in "
+                "the dashboard, or ask a developer to add their crawlers."
+            )
+        else:
+            title = "1 active source has no crawler"
+            intro = "The source below is active, but no crawler is written for it."
+            note = (
+                "No jobs are collected from this source. Please deactivate it in "
+                "the dashboard, or ask a developer to add its crawler."
+            )
+        text = "\n".join(
+            [
+                f"{self._app_name}: {title}",
+                "",
+                *[f"- {name}" for name in names],
+                "",
+                note,
+                f"Dashboard: {self._dashboard_url}",
+            ]
+        )
+        html = _render_html(
+            self._app_name,
+            title,
+            intro,
+            _missing_crawlers_body(names),
+            note,
+            self._dashboard_url,
+        )
+        return f"[{self._app_name}] {title}", text, html
+
     def _crash_email(self, error: Optional[BaseException]) -> Tuple[str, str, str]:
         reason = (
             _truncate(f"{type(error).__name__}: {error}") if error else "Unknown error"
@@ -317,6 +369,16 @@ class EmailAlertService:
             return
         await self._deliver(
             "failure alert", lambda: self._failure_email(failed, run_id)
+        )
+
+    # This function emails the admins about the active sources that have no crawler,
+    # so no jobs are collected from them. It does nothing when there are none, and it
+    # never raises
+    async def send_missing_crawlers_alert(self, names: List[str]) -> None:
+        if not names:
+            return
+        await self._deliver(
+            "missing crawlers alert", lambda: self._missing_crawlers_email(names)
         )
 
     # This function sends an email that the whole crawler run crashed before the

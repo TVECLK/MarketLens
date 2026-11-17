@@ -255,6 +255,64 @@ async def test_the_run_completes_when_the_alert_cannot_be_built(
     assert sorted(result) == ["source_a", "source_b"]
 
 
+async def test_no_email_when_every_active_source_has_a_crawler(smtp, service):
+    await service.send_missing_crawlers_alert([])
+    smtp.send_message.assert_not_called()
+
+
+async def test_the_missing_crawlers_email_lists_the_sources(smtp, service):
+    await service.send_missing_crawlers_alert(["glassdoor", "<b>x</b>"])
+
+    message = sent_message(smtp)
+    html = html_of(message)
+    assert message["Subject"] == "[Test App] 2 active sources have no crawler"
+    assert "glassdoor" in html and "&lt;b&gt;x&lt;/b&gt;" in html
+    assert "ask a developer to add their crawlers" in html
+    assert 'href="http://app.test/data-sources"' in html
+    assert "glassdoor" in message.get_body(("plain",)).get_content()
+
+
+async def test_the_missing_crawlers_wording_is_singular_for_one_source(smtp, service):
+    await service.send_missing_crawlers_alert(["glassdoor"])
+
+    message = sent_message(smtp)
+    html = html_of(message)
+    assert message["Subject"] == "[Test App] 1 active source has no crawler"
+    assert "The source below is active" in html
+    assert "deactivate it in the dashboard" in html and "add its crawler" in html
+    # The URL and the button also contain the words "sources" and "Sources"
+    wording = html.replace("data-sources", "").replace("Data Sources", "")
+    for plural in ("sources", "them", "their", "(s)"):
+        assert plural not in wording
+
+
+@pytest.mark.parametrize("concurrent", [True, False])
+async def test_manager_alerts_about_the_active_sources_without_a_crawler(
+    manager, alert_service, concurrent
+):
+    manager._sources_without_crawler = ["glassdoor"]
+    manager._start_run = AsyncMock(return_value=7)
+    manager._finalize_run = AsyncMock()
+
+    await manager.run_all_crawlers(concurrent=concurrent)
+
+    alert_service.send_missing_crawlers_alert.assert_awaited_once_with(["glassdoor"])
+
+
+async def test_manager_alerts_even_when_no_active_source_has_a_crawler(
+    manager, alert_service
+):
+    manager.fetch_active_crawlers.return_value = {}
+    manager._sources_without_crawler = ["glassdoor"]
+    manager._start_run = AsyncMock(return_value=7)
+
+    result = await manager.run_all_crawlers()
+
+    assert result is None
+    manager._start_run.assert_not_awaited()
+    alert_service.send_missing_crawlers_alert.assert_awaited_once_with(["glassdoor"])
+
+
 async def test_crash_alert_describes_the_error(smtp, service):
     await service.send_crash_alert(RuntimeError("backend <down>"))
 
