@@ -12,6 +12,7 @@ interface ChartCardProps {
   loadingLabel: string;
   isError?: boolean;
   isEmpty?: boolean;
+  variant?: "default" | "public";
   children: ReactNode;
 }
 
@@ -34,6 +35,7 @@ export default function ChartCard({
   loadingLabel,
   isError = false,
   isEmpty = false,
+  variant = "default",
   children,
 }: ChartCardProps) {
   return (
@@ -49,8 +51,16 @@ export default function ChartCard({
           headerRight && "justify-between",
         )}
       >
-        <div>
-          <h4 className="text-sm font-bold text-zinc-900">{title}</h4>
+        <div className={variant === "public" ? "mb-8" : undefined}>
+          <h4
+            className={
+              variant === "public"
+                ? "text-3xl font-normal text-indigo-600 whitespace-pre-line leading-snug"
+                : "text-sm font-bold text-zinc-900"
+            }
+          >
+            {title}
+          </h4>
           {subtitle && <p className="text-[11px] text-zinc-400">{subtitle}</p>}
         </div>
         {headerRight}

@@ -58,6 +58,8 @@ export default function DashboardPage() {
         data={trendData}
         granularity={granularity}
         totalVacancies={totalInRange}
+        fromDate={fromDate}
+        toDate={toDate}
         isLoading={isLoading}
         isError={sectionFailed("vacancy_trend")}
       />
