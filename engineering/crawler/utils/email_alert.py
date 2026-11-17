@@ -117,34 +117,22 @@ def _failure_body(failed: List[FailedCrawler], run_id: int) -> str:
 
 
 class EmailAlertService:
-    """Send emails when crawlers fail. Every setting defaults to the value in
-    config.py, which is read when the service is created."""
+    """Send emails when crawlers fail. The settings come from config.py, which reads
+    the environment once, when it is imported."""
 
-    def __init__(
-        self,
-        enabled: Optional[bool] = None,
-        smtp_host: Optional[str] = None,
-        smtp_port: Optional[int] = None,
-        smtp_security: Optional[str] = None,
-        smtp_username: Optional[str] = None,
-        smtp_password: Optional[str] = None,
-        from_email: Optional[str] = None,
-        recipients: Optional[List[str]] = None,
-        dashboard_url: Optional[str] = None,
-        app_name: Optional[str] = None,
-    ):
-        self._enabled = ALERT_EMAILS_ENABLED if enabled is None else enabled
-        self._smtp_host = smtp_host or SMTP_HOST
-        self._smtp_security = (smtp_security or SMTP_SECURITY).strip().lower()
-        self._smtp_port = (
-            smtp_port or SMTP_PORT or DEFAULT_SMTP_PORTS.get(self._smtp_security)
-        )
-        self._smtp_username = smtp_username or SMTP_USERNAME
-        self._smtp_password = smtp_password or SMTP_PASSWORD
-        self._from_email = from_email or ALERT_FROM_EMAIL
-        self._recipients = ALERT_RECIPIENTS if recipients is None else recipients
-        self._dashboard_url = dashboard_url or DASHBOARD_URL
-        self._app_name = app_name or APP_NAME
+    def __init__(self):
+        self._enabled = ALERT_EMAILS_ENABLED
+        self._smtp_host = SMTP_HOST
+        self._smtp_security = SMTP_SECURITY
+        # Without a port, the default one of the security mode is used
+        self._smtp_port = SMTP_PORT or DEFAULT_SMTP_PORTS.get(SMTP_SECURITY)
+        self._smtp_username = SMTP_USERNAME
+        self._smtp_password = SMTP_PASSWORD
+        # Without a sender, the emails are sent from the username
+        self._from_email = ALERT_FROM_EMAIL or SMTP_USERNAME
+        self._recipients = ALERT_RECIPIENTS
+        self._dashboard_url = DASHBOARD_URL
+        self._app_name = APP_NAME
 
     def _is_ready(self) -> bool:
         if not self._enabled:
@@ -156,11 +144,7 @@ class EmailAlertService:
                 f"{', '.join(DEFAULT_SMTP_PORTS)}, skipping."
             )
             return False
-        if not (
-            self._smtp_host
-            and self._recipients
-            and (self._from_email or self._smtp_username)
-        ):
+        if not (self._smtp_host and self._recipients and self._from_email):
             logger.warning(
                 "Email alert: SMTP host, sender or recipients are missing, skipping."
             )
@@ -220,13 +204,14 @@ class EmailAlertService:
         try:
             message = EmailMessage()
             message["Subject"] = subject
-            sender = self._from_email or self._smtp_username
-            message["From"] = sender
+            message["From"] = self._from_email
             message["To"] = ", ".join(self._recipients)
             # smtplib adds neither header and not every server fills them in. The
             # Message-ID uses the sender's domain, as the hostname of a pod is random
             message["Date"] = formatdate(localtime=True)
-            message["Message-ID"] = make_msgid(domain=self._sender_domain(sender))
+            message["Message-ID"] = make_msgid(
+                domain=self._sender_domain(self._from_email)
+            )
             message.set_content(text)
             message.add_alternative(html, subtype="html")
             refused = await asyncio.to_thread(self._send_message, message)

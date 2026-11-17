@@ -176,10 +176,25 @@ def smtp(monkeypatch):
     return server
 
 
+# The config.py setting each EmailAlertService setting comes from
+_EMAIL_SETTINGS = {
+    "enabled": "ALERT_EMAILS_ENABLED",
+    "smtp_host": "SMTP_HOST",
+    "smtp_port": "SMTP_PORT",
+    "smtp_security": "SMTP_SECURITY",
+    "smtp_username": "SMTP_USERNAME",
+    "smtp_password": "SMTP_PASSWORD",
+    "from_email": "ALERT_FROM_EMAIL",
+    "recipients": "ALERT_RECIPIENTS",
+    "dashboard_url": "DASHBOARD_URL",
+    "app_name": "APP_NAME",
+}
+
+
 @pytest.fixture
-def make_service():
-    """Returns a factory for an EmailAlertService with test settings. Any setting
-    can be overridden."""
+def make_service(monkeypatch):
+    """Returns a factory for an EmailAlertService with test settings. The service
+    reads config.py, so the settings are set there, and any can be overridden."""
 
     def _make(**overrides):
         settings = dict(
@@ -195,17 +210,11 @@ def make_service():
             app_name="Test App",
         )
         settings.update(overrides)
-        return EmailAlertService(**settings)
+        for name, value in settings.items():
+            monkeypatch.setattr(f"utils.email_alert.{_EMAIL_SETTINGS[name]}", value)
+        return EmailAlertService()
 
     return _make
-
-
-@pytest.fixture
-def no_configured_port(monkeypatch):
-    """The service falls back to config.py for a port and a security that are not
-    given, which can come from a local .env, so these are cleared."""
-    monkeypatch.setattr("utils.email_alert.SMTP_PORT", None)
-    monkeypatch.setattr("utils.email_alert.SMTP_SECURITY", "starttls")
 
 
 @pytest.fixture

@@ -28,7 +28,8 @@ SMTP_SECURITY = (os.getenv("SMTP_SECURITY") or "starttls").strip().lower()
 SMTP_PORT = int(os.getenv("SMTP_PORT") or 0) or None
 SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-ALERT_FROM_EMAIL = os.getenv("ALERT_FROM_EMAIL") or SMTP_USERNAME
+# Left empty, the email is sent from SMTP_USERNAME
+ALERT_FROM_EMAIL = os.getenv("ALERT_FROM_EMAIL") or None
 ALERT_RECIPIENTS = [
     email.strip()
     for email in os.getenv("ALERT_RECIPIENTS", "").split(",")

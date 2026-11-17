@@ -125,22 +125,14 @@ async def test_skips_when_disabled(smtp, make_service):
     ],
     ids=["host", "password-only-username", "username-only-password", "recipients"],
 )
-async def test_skips_when_the_settings_are_missing(
-    smtp, make_service, monkeypatch, missing
-):
-    # The service falls back to config.py for an empty setting, so those are cleared
-    monkeypatch.setattr("utils.email_alert.SMTP_HOST", None)
-    monkeypatch.setattr("utils.email_alert.SMTP_PASSWORD", None)
-    monkeypatch.setattr("utils.email_alert.SMTP_USERNAME", None)
+async def test_skips_when_the_settings_are_missing(smtp, make_service, missing):
     await make_service(**missing).send_failure_alert(
         [FailedCrawler("ikman", "down")], 1
     )
     smtp.send_message.assert_not_called()
 
 
-async def test_ssl_security_connects_with_tls_from_the_start(
-    smtp, make_service, no_configured_port
-):
+async def test_ssl_security_connects_with_tls_from_the_start(smtp, make_service):
     service = make_service(smtp_security="ssl", smtp_port=None)
 
     await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
@@ -155,9 +147,7 @@ async def test_ssl_security_connects_with_tls_from_the_start(
     sent_message(smtp)
 
 
-async def test_none_security_sends_without_encryption(
-    smtp, make_service, no_configured_port
-):
+async def test_none_security_sends_without_encryption(smtp, make_service):
     service = make_service(smtp_security="none", smtp_port=None)
 
     await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
@@ -167,10 +157,8 @@ async def test_none_security_sends_without_encryption(
     sent_message(smtp)
 
 
-async def test_starttls_is_the_security_by_default(
-    smtp, make_service, no_configured_port
-):
-    service = make_service(smtp_security=None, smtp_port=None)
+async def test_starttls_is_the_security_by_default(smtp, make_service):
+    service = make_service(smtp_security="starttls", smtp_port=None)
 
     await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
 
@@ -179,11 +167,9 @@ async def test_starttls_is_the_security_by_default(
 
 
 async def test_a_server_without_login_gets_the_email_without_logging_in(
-    smtp, make_service, monkeypatch
+    smtp, make_service
 ):
-    monkeypatch.setattr("utils.email_alert.SMTP_USERNAME", None)
-    monkeypatch.setattr("utils.email_alert.SMTP_PASSWORD", None)
-    service = make_service(smtp_username=None, smtp_password=None)
+    service = make_service(smtp_username="", smtp_password="")
 
     await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
 
@@ -201,14 +187,20 @@ async def test_skips_an_unknown_security(smtp, make_service, caplog):
     assert "'tls'" in caplog.text
 
 
-async def test_skips_when_there_is_no_sender(smtp, make_service, monkeypatch):
-    monkeypatch.setattr("utils.email_alert.SMTP_USERNAME", None)
-    monkeypatch.setattr("utils.email_alert.ALERT_FROM_EMAIL", None)
-    service = make_service(smtp_username=None, smtp_password=None, from_email=None)
+async def test_skips_when_there_is_no_sender(smtp, make_service):
+    service = make_service(smtp_username="", smtp_password="", from_email="")
 
     await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
 
     smtp.send_message.assert_not_called()
+
+
+async def test_the_sender_falls_back_to_the_username(smtp, make_service):
+    service = make_service(from_email=None, smtp_username="user@test.lk")
+
+    await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
+    assert sent_message(smtp)["From"] == "user@test.lk"
 
 
 async def test_crash_alert_describes_the_error(smtp, service):
