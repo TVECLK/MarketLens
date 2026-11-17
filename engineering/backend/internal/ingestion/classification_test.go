@@ -60,11 +60,11 @@ func TestClassifier_WalksToLeaf(t *testing.T) {
 
 func TestAskToPick(t *testing.T) {
 	tests := []struct {
-		name    string
-		options []ingestion.Option
-		content string // what the mock LLM answers, whatever is asked
-		wantID  uint
-		wantErr error
+		name      string
+		options   []ingestion.Option
+		content   string // what the mock LLM answers, whatever is asked
+		wantID    uint
+		wantErr   error
 		wantCount int
 	}{
 		{
