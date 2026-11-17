@@ -41,6 +41,13 @@ func (r *Store) CreateCrawlerRun(ctx context.Context) (models.CrawlerRun, error)
 	return run, nil
 }
 
+// CrawlerRunExists reports whether a crawler run with this id is recorded.
+func (r *Store) CrawlerRunExists(ctx context.Context, id uint) (bool, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&models.CrawlerRun{}).Where("id = ?", id).Count(&n).Error
+	return n > 0, err
+}
+
 func (r *Store) CompleteCrawlerRun(ctx context.Context, id uint, status string) error {
 	now := time.Now()
 	res := r.db.WithContext(ctx).Model(&models.CrawlerRun{}).Where("id = ?", id).Updates(map[string]interface{}{

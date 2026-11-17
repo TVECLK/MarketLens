@@ -19,6 +19,11 @@ func (s *CrawlerRunService) CreateCrawlerRun(ctx context.Context) (models.Crawle
 	return s.store.CreateCrawlerRun(ctx)
 }
 
+// CrawlerRunExists reports whether a crawler run with this id is recorded.
+func (s *CrawlerRunService) CrawlerRunExists(ctx context.Context, id uint) (bool, error) {
+	return s.store.CrawlerRunExists(ctx, id)
+}
+
 // validCrawlerRunStatuses are the only values a caller may set via
 // CompleteCrawlerRun — anything else (a typo, a stray value) is rejected
 // instead of being written straight into the crawler_runs.status column,

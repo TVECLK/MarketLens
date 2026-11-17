@@ -55,6 +55,7 @@ type FailedJob struct {
 type IngestionService struct {
 	jobPosts             *service.JobPostService
 	sources              *service.SourceService
+	crawlerRuns          *service.CrawlerRunService
 	llmClient            *llm.Client
 	model                string
 	metadataBuilder      *MetadataBuilder
@@ -73,6 +74,7 @@ type IngestionService struct {
 func NewIngestionService(
 	jobPosts *service.JobPostService,
 	sources *service.SourceService,
+	crawlerRuns *service.CrawlerRunService,
 	llmClient *llm.Client,
 	model string,
 	industryClassifier *IndustryClassifier,
@@ -86,6 +88,7 @@ func NewIngestionService(
 	return &IngestionService{
 		jobPosts:             jobPosts,
 		sources:              sources,
+		crawlerRuns:          crawlerRuns,
 		llmClient:            llmClient,
 		model:                model,
 		metadataBuilder:      metadataBuilder,
@@ -106,6 +109,8 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 	var failures []FailedJob
 	// A batch nearly always comes from one source, so look each name up once.
 	sourceChecks := make(map[string]*FailedJob)
+	// Likewise a batch nearly always carries one crawler_run_id.
+	runChecks := make(map[uint]*FailedJob)
 
 	for _, raw := range rawJobs {
 		if hasNoUsableText(raw) {
@@ -117,12 +122,33 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 			continue
 		}
 
+		// ids start at 1, so a missing crawler_run_id (decoded as 0) is
+		// rejected here without a database lookup.
 		if raw.CrawlerRunID == 0 {
 			log.Printf("ingestion: job %s rejected: no crawler_run_id", raw.JobID)
 			failures = append(failures, FailedJob{
 				JobID:      raw.JobID,
 				StatusCode: http.StatusBadRequest,
 				Error:      "job has no crawler_run_id",
+			})
+			continue
+		}
+
+		// The run must exist, or the save fails on the foreign key only after
+		// the LLM work. A lookup error is 503 and not cached, so it is retried.
+		runCheck, cached := runChecks[raw.CrawlerRunID]
+		if !cached {
+			runCheck = s.checkCrawlerRun(ctx, raw.CrawlerRunID)
+			if runCheck == nil || runCheck.StatusCode != http.StatusServiceUnavailable {
+				runChecks[raw.CrawlerRunID] = runCheck
+			}
+		}
+		if runCheck != nil {
+			log.Printf("ingestion: job %s rejected: %s", raw.JobID, runCheck.Error)
+			failures = append(failures, FailedJob{
+				JobID:      raw.JobID,
+				StatusCode: runCheck.StatusCode,
+				Error:      runCheck.Error,
 			})
 			continue
 		}
@@ -218,6 +244,21 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 	}
 
 	return failures
+}
+
+// checkCrawlerRun reports why jobs for the crawler run must be rejected, or
+// nil if the run exists. JobID is left for the caller to fill in. An unknown
+// run is 422 so the crawler does not retry it; a lookup failure is 503 so
+// it does.
+func (s *IngestionService) checkCrawlerRun(ctx context.Context, id uint) *FailedJob {
+	exists, err := s.crawlerRuns.CrawlerRunExists(ctx, id)
+	if err != nil {
+		return &FailedJob{StatusCode: http.StatusServiceUnavailable, Error: fmt.Sprintf("looking up crawler run %d: %v", id, err)}
+	}
+	if !exists {
+		return &FailedJob{StatusCode: http.StatusUnprocessableEntity, Error: fmt.Sprintf("crawler run %d does not exist", id)}
+	}
+	return nil
 }
 
 // checkSource reports why jobs from the named source must be rejected, or

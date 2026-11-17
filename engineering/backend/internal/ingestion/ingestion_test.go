@@ -436,6 +436,7 @@ func TestProcessBatch_LLMRejectsRequests(t *testing.T) {
 			svc := ingestion.NewIngestionService(
 				svcs.JobPosts,
 				svcs.Sources,
+				svcs.CrawlerRuns,
 				client,
 				"test-model",
 				newIndustryClassifier(svcs, client),
@@ -456,5 +457,74 @@ func TestProcessBatch_LLMRejectsRequests(t *testing.T) {
 				t.Errorf("expected no job saved, got %d", n)
 			}
 		})
+	}
+}
+
+// TestProcessBatch_CrawlerRunMustExist checks that a crawler_run_id with no
+// row in crawler_runs is rejected up front as a 422 (no retry), instead of
+// failing on the foreign key after the LLM work, and that it does not stop
+// a valid job in the same batch.
+func TestProcessBatch_CrawlerRunMustExist(t *testing.T) {
+	const unknownRunID = 9999
+
+	db := setupDB(t)
+	svc := newIngestionService(t, db, extractionResponder(validExtractionJSON))
+
+	failed := svc.ProcessBatch(context.Background(), []ingestion.RawJobInput{
+		rawJob("job-1", "Lanka Retail Group", "Store Manager", "Kandy", "Manage daily operations.", "Test", unknownRunID),
+		rawJob("job-2", "Ceylon Tea Traders", "Accountant", "Galle", "Maintain the books.", "Test", 100),
+	})
+
+	if len(failed) != 1 || failed[0].JobID != "job-1" || failed[0].StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("expected only job-1 to fail with 422, got %+v", failed)
+	}
+	if !strings.Contains(failed[0].Error, "crawler run 9999 does not exist") {
+		t.Errorf("unexpected error text: %q", failed[0].Error)
+	}
+	if n := countRows(t, db, &models.JobPost{}); n != 1 {
+		t.Errorf("expected only the valid job saved, got %d", n)
+	}
+}
+
+// TestProcessBatch_CrawlerRunLookupFailure checks that a database error
+// while looking the run up is a 503 (the crawler retries), not a 422.
+func TestProcessBatch_CrawlerRunLookupFailure(t *testing.T) {
+	db := setupDB(t)
+	svc := newIngestionService(t, db, extractionResponder(validExtractionJSON))
+
+	err := db.Callback().Query().Before("gorm:query").Register("test:fail:crawler_runs", func(tx *gorm.DB) {
+		if tx.Statement.Table == "crawler_runs" {
+			_ = tx.AddError(errors.New("connection reset"))
+		}
+	})
+	if err != nil {
+		t.Fatalf("registering query callback: %v", err)
+	}
+
+	failed := svc.ProcessBatch(context.Background(), []ingestion.RawJobInput{ceylonJob})
+
+	if len(failed) != 1 || failed[0].StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected one 503 failure, got %+v", failed)
+	}
+	if n := countRows(t, db, &models.JobPost{}); n != 0 {
+		t.Errorf("expected no job saved, got %d", n)
+	}
+}
+
+// TestProcessBatch_CrawlerRunLookedUpOncePerID checks the per-batch cache:
+// jobs sharing a run id cost one lookup, and a different id costs another.
+func TestProcessBatch_CrawlerRunLookedUpOncePerID(t *testing.T) {
+	db := setupDB(t)
+	runQueries := countQueries(t, db, "crawler_runs")
+	svc := newIngestionService(t, db, extractionResponder(validExtractionJSON))
+
+	svc.ProcessBatch(context.Background(), []ingestion.RawJobInput{
+		rawJob("job-1", "Lanka Retail Group", "Store Manager", "Kandy", "Manage daily operations.", "Test", 100),
+		rawJob("job-2", "Ceylon Tea Traders", "Accountant", "Galle", "Maintain the books.", "Test", 100),
+		rawJob("job-3", "Island Logistics", "Driver", "Matara", "Deliver goods across the south.", "Test", 200),
+	})
+
+	if got := runQueries.Load(); got != 2 {
+		t.Errorf("expected 2 crawler run lookups (one per distinct id), got %d", got)
 	}
 }

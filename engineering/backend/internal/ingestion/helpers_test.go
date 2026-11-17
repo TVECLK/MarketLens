@@ -112,6 +112,7 @@ func newIngestionService(t *testing.T, db *gorm.DB, respond mocks.Responder) *in
 	return ingestion.NewIngestionService(
 		svcs.JobPosts,
 		svcs.Sources,
+		svcs.CrawlerRuns,
 		client,
 		"test-model",
 		newIndustryClassifier(svcs, client),
