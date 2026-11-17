@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from email.message import EmailMessage
 from html import escape
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from config import (
     APP_NAME,
@@ -154,14 +154,22 @@ class EmailAlertService:
             return False
         return True
 
-    # Blocking: it is run in a thread by _deliver
-    def _send_message(self, message: EmailMessage) -> None:
+    # Blocking: it is run in a thread by _deliver. It returns the recipients the
+    # server refused (address -> (code, reason)), which is empty when all were
+    # accepted. smtplib only raises when every recipient is refused.
+    def _send_message(self, message: EmailMessage) -> Dict[str, Tuple[int, bytes]]:
         with smtplib.SMTP(
             self._smtp_host, self._smtp_port, timeout=SMTP_TIMEOUT_SECONDS
         ) as server:
             server.starttls(context=ssl.create_default_context())
             server.login(self._smtp_username, self._smtp_password)
-            server.send_message(message)
+            return server.send_message(message)
+
+    @staticmethod
+    def _decode(reason: bytes | str) -> str:
+        if isinstance(reason, bytes):
+            return reason.decode("utf-8", errors="replace")
+        return str(reason)
 
     # Best effort: it never raises, so a mail problem cannot change or hide the
     # outcome of the crawl
@@ -175,10 +183,19 @@ class EmailAlertService:
             message["To"] = ", ".join(self._recipients)
             message.set_content(text)
             message.add_alternative(html, subtype="html")
-            await asyncio.to_thread(self._send_message, message)
-            logger.info(
-                f"Email alert: Sent '{subject}' to {len(self._recipients)} admin(s)."
-            )
+            refused = await asyncio.to_thread(self._send_message, message)
+            if refused:
+                details = ", ".join(
+                    f"{address} ({code} {self._decode(reason)})"
+                    for address, (code, reason) in refused.items()
+                )
+                logger.warning(
+                    f"Email alert: The server refused {len(refused)} of "
+                    f"{len(self._recipients)} recipient(s) of '{subject}': {details}"
+                )
+            accepted = len(self._recipients) - len(refused)
+            if accepted > 0:
+                logger.info(f"Email alert: Sent '{subject}' to {accepted} admin(s).")
         except Exception as e:
             logger.error(f"Email alert: Could not send '{subject}': {e}")
 

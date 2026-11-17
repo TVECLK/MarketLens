@@ -1,3 +1,4 @@
+import logging
 import ssl
 from unittest.mock import AsyncMock
 
@@ -53,6 +54,28 @@ async def test_escapes_html_and_truncates_long_reasons(smtp, service):
     html = html_of(sent_message(smtp))
     assert "<script>" not in html and "&lt;b&gt;x&lt;/b&gt;" in html
     assert "a" * 250 not in html and "..." in html
+
+
+async def test_logs_the_recipients_the_server_refused(smtp, service, caplog):
+    smtp.send_message.return_value = {"b@test.lk": (550, b"No such user")}
+
+    with caplog.at_level(logging.INFO):
+        await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "1 of 2" in warnings[0].message
+    assert "b@test.lk (550 No such user)" in warnings[0].message
+    # Only the accepted recipient is counted as sent
+    assert "to 1 admin(s)" in caplog.text
+
+
+async def test_logs_no_warning_when_every_recipient_is_accepted(smtp, service, caplog):
+    with caplog.at_level(logging.INFO):
+        await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert "to 2 admin(s)" in caplog.text
 
 
 async def test_a_smtp_failure_does_not_raise(smtp, service):

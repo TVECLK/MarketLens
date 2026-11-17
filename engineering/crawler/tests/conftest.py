@@ -165,6 +165,8 @@ def smtp(monkeypatch):
     """Replaces the SMTP connection. Returns the fake server."""
     server = MagicMock()
     server.__enter__.return_value = server
+    # Like the real send_message: no recipient was refused
+    server.send_message.return_value = {}
     monkeypatch.setattr(
         "utils.email_alert.smtplib.SMTP", MagicMock(return_value=server)
     )
