@@ -80,7 +80,7 @@ const chartBody = (data: VacancyTrendPoint[]) => (
         type="monotone"
         dataKey="open_job_count"
         name="Job Count"
-        stroke={CHART_COLORS.indigo}
+        stroke={CHART_COLORS.violet}
         strokeWidth={2}
         fill="url(#trendFill)"
         dot={
@@ -113,7 +113,7 @@ export default function VacancyTrendChart({
   const publicTitle = (
     <>
       Sri Lanka saw{" "}
-      <span className="bg-indigo-200 text-black font-semibold px-1 rounded">{total} job vacancies</span>
+      <span className="bg-violet-200 text-purple-950 font-semibold px-1">{total} job vacancies</span>
       {" "}between {formatDate(fromDate)} and {formatDate(toDate)} listed on tracked job platforms.
     </>
   );
