@@ -5,6 +5,7 @@ import ssl
 from dataclasses import dataclass
 from datetime import datetime
 from email.message import EmailMessage
+from email.utils import formatdate, make_msgid, parseaddr
 from html import escape
 from typing import Dict, List, Optional, Tuple
 
@@ -165,6 +166,12 @@ class EmailAlertService:
             server.login(self._smtp_username, self._smtp_password)
             return server.send_message(message)
 
+    # The domain of "Name <user@domain>" or "user@domain", None if it has none
+    @staticmethod
+    def _sender_domain(sender: str) -> Optional[str]:
+        _, address = parseaddr(sender)
+        return address.partition("@")[2] or None
+
     @staticmethod
     def _decode(reason: bytes | str) -> str:
         if isinstance(reason, bytes):
@@ -179,8 +186,13 @@ class EmailAlertService:
         try:
             message = EmailMessage()
             message["Subject"] = subject
-            message["From"] = self._from_email or self._smtp_username
+            sender = self._from_email or self._smtp_username
+            message["From"] = sender
             message["To"] = ", ".join(self._recipients)
+            # smtplib adds neither header and not every server fills them in. The
+            # Message-ID uses the sender's domain, as the hostname of a pod is random
+            message["Date"] = formatdate(localtime=True)
+            message["Message-ID"] = make_msgid(domain=self._sender_domain(sender))
             message.set_content(text)
             message.add_alternative(html, subtype="html")
             refused = await asyncio.to_thread(self._send_message, message)

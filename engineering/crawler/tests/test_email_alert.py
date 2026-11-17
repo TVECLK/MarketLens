@@ -1,5 +1,6 @@
 import logging
 import ssl
+from email.utils import parsedate_to_datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -44,6 +45,29 @@ async def test_sends_one_email_listing_the_failed_crawlers(smtp, service):
     context = smtp.starttls.call_args.kwargs["context"]
     assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
     smtp.login.assert_called_once_with("bot@test.lk", "secret")
+
+
+async def test_the_email_has_a_date_and_a_message_id(smtp, make_service):
+    service = make_service(from_email="MarketLens <bot@test.lk>")
+
+    await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
+    message = sent_message(smtp)
+    assert message["Date"]
+    assert parsedate_to_datetime(message["Date"]).tzinfo is not None
+    assert message["Message-ID"].startswith("<") and message["Message-ID"].endswith(
+        "@test.lk>"
+    )
+
+
+async def test_every_email_gets_its_own_message_id(smtp, service):
+    await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+    first = sent_message(smtp)["Message-ID"]
+    smtp.send_message.reset_mock()
+
+    await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
+    assert sent_message(smtp)["Message-ID"] != first
 
 
 async def test_escapes_html_and_truncates_long_reasons(smtp, service):
