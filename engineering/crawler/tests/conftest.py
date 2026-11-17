@@ -186,6 +186,7 @@ def make_service():
             from_email="bot@test.lk",
             recipients=["a@test.lk", "b@test.lk"],
             dashboard_url="http://app.test/data-sources",
+            app_name="Test App",
         )
         settings.update(overrides)
         return EmailAlertService(**settings)

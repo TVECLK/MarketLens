@@ -9,6 +9,7 @@ from html import escape
 from typing import List, Optional
 
 from config import (
+    APP_NAME,
     ALERT_EMAILS_ENABLED,
     ALERT_FROM_EMAIL,
     ALERT_RECIPIENTS,
@@ -49,7 +50,12 @@ def _timestamp() -> str:
 # Wraps the content in the shared layout. Only inline CSS and tables are used,
 # because email clients ignore <style> blocks and have poor support for flexbox/grid.
 def _render_html(
-    title: str, intro: str, body: str, note: str, dashboard_url: str
+    app_name: str,
+    title: str,
+    intro: str,
+    body: str,
+    note: str,
+    dashboard_url: str,
 ) -> str:
     return f"""\
 <!DOCTYPE html>
@@ -59,7 +65,7 @@ def _render_html(
     <tr><td align="center">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
         <tr><td style="background-color:{COLOR_DARK};padding:20px 28px;">
-          <span style="color:#ffffff;font-size:18px;font-weight:bold;">Labour Market Demand Application</span>
+          <span style="color:#ffffff;font-size:18px;font-weight:bold;">{escape(app_name)}</span>
           <span style="color:#93c5fd;font-size:13px;margin-left:8px;">Crawler Alert</span>
         </td></tr>
         <tr><td style="background-color:#fef2f2;border-bottom:1px solid #fecaca;padding:18px 28px;">
@@ -76,7 +82,7 @@ def _render_html(
           </tr></table>
         </td></tr>
         <tr><td style="background-color:#f3f4f6;padding:14px 28px;color:#6b7280;font-size:12px;">
-          This is an automated message from the Labour Market Analysis crawler. Sent at {escape(_timestamp())}.
+          This is an automated message from the {escape(app_name)} crawler. Sent at {escape(_timestamp())}.
         </td></tr>
       </table>
     </td></tr>
@@ -120,6 +126,7 @@ class EmailAlertService:
         from_email: Optional[str] = None,
         recipients: Optional[List[str]] = None,
         dashboard_url: Optional[str] = None,
+        app_name: Optional[str] = None,
     ):
         self._enabled = ALERT_EMAILS_ENABLED if enabled is None else enabled
         self._smtp_host = smtp_host or SMTP_HOST
@@ -129,6 +136,7 @@ class EmailAlertService:
         self._from_email = from_email or ALERT_FROM_EMAIL
         self._recipients = ALERT_RECIPIENTS if recipients is None else recipients
         self._dashboard_url = dashboard_url or DASHBOARD_URL
+        self._app_name = app_name or APP_NAME
 
     def _is_ready(self) -> bool:
         if not self._enabled:
@@ -190,7 +198,7 @@ class EmailAlertService:
         )
         text = "\n".join(
             [
-                f"MarketLens: {title} in crawler run #{run_id}",
+                f"{self._app_name}: {title} in crawler run #{run_id}",
                 "",
                 *[f"- {f.name}: {_truncate(f.reason)}" for f in failed],
                 "",
@@ -199,6 +207,7 @@ class EmailAlertService:
             ]
         )
         html = _render_html(
+            self._app_name,
             title,
             "Some crawlers did not finish successfully in the latest run.",
             _failure_body(failed, run_id),
@@ -206,7 +215,7 @@ class EmailAlertService:
             self._dashboard_url,
         )
         await self._deliver(
-            f"[Labour Market Demand Application] {title} in crawler run #{run_id}",
+            f"[{self._app_name}] {title} in crawler run #{run_id}",
             text,
             html,
         )
@@ -232,7 +241,7 @@ class EmailAlertService:
         )
         text = "\n".join(
             [
-                f"MarketLens: {title}",
+                f"{self._app_name}: {title}",
                 "",
                 reason,
                 "",
@@ -241,10 +250,11 @@ class EmailAlertService:
             ]
         )
         html = _render_html(
+            self._app_name,
             title,
             "The latest crawler run did not complete.",
             body,
             note,
             self._dashboard_url,
         )
-        await self._deliver(f"[Labour Market Demand Application] {title}", text, html)
+        await self._deliver(f"[{self._app_name}] {title}", text, html)

@@ -31,7 +31,8 @@ async def test_sends_one_email_listing_the_failed_crawlers(smtp, service):
 
     message = sent_message(smtp)
     assert message["To"] == "a@test.lk, b@test.lk"
-    assert "2 crawlers failed" in message["Subject"]
+    assert message["Subject"].startswith("[Test App] 2 crawlers failed")
+    assert "Test App" in message.get_body(("plain",)).get_content()
     html = html_of(message)
     assert "ikman" in html and "rooster" in html and "RuntimeError: site down" in html
     assert "deactivate the failed source(s)" in html
