@@ -29,6 +29,6 @@ ALERT_RECIPIENTS = [
     for email in os.getenv("ALERT_RECIPIENTS", "").split(",")
     if email.strip()
 ]
-APP_NAME = os.getenv("APP_NAME") or "Labour Market Demand Application"
+APP_NAME = os.getenv("APP_NAME") or "Labour Market Analysis System"
 # The page the "Open Data Sources Dashboard" button of the email opens
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:3000/data-sources")
