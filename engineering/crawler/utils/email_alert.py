@@ -219,7 +219,7 @@ class EmailAlertService:
         )
         title = "Crawler run crashed"
         note = (
-            "No crawler results were recorded for this run. Please check the crawler "
+            "Please check the crawler "
             "logs and the backend, and review the sources in the Data Sources "
             "dashboard."
         )
