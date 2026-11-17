@@ -107,7 +107,7 @@ def _failure_body(failed: List[FailedCrawler], run_id: int) -> str:
 
 
 class EmailAlertService:
-    """Emails the admins when crawlers fail. Every setting defaults to the value in
+    """Send emails when crawlers fail. Every setting defaults to the value in
     config.py, which is read when the service is created."""
 
     def __init__(
@@ -185,7 +185,7 @@ class EmailAlertService:
         count = len(failed)
         title = f"{count} crawler{'s' if count > 1 else ''} failed"
         note = (
-            "Please deactivate the failed source(s) in the Data Sources dashboard "
+            "Please deactivate the failed source(s) in the dashboard "
             "until the issue is fixed, then activate them again."
         )
         text = "\n".join(
@@ -211,7 +211,7 @@ class EmailAlertService:
             html,
         )
 
-    # This function emails the admins that the whole crawler run crashed before the
+    # This function send and email that the whole crawler run crashed before the
     # crawlers could finish, so there is no list of failed crawlers
     async def send_crash_alert(self, error: Optional[BaseException]) -> None:
         reason = (
