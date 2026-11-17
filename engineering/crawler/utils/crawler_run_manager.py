@@ -215,10 +215,8 @@ class CrawlerManager:
 
             succeeded_sources = [r for r in results if isinstance(r, str)]
 
-            await self._finalize_run(client, crawler_run_id, succeeded_sources)
-
             # The active crawlers that did not succeed. The email is only sent when
-            # there is at least one, and after the run is recorded
+            # there is at least one
             failed_crawlers = [
                 FailedCrawler(
                     name, self._failure_reasons.get(name, "Crawler did not succeed")
@@ -226,9 +224,16 @@ class CrawlerManager:
                 for name in self._registry
                 if name not in succeeded_sources
             ]
-            await self._alert_service.send_failure_alert(
-                failed_crawlers, crawler_run_id
-            )
+
+            # The email is sent even if finalizing fails, so the admins still learn
+            # which crawlers failed. Sending never raises, so a failure of
+            # _finalize_run still reaches the caller.
+            try:
+                await self._finalize_run(client, crawler_run_id, succeeded_sources)
+            finally:
+                await self._alert_service.send_failure_alert(
+                    failed_crawlers, crawler_run_id
+                )
 
             logger.info("Scraper execution pipeline concluded.")
             return succeeded_sources

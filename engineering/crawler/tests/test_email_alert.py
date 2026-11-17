@@ -3,6 +3,7 @@ import ssl
 from email.utils import parsedate_to_datetime
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 from utils import email_alert
@@ -261,3 +262,17 @@ async def test_manager_gives_an_empty_list_when_nothing_failed(
     await manager.run_all_crawlers(concurrent=True)
 
     assert alert_service.send_failure_alert.await_args.args[0] == []
+
+
+async def test_manager_still_alerts_when_finalizing_the_run_fails(
+    manager, alert_service
+):
+    manager._start_run = AsyncMock(return_value=7)
+    manager._finalize_run = AsyncMock(side_effect=httpx.ConnectError("backend down"))
+
+    with pytest.raises(httpx.ConnectError, match="backend down"):
+        await manager.run_all_crawlers(concurrent=True)
+
+    failed, run_id = alert_service.send_failure_alert.await_args.args
+    assert run_id == 7
+    assert [f.name for f in failed] == ["source_c"]
