@@ -13,9 +13,9 @@ THUNDER_RESOURCE = os.getenv("THUNDER_RESOURCE")
 THUNDER_VERIFY_TLS = os.getenv("THUNDER_INSECURE_TLS", "true").lower() != "true"
 
 
-# Email alerts for failed crawlers (Google SMTP: use an App Password, not the account password)
+# Email alerts for failed crawlers
 ALERT_EMAILS_ENABLED = os.getenv("ALERT_EMAILS_ENABLED", "true").lower() == "true"
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_HOST = os.getenv("SMTP_HOST")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")

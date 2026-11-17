@@ -68,13 +68,19 @@ async def test_skips_when_disabled(smtp, make_service):
 
 @pytest.mark.parametrize(
     "missing",
-    [{"smtp_password": ""}, {"smtp_username": ""}, {"recipients": []}],
-    ids=["password", "username", "recipients"],
+    [
+        {"smtp_host": ""},
+        {"smtp_password": ""},
+        {"smtp_username": ""},
+        {"recipients": []},
+    ],
+    ids=["host", "password", "username", "recipients"],
 )
 async def test_skips_when_the_settings_are_missing(
     smtp, make_service, monkeypatch, missing
 ):
     # The service falls back to config.py for an empty setting, so those are cleared
+    monkeypatch.setattr("utils.email_alert.SMTP_HOST", None)
     monkeypatch.setattr("utils.email_alert.SMTP_PASSWORD", None)
     monkeypatch.setattr("utils.email_alert.SMTP_USERNAME", None)
     await make_service(**missing).send_failure_alert(
