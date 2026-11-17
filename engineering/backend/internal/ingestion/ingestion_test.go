@@ -528,3 +528,45 @@ func TestProcessBatch_CrawlerRunLookedUpOncePerID(t *testing.T) {
 		t.Errorf("expected 2 crawler run lookups (one per distinct id), got %d", got)
 	}
 }
+
+// TestProcessBatch_TooLittleText checks that empty text and a character or
+// two of text are rejected the same way: a 400 with one message, before any
+// source or crawler run lookup. The bad source and run id prove that: the
+// text error wins, so no lookup ran. A three-character job is accepted.
+func TestProcessBatch_TooLittleText(t *testing.T) {
+	const wantMsg = "job has too little text: employer, job_role, location and description together are under 3 characters"
+
+	tests := []struct {
+		name    string
+		job     ingestion.RawJobInput
+		wantErr bool
+	}{
+		{"all fields empty", rawJob("job-1", "", "", "", "", "NoSuchSource", 9999), true},
+		{"whitespace only", rawJob("job-1", " ", "\t", "", "  ", "NoSuchSource", 9999), true},
+		{"one character", rawJob("job-1", "A", "", "", "", "NoSuchSource", 9999), true},
+		{"two characters", rawJob("job-1", "AB", "", "", "", "NoSuchSource", 9999), true},
+		{"three characters is enough", rawJob("job-1", "ABC", "", "", "", "Test", 1), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupDB(t)
+			svc := newIngestionService(t, db, extractionResponder(validExtractionJSON))
+
+			failed := svc.ProcessBatch(context.Background(), []ingestion.RawJobInput{tt.job})
+
+			if !tt.wantErr {
+				if len(failed) != 0 {
+					t.Fatalf("expected no failure, got %+v", failed)
+				}
+				return
+			}
+			if len(failed) != 1 || failed[0].StatusCode != http.StatusBadRequest {
+				t.Fatalf("expected one 400 failure, got %+v", failed)
+			}
+			if failed[0].Error != wantMsg {
+				t.Errorf("expected %q, got %q", wantMsg, failed[0].Error)
+			}
+		})
+	}
+}

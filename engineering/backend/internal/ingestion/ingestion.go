@@ -29,16 +29,12 @@ type RawJobInput struct {
 	Source       string
 }
 
-// hasNoUsableText reports whether raw has no content in any text
-// field — such a job produces a degenerate MinHash signature (every
-// element stays at its max-value default), making it look identical
-// to every other such job.
-func hasNoUsableText(raw RawJobInput) bool {
-	return strings.TrimSpace(raw.Employer) == "" &&
-		strings.TrimSpace(raw.JobRole) == "" &&
-		strings.TrimSpace(raw.Location) == "" &&
-		strings.TrimSpace(raw.Description) == ""
-}
+// tooLittleTextMessage is the error for a job whose text is shorter than
+// one shingle, whether it is empty or just a character or two.
+var tooLittleTextMessage = fmt.Sprintf(
+	"job has too little text: employer, job_role, location and description together are under %d characters",
+	shingleSize,
+)
 
 // FailedJob reports one job's save failure, keyed by the crawler-generated
 // job_id. A job not present in a ProcessBatch response's failures either
@@ -113,11 +109,21 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 	runChecks := make(map[uint]*FailedJob)
 
 	for _, raw := range rawJobs {
-		if hasNoUsableText(raw) {
+		jobData := JobData{
+			Employer:    raw.Employer,
+			JobRole:     raw.JobRole,
+			Location:    raw.Location,
+			Description: raw.Description,
+		}
+
+		// Checked first: it is plain string work, so a job with no
+		// fingerprintable text costs no database lookup.
+		if !hasUsableText(jobData) {
+			log.Printf("ingestion: job %s rejected: %v", raw.JobID, ErrTooLittleText)
 			failures = append(failures, FailedJob{
 				JobID:      raw.JobID,
 				StatusCode: http.StatusBadRequest,
-				Error:      "job has no text: employer, job_role, location and description are all empty",
+				Error:      tooLittleTextMessage,
 			})
 			continue
 		}
@@ -171,19 +177,15 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 			continue
 		}
 
-		jobData := JobData{
-			Employer:    raw.Employer,
-			JobRole:     raw.JobRole,
-			Location:    raw.Location,
-			Description: raw.Description,
-		}
+		// hasUsableText passed above, so this only fails if the two ever
+		// disagree; keep it as a safety net.
 		sig, lshIndexes, err := GenerateMinHashAndLSH(jobData, s.numPerm, s.numBands)
 		if err != nil {
 			log.Printf("ingestion: job %s rejected: %v", raw.JobID, err)
 			failures = append(failures, FailedJob{
 				JobID:      raw.JobID,
 				StatusCode: http.StatusBadRequest,
-				Error:      fmt.Sprintf("job has too little text: employer, job_role, location and description together are under %d characters", shingleSize),
+				Error:      tooLittleTextMessage,
 			})
 			continue
 		}

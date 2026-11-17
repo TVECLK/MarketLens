@@ -41,17 +41,32 @@ type LSHIndex struct {
 // shingle, so it has no MinHash signature to compare.
 var ErrTooLittleText = errors.New("too little text to fingerprint")
 
-// GenerateMinHashAndLSH computes the MinHash signature and LSH bucket
-// keys for a job.
-func GenerateMinHashAndLSH(job JobData, numPerm, numBands int) ([]uint32, []LSHIndex, error) {
+// normalizeText joins a job's text fields, lowercases them and collapses
+// runs of whitespace: the text a signature is built from, and the text
+// whose length decides whether there is enough to fingerprint.
+func normalizeText(job JobData) string {
 	text := strings.ToLower(strings.Join([]string{
 		job.Employer, job.JobRole, job.Location, job.Description,
 	}, " "))
-	text = strings.Join(strings.Fields(text), " ")
+	return strings.Join(strings.Fields(text), " ")
+}
 
-	if utf8.RuneCountInString(text) < shingleSize {
+// hasUsableText reports whether a job's normalized text is at least one
+// shingle long. Shorter text (including none at all) gives no shingles, so
+// every such job would get the same all-max signature and match the first
+// one as a duplicate.
+func hasUsableText(job JobData) bool {
+	return utf8.RuneCountInString(normalizeText(job)) >= shingleSize
+}
+
+// GenerateMinHashAndLSH computes the MinHash signature and LSH bucket
+// keys for a job. It returns ErrTooLittleText when the job has no usable
+// text, so no caller can get a signature that matches every other short job.
+func GenerateMinHashAndLSH(job JobData, numPerm, numBands int) ([]uint32, []LSHIndex, error) {
+	if !hasUsableText(job) {
 		return nil, nil, ErrTooLittleText
 	}
+	text := normalizeText(job)
 
 	shingles := shingle(text, shingleSize)
 
