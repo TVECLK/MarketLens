@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ThunderIDProvider } from "@thunderid/nextjs/server";
-import { Inter } from "next/font/google";
+import { Poppins } from "next/font/google";
 import "./globals.css";
 import QueryProvider from "@/providers/query-provider";
 import AppShell from "@/components/layout/AppShell";
@@ -9,7 +9,7 @@ import { hasServerPermission } from "@/lib/server-permissions";
 
 export const dynamic = "force-dynamic";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
 export const metadata: Metadata = {
   title: "Labour Market Analysis System",

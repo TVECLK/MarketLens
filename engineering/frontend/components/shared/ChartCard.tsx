@@ -3,7 +3,7 @@ import { clsx } from "clsx";
 
 interface ChartCardProps {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   heightClassName: string;
   bodyClassName?: string;
   headerRight?: ReactNode;
@@ -49,10 +49,12 @@ export default function ChartCard({
           headerRight && "justify-between",
         )}
       >
-        <div>
-          <h4 className="text-sm font-bold text-zinc-900">{title}</h4>
-          <p className="text-[11px] text-zinc-400">{subtitle}</p>
-        </div>
+        <div className="mb-32">
+          <div className="w-3xl">
+          <h4 className="text-3xl font-normal text-zinc-900 whitespace-pre-line leading-snug">{title}</h4>
+          </div>
+          {subtitle && <p className="text-[11px] text-zinc-400">{subtitle}</p>}
+        </div> 
         {headerRight}
       </div>
       <div className={clsx("flex-1 mt-4 min-w-0", bodyClassName)}>

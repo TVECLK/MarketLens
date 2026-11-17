@@ -23,45 +23,46 @@ import type { VacancyTrendPoint } from "@/types/dashboard";
 
 interface VacancyTrendChartProps {
   data: VacancyTrendPoint[];
-  granularity?: "daily" | "monthly";
   totalVacancies?: number;
+  fromDate: string;
+  toDate: string;
   isLoading: boolean;
   isError: boolean;
 }
 
+function formatDate(dateStr: string): string {
+  const [year, month, day] = dateStr.split("-");
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  return date.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
+}
+
 export default function VacancyTrendChart({
   data,
-  granularity,
   totalVacancies,
+  fromDate,
+  toDate,
   isLoading,
   isError,
 }: VacancyTrendChartProps) {
-  const subtitle =
-    granularity === "daily"
-      ? "Daily vacancy counts"
-      : granularity === "monthly"
-        ? "Monthly vacancy counts"
-        : "Vacancy counts";
+  const total = isLoading
+    ? "…"
+    : totalVacancies === undefined
+      ? "—"
+      : totalVacancies.toLocaleString();
+
+  const from = formatDate(fromDate);
+  const to = formatDate(toDate);
+
+  const title = `Sri Lanka saw ${total} job vacancies between ${from} and ${to}`;
 
   return (
     <ChartCard
-      title="Vacancy Trend"
-      subtitle={subtitle}
-      heightClassName="h-[320px] md:h-[420px]"
+      title={title}
+      heightClassName="h-[320px] md:h-[600px]"
       isLoading={isLoading}
       isError={isError}
       isEmpty={isEmptyChartData(data, (point) => point.open_job_count)}
       loadingLabel="Loading trend data..."
-      headerRight={
-        <div className="text-right">
-          <p className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
-            Total vacancies
-          </p>
-          <p className="text-lg font-black text-zinc-900">
-            {isLoading ? "…" : totalVacancies === undefined ? "—" : totalVacancies.toLocaleString()}
-          </p>
-        </div>
-      }
     >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 10, right: 20, left: 4, bottom: 15 }}>
