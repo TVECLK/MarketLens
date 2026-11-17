@@ -4,6 +4,7 @@ import { clsx } from "clsx";
 interface ChartCardProps {
   title: ReactNode;
   subtitle?: string;
+  headline?: ReactNode;
   heightClassName: string;
   bodyClassName?: string;
   headerRight?: ReactNode;
@@ -12,7 +13,6 @@ interface ChartCardProps {
   loadingLabel: string;
   isError?: boolean;
   isEmpty?: boolean;
-  variant?: "default" | "public";
   children: ReactNode;
 }
 
@@ -27,6 +27,7 @@ function CardMessage({ children }: { children: ReactNode }) {
 export default function ChartCard({
   title,
   subtitle,
+  headline,
   heightClassName,
   bodyClassName,
   headerRight,
@@ -35,7 +36,6 @@ export default function ChartCard({
   loadingLabel,
   isError = false,
   isEmpty = false,
-  variant = "default",
   children,
 }: ChartCardProps) {
   return (
@@ -45,27 +45,20 @@ export default function ChartCard({
         heightClassName,
       )}
     >
+      {headline && (
+        <div className="mb-4 pb-4 border-b border-zinc-100">
+          <p className="w-2/3 text-2xl font-normal text-zinc-900 whitespace-pre-line leading-snug">{headline}</p>
+        </div>
+      )}
       <div
         className={clsx(
           "flex flex-wrap items-start border-b border-zinc-100 pb-2 gap-2",
           headerRight && "justify-between",
         )}
       >
-        <div className={variant === "public" ? "flex flex-col mb-2" : undefined}>
-          <h4
-            className={
-              variant === "public"
-                ? "w-2/3 text-2xl font-normal text-black-600 whitespace-pre-line leading-snug"
-                : "text-sm font-bold text-zinc-900"
-            }
-          >
-            {title}
-          </h4>
-          {subtitle && (
-            variant === "public"
-              ? <p className="text-xl text-zinc-400 mt-auto pt-8">{subtitle}</p>
-              : <p className="text-[11px] text-zinc-400">{subtitle}</p>
-          )}
+        <div>
+          <h4 className="text-sm font-bold text-zinc-900">{title}</h4>
+          {subtitle && <p className="text-[11px] text-zinc-400">{subtitle}</p>}
         </div>
         {headerRight}
       </div>

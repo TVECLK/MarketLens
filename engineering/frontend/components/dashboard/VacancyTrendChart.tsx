@@ -114,7 +114,7 @@ export default function VacancyTrendChart({
     <>
       Sri Lanka saw{" "}
       <span className="bg-indigo-200 text-black font-semibold px-1 rounded">{total} job vacancies</span>
-      {" "}between {formatDate(fromDate)} and {formatDate(toDate)} BASURU BASURU BASURU BASURU BASURU BASURU
+      {" "}between {formatDate(fromDate)} and {formatDate(toDate)} listed on tracked job platforms.
     </>
   );
 
@@ -145,14 +145,14 @@ export default function VacancyTrendChart({
       </SignedIn>
       <SignedOut>
         <ChartCard
-          title={publicTitle}
-          subtitle="Vacancy Trend"
-          heightClassName="h-[420px] md:h-[480px]"
+          title="Vacancy Trend"
+          subtitle={subtitle}
+          heightClassName="h-[320px] md:h-[420px]"
           isLoading={isLoading}
           isError={isError}
           isEmpty={isEmptyChartData(data, (point) => point.open_job_count)}
           loadingLabel="Loading trend data..."
-          variant="public"
+          headline={publicTitle}
         >
           {chartBody(data)}
         </ChartCard>
