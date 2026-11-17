@@ -298,8 +298,11 @@ func TestProcessBatch_Failures(t *testing.T) {
 			wantJobs:     0,
 		},
 		{
-			// No permanent/transient split here: it's a single-column update
-			// on an already-known-valid row, so it is always retryable.
+			// A DB error that isn't a constraint violation (here a timeout) is
+			// retryable, so 503. A constraint violation is permanent (422), the
+			// same as on the save path: the row being updated is known to exist,
+			// but the crawler_run_id written into it comes from the request and
+			// may point at a run that doesn't exist.
 			name: "failing to update a duplicate is 503",
 			seed: []ingestion.RawJobInput{ceylonJob},
 			setup: func(t *testing.T, db *gorm.DB) {
