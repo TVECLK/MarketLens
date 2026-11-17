@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { clsx } from "clsx";
 
 interface ChartCardProps {
-  title: string;
+  title: ReactNode;
   subtitle?: string;
   heightClassName: string;
   bodyClassName?: string;
@@ -51,17 +51,21 @@ export default function ChartCard({
           headerRight && "justify-between",
         )}
       >
-        <div className={variant === "public" ? "mb-8" : undefined}>
+        <div className={variant === "public" ? "flex flex-col mb-2" : undefined}>
           <h4
             className={
               variant === "public"
-                ? "text-3xl font-normal text-indigo-600 whitespace-pre-line leading-snug"
+                ? "w-2/3 text-2xl font-normal text-black-600 whitespace-pre-line leading-snug"
                 : "text-sm font-bold text-zinc-900"
             }
           >
             {title}
           </h4>
-          {subtitle && <p className="text-[11px] text-zinc-400">{subtitle}</p>}
+          {subtitle && (
+            variant === "public"
+              ? <p className="text-xl text-zinc-400 mt-auto pt-8">{subtitle}</p>
+              : <p className="text-[11px] text-zinc-400">{subtitle}</p>
+          )}
         </div>
         {headerRight}
       </div>

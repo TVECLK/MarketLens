@@ -110,7 +110,13 @@ export default function VacancyTrendChart({
         : "Vacancy counts";
 
   const total = isLoading ? "…" : totalVacancies === undefined ? "—" : totalVacancies.toLocaleString();
-  const publicTitle = `Sri Lanka saw ${total} job vacancies between ${formatDate(fromDate)} and ${formatDate(toDate)}`;
+  const publicTitle = (
+    <>
+      Sri Lanka saw{" "}
+      <span className="bg-indigo-200 text-black font-semibold px-1 rounded">{total} job vacancies</span>
+      {" "}between {formatDate(fromDate)} and {formatDate(toDate)} BASURU BASURU BASURU BASURU BASURU BASURU
+    </>
+  );
 
   return (
     <>
@@ -140,7 +146,8 @@ export default function VacancyTrendChart({
       <SignedOut>
         <ChartCard
           title={publicTitle}
-          heightClassName="h-[320px] md:h-[600px]"
+          subtitle="Vacancy Trend"
+          heightClassName="h-[420px] md:h-[480px]"
           isLoading={isLoading}
           isError={isError}
           isEmpty={isEmptyChartData(data, (point) => point.open_job_count)}
