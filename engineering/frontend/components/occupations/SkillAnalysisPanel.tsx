@@ -12,6 +12,7 @@ import {
 import { isEmptyChartData } from "@/lib/chart-data";
 import type { ChartDatum } from "@/types/chart";
 import SectionMessage from "@/components/analysis/SectionMessage";
+import InfoTooltip from "@/components/shared/InfoTooltip";
 import { skillSharePercent } from "@/lib/skill-share";
 import type { SkillStat, EmployerStat, SkillsSectionErrors } from "@/types/occupation";
 
@@ -67,8 +68,8 @@ export default function SkillAnalysisPanel({
       ) : (
         <>
           <div className="border border-zinc-100 p-5 rounded-xl flex flex-col">
-            <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-              Top 15 Skills in Demand
+            <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+              Top 15 Skills in Demand <InfoTooltip text="The 15 most frequently requested skills across vacancies in this occupation" className="text-zinc-900" />
             </h4>
             {sectionErrors.top_15_skills ? (
               <SectionMessage />

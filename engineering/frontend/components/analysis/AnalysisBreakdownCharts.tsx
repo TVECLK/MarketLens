@@ -28,6 +28,7 @@ import {
 } from "@/lib/chart-theme";
 import { YAxisTooltipTick, XAxisStraightTooltipTick } from "@/lib/chart-ticks";
 import SectionMessage from "@/components/analysis/SectionMessage";
+import InfoTooltip from "@/components/shared/InfoTooltip";
 import type { AnalysisSectionErrors } from "@/types/analysis";
 import type { ChartDatum, ShareDatum } from "@/types/chart";
 
@@ -73,7 +74,7 @@ export default function AnalysisBreakdownCharts({
       {childrenBreakdown.length > 0 && (
         <div className="border border-zinc-100 p-5 rounded-xl flex flex-col">
           <div className="border-b border-zinc-100 pb-2">
-            <h4 className="text-sm font-bold text-zinc-900">{childrenBreakdownTitle}</h4>
+            <h4 className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">{childrenBreakdownTitle} <InfoTooltip text="Vacancy breakdown by sub-classification within the selected category" className="text-zinc-900" /></h4>
             <p className="text-[11px] text-zinc-400">{childrenBreakdownDescription}</p>
           </div>
           <div
@@ -105,8 +106,8 @@ export default function AnalysisBreakdownCharts({
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-            Employment Sector
+          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+            Employment Sector <InfoTooltip text="Distribution of vacancies by employment sector" className="text-zinc-900" />
           </h4>
           <div className="flex-1 mt-4 min-w-0">
             {sectionErrors.employment_sector ? (
@@ -134,8 +135,8 @@ export default function AnalysisBreakdownCharts({
         </div>
 
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-            Experience
+          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+            Experience <InfoTooltip text="Required years of experience for the vacancies" className="text-zinc-900" />
           </h4>
           <div className="flex-1 mt-4 min-w-0">
             {sectionErrors.experience ? (
@@ -161,8 +162,8 @@ export default function AnalysisBreakdownCharts({
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-            Province
+          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+            Province <InfoTooltip text="Distribution of vacancies by province" className="text-zinc-900" />
           </h4>
           <div className="flex-1 flex items-center justify-center min-w-0">
             {sectionErrors.province ? (
@@ -201,8 +202,8 @@ export default function AnalysisBreakdownCharts({
         </div>
 
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-            Education Level
+          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+            Education Level <InfoTooltip text="Required education level for the vacancies" className="text-zinc-900" />
           </h4>
           <div className="flex-1 flex items-center justify-center min-w-0">
             {sectionErrors.education ? (
@@ -243,8 +244,8 @@ export default function AnalysisBreakdownCharts({
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-            Formal / Informal
+          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+            Formal / Informal <InfoTooltip text="Proportion of formal vs informal sector vacancies" className="text-zinc-900" />
           </h4>
           <div className="flex-1 flex items-center justify-center min-w-0">
             {sectionErrors.formality ? (
@@ -283,8 +284,8 @@ export default function AnalysisBreakdownCharts({
         </div>
 
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-            Gender
+          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+            Gender <InfoTooltip text="Gender preference specified in vacancy listings" className="text-zinc-900" />
           </h4>
           <div className="flex-1 flex items-center justify-center min-w-0">
             {sectionErrors.gender ? (
@@ -324,8 +325,8 @@ export default function AnalysisBreakdownCharts({
       </div>
 
       <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-        <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-          Vocational Education (NVQ Level)
+        <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+          Vocational Education (NVQ Level) <InfoTooltip text="Distribution of vacancies by NVQ vocational education level" className="text-zinc-900" />
         </h4>
         <div className="flex-1 mt-4 min-w-0">
           {sectionErrors.vocational_education ? (
