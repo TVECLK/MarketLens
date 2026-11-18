@@ -35,14 +35,12 @@ export default function DateRangePicker({
           : "border-b border-transparent",
       )}
     >
-      {error ? (
+      {error && (
         <p role="alert" className="text-xs text-red-500 font-bold">
           {error}
         </p>
-      ) : (
-        <p className="text-xs text-zinc-400 font-medium">Select a date range</p>
       )}
-      <div className="flex flex-wrap items-center gap-3 mt-3">
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <div className="flex items-center gap-2 bg-zinc-100 px-3 py-2 rounded-md">
           <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
             From
