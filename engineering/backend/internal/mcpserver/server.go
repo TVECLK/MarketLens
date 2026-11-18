@@ -221,7 +221,7 @@ func registerNoArgTool[T any](server *mcp.Server, name, description string, fn f
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
 			out, err := fn(ctx)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, toolError(name, err)
 			}
 			return nil, wrapIfList(out), nil
 		},
@@ -240,7 +240,7 @@ func registerIDTool[T any](server *mcp.Server, name, description string, fn func
 		func(ctx context.Context, _ *mcp.CallToolRequest, in idInput) (*mcp.CallToolResult, any, error) {
 			out, err := fn(ctx, in.ID)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, toolError(name, err)
 			}
 			return nil, wrapIfList(out), nil
 		},

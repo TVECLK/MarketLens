@@ -265,7 +265,7 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 		active := true
 		sources, err := svcs.Sources.ListSources(ctx, string(models.SourceTypeManual), &active)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to list manual sources: %w", err)
+			return nil, nil, toolError("select_manual_source", err)
 		}
 		if len(sources) == 0 {
 			return nil, selectManualSourceOutput{
@@ -366,7 +366,7 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 			return nil, nil, fmt.Errorf("source %q is not registered - call select_manual_source and use the source it returns. %s", sourceName, noMatchingSourceMessage)
 		}
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to look up source %q: %w", sourceName, err)
+			return nil, nil, toolError("submit_newspaper_vacancies", err)
 		}
 		if source.Type != models.SourceTypeManual {
 			return nil, nil, fmt.Errorf("source %q is not a manual source - call select_manual_source and use the source it returns. %s", sourceName, noMatchingSourceMessage)
@@ -405,7 +405,7 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 		// manual submission gets its own run, closed once the batch is done.
 		run, err := svcs.CrawlerRuns.CreateCrawlerRun(ctx)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to start ingestion run: %w", err)
+			return nil, nil, toolError("submit_newspaper_vacancies", err)
 		}
 		runStatus := "FAILED"
 		defer func() {

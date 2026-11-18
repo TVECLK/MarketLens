@@ -43,7 +43,7 @@ func registerHierarchyTools(server *mcp.Server, svcs *service.Services) {
 	}) (*mcp.CallToolResult, any, error) {
 		items, total, err := svcs.OccupationGroups.GetAll(ctx, in.Limit, in.Offset, nil, nil)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, toolError("get_occupation_groups", err)
 		}
 		return nil, map[string]any{"items": items, "total": total, "limit": svcs.OccupationGroups.PageLimit(in.Limit), "offset": max(in.Offset, 0)}, nil
 	})
@@ -83,7 +83,7 @@ func registerHierarchyTools(server *mcp.Server, svcs *service.Services) {
 	}) (*mcp.CallToolResult, any, error) {
 		items, total, err := svcs.IndustrySubclasses.GetAll(ctx, in.Limit, in.Offset, nil, nil)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, toolError("get_industry_subclasses", err)
 		}
 		return nil, map[string]any{"items": items, "total": total, "limit": svcs.IndustrySubclasses.PageLimit(in.Limit), "offset": max(in.Offset, 0)}, nil
 	})
@@ -164,7 +164,7 @@ func registerLevelBreakdownTool[T any](
 			}
 			out, err := fn(ctx, in.Standard, in.Level, id, from, to)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, toolError(name, err)
 			}
 			return nil, wrapIfList(out), nil
 		},
@@ -186,7 +186,7 @@ func registerChildrenTool(server *mcp.Server, svcs *service.Services) {
 		}
 		items, childLevel, err := svcs.Analytics.GetLevelChildren(ctx, in.Standard, in.Level, id, from, to)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, toolError("get_hierarchy_children", err)
 		}
 		return nil, map[string]any{"child_level": childLevel, "children": items}, nil
 	})

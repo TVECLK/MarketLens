@@ -28,7 +28,7 @@ func registerAnalysisTools(server *mcp.Server, svcs *service.Services) {
 		}
 		items, total, err := svcs.Analytics.GetAllSkillsByOccupationLevel(ctx, in.Level, in.ID, from, to, in.Limit, in.Offset)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, toolError("get_all_skills_by_occupation", err)
 		}
 		return nil, map[string]any{"items": items, "total": total, "limit": svcs.Analytics.SkillsPageLimit(in.Limit), "offset": max(in.Offset, 0)}, nil
 	})
@@ -49,7 +49,7 @@ func registerAnalysisTools(server *mcp.Server, svcs *service.Services) {
 		}
 		out, err := svcs.Analytics.GetHiringEmployersByOccupationLevel(ctx, in.Level, in.ID, from, to, in.Limit)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, toolError("get_top_hiring_employers_by_occupation", err)
 		}
 		return nil, wrapIfList(out), nil
 	})
@@ -67,7 +67,7 @@ func registerAnalysisTools(server *mcp.Server, svcs *service.Services) {
 		}
 		data, granularity, err := svcs.Analytics.GetVacancyTrend(ctx, from, to)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, toolError("get_vacancy_trend", err)
 		}
 		return nil, map[string]any{"granularity": granularity, "data": data}, nil
 	})
@@ -81,7 +81,10 @@ func registerAnalysisTools(server *mcp.Server, svcs *service.Services) {
 			return nil, nil, err
 		}
 		total, err := svcs.Analytics.GetTotalVacancyCount(ctx, from, to)
-		return nil, map[string]any{"total_vacancies": total}, err
+		if err != nil {
+			return nil, nil, toolError("get_vacancy_total", err)
+		}
+		return nil, map[string]any{"total_vacancies": total}, nil
 	})
 
 	// Date-range occupation/industry counts
@@ -99,7 +102,7 @@ func registerAnalysisTools(server *mcp.Server, svcs *service.Services) {
 		}
 		out, err := svcs.Analytics.GetJobCountByDateRange(ctx, "occupation", from, to)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, toolError("get_occupations_by_date_range", err)
 		}
 		return nil, wrapIfList(out), nil
 	})
@@ -117,7 +120,7 @@ func registerAnalysisTools(server *mcp.Server, svcs *service.Services) {
 		}
 		out, err := svcs.Analytics.GetJobCountByDateRange(ctx, "industry", from, to)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, toolError("get_industries_by_date_range", err)
 		}
 		return nil, wrapIfList(out), nil
 	})
