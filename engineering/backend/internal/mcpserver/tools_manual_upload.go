@@ -21,6 +21,12 @@ import (
 
 const submitNewspaperVacanciesScope = "submit-newspaper-vacancies"
 
+// errMissingUploadScope is returned by both upload tools when the caller's
+// token lacks the scope. The text tells the model to end the workflow.
+var errMissingUploadScope = fmt.Errorf(
+	"missing required scope: %s - this user is not allowed to upload newspaper vacancies. "+
+		"Stop and tell the user they do not have permission", submitNewspaperVacanciesScope)
+
 type newspaperJob struct {
 	Employer    string `json:"employer" jsonschema:"employer/company name as printed in the ad"`
 	JobRole     string `json:"job_role" jsonschema:"job title / role as printed in the ad"`
@@ -247,8 +253,15 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 			"a select box, the result has status 'choose_in_chat' and a list of sources: ask the user to pick one " +
 			"of exactly those names. The user may only choose a listed source - never invent or guess one. " +
 			"Status 'cancelled' means the user closed the select box without choosing: stop and relay the " +
-			"'message'. If no source matches, relay the 'message' to the user.",
+			"'message'. If no source matches, relay the 'message' to the user. If it fails with a " +
+			"missing-scope error, the user may not upload newspaper vacancies: stop and tell them.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
+		// Checked first so a user who may not upload is stopped here, before
+		// the source picker, not at the submit step after all the work.
+		if !hasScope(req, submitNewspaperVacanciesScope) {
+			return nil, nil, errMissingUploadScope
+		}
+
 		active := true
 		sources, err := svcs.Sources.ListSources(ctx, string(models.SourceTypeManual), &active)
 		if err != nil {
@@ -341,7 +354,7 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 		}
 
 		if !hasScope(req, submitNewspaperVacanciesScope) {
-			return nil, nil, fmt.Errorf("missing required scope: %s", submitNewspaperVacanciesScope)
+			return nil, nil, errMissingUploadScope
 		}
 
 		sourceName := strings.TrimSpace(in.Source)
