@@ -45,24 +45,23 @@ export default function ChartCard({
         heightClassName,
       )}
     >
-      {headline && !isLoading && !isError && (
-        <div className="mb-2 pb-3 md:mb-4 md:pb-4 border-b border-zinc-100">
-          <p className="w-full md:w-2/3 text-xl md:text-2xl font-normal text-zinc-900 whitespace-pre-line leading-snug">{headline}</p>
-        </div>
-      )}
-      <div
-        className={clsx(
-          "flex flex-wrap items-start border-b border-zinc-100 pb-1 gap-2",
-          headerRight && "justify-between",
+      <div className="flex flex-col gap-2">
+        {headline && !isLoading && !isError && (
+          <>
+            <p className="w-full md:w-2/3 text-xl md:text-2xl font-normal text-zinc-900 whitespace-pre-line leading-snug mb-2">{headline}</p>
+            <div className="border-b border-zinc-100" />
+          </>
         )}
-      >
-        <div>
-          <h4 className="text-base font-semibold text-zinc-900 leading-none">{title}</h4>
-          {subtitle && <p className="text-sm text-zinc-600 leading-none mt-1">{subtitle}</p>}
+        <div className={clsx("flex flex-wrap items-start gap-2", headerRight && "justify-between")}>
+          <div>
+            <h4 className="text-base font-semibold text-zinc-900 leading-none">{title}</h4>
+            {subtitle && <p className="text-sm text-zinc-600 leading-none mt-2">{subtitle}</p>}
+          </div>
+          {headerRight}
         </div>
-        {headerRight}
+        <div className="border-b border-zinc-100" />
       </div>
-      <div className={clsx("flex-1 mt-3 min-w-0 min-h-0", bodyClassName)}>
+      <div className={clsx("flex-1 mt-2 min-w-0 min-h-0", bodyClassName)}>
         {isLoading ? (
           <CardMessage>{loadingLabel}</CardMessage>
         ) : isError ? (

@@ -41,7 +41,7 @@ export default function DateRangePicker({
         </p>
       )}
       <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-3">
-        <div className="flex items-center">
+        <div className="flex items-center pl-6">
           <div className="flex flex-col items-center justify-center gap-0.5 pr-8">
             <p className="text-2xl font-semibold text-gray-700 leading-none">5</p>
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Sources</p>
@@ -56,7 +56,7 @@ export default function DateRangePicker({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 bg-zinc-100 px-3 py-2 rounded-md">
+        <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-md">
           <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
             From
           </label>
@@ -74,7 +74,7 @@ export default function DateRangePicker({
           →
         </span>
 
-        <div className="flex items-center gap-2 bg-zinc-100 px-3 py-2 rounded-md">
+        <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-md">
           <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
             To
           </label>
