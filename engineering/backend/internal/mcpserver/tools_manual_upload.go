@@ -166,15 +166,18 @@ type submitNewspaperVacanciesOutput struct {
 	ReconcileNote       string `json:"reconcile_note,omitempty" jsonschema:"set only if closing the earlier vacancies failed; the submitted jobs were still saved"`
 }
 
-// hasScope reports whether the verified token on ctx carries scope.
-func hasScope(ctx context.Context, scope string) bool {
-	scopes, _ := ctx.Value(scopesKey).([]string)
-	for _, s := range scopes {
-		if s == scope {
-			return true
-		}
+// hasScope reports whether the token on the current request carries scope.
+// It reads the request's own token info, not the context: the context of a
+// tool call comes from the session's first request, so its scopes can be stale.
+func hasScope(req *mcp.CallToolRequest, scope string) bool {
+	if req == nil {
+		return false
 	}
-	return false
+	extra := req.GetExtra()
+	if extra == nil || extra.TokenInfo == nil {
+		return false
+	}
+	return slices.Contains(extra.TokenInfo.Scopes, scope)
 }
 
 const (
@@ -337,7 +340,7 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 			return nil, nil, fmt.Errorf("jobs list must not be empty - extract at least one job from the image first")
 		}
 
-		if !hasScope(ctx, submitNewspaperVacanciesScope) {
+		if !hasScope(req, submitNewspaperVacanciesScope) {
 			return nil, nil, fmt.Errorf("missing required scope: %s", submitNewspaperVacanciesScope)
 		}
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"marketlens-go-backend/internal/auth"
@@ -21,7 +22,14 @@ const (
 	protectedResPath = "/.well-known/oauth-protected-resource/mcp"
 )
 
-type contextKey string
+// tokenInfoCtxKey carries the verified token's info from requireValidToken to
+// bridgeTokenInfo within one HTTP request.
+type tokenInfoCtxKey struct{}
+
+// errMissingSubject rejects a token with no "sub" claim: the SDK only binds a
+// session to its creator when TokenInfo.UserID is set, so an empty one would
+// silently switch the session-hijacking check off.
+var errMissingSubject = errors.New("token has no subject")
 
 // Metadata holds the values needed for the OAuth protected-resource
 // metadata endpoint and the WWW-Authenticate challenge header — loaded
@@ -44,8 +52,6 @@ func serveProtectedResourceMetadata(meta Metadata) http.HandlerFunc {
 		})
 	}
 }
-
-const scopesKey contextKey = "scopes"
 
 // serverInstructions is sent to every MCP client on initialize. It explains
 // how the read tools relate to each other, and carries the newspaper-upload
@@ -74,7 +80,36 @@ const newspaperInstructions = `Newspaper vacancy upload workflow. When the user 
 5. Only if the tool says the client cannot show a confirmation form: ask the user in the chat, and call it again with user_confirmed=true only after their explicit yes.
 Never save without the user's explicit Yes, and never set user_confirmed on your own.`
 
-func requireValidToken(verifier *auth.Verifier, publicBaseURL string, next http.Handler) http.Handler {
+// verifyFunc verifies a raw bearer token and returns the token info the MCP
+// SDK needs. Errors wrapping auth.ErrJWKSUnavailable become 503; any other
+// error becomes 401.
+type verifyFunc func(rawToken string) (*mcpauth.TokenInfo, error)
+
+// newVerifyFunc adapts the JWT verifier. UserID is the token's subject, so the
+// SDK can refuse a session id used by a different user.
+func newVerifyFunc(verifier *auth.Verifier) verifyFunc {
+	return func(rawToken string) (*mcpauth.TokenInfo, error) {
+		claims, err := verifier.VerifyToken(rawToken)
+		if err != nil {
+			return nil, err
+		}
+		if claims.Subject == "" {
+			return nil, errMissingSubject
+		}
+		if claims.ExpiresAt == nil {
+			return nil, errors.New("token has no expiry")
+		}
+		return &mcpauth.TokenInfo{
+			Scopes:     strings.Fields(claims.Scope),
+			Expiration: claims.ExpiresAt.Time,
+			UserID:     claims.Subject,
+		}, nil
+	}
+}
+
+// requireValidToken verifies the bearer token on every request and keeps the
+// token info in the request context for bridgeTokenInfo.
+func requireValidToken(verify verifyFunc, publicBaseURL string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
@@ -85,7 +120,7 @@ func requireValidToken(verifier *auth.Verifier, publicBaseURL string, next http.
 		}
 		rawToken := strings.TrimPrefix(authHeader, "Bearer ")
 
-		claims, err := verifier.VerifyToken(rawToken)
+		info, err := verify(rawToken)
 		if err != nil {
 			log.Printf("mcp token verification failed: %v", err)
 			if errors.Is(err, auth.ErrJWKSUnavailable) {
@@ -96,9 +131,25 @@ func requireValidToken(verifier *auth.Verifier, publicBaseURL string, next http.
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), scopesKey, strings.Fields(claims.Scope))
+		ctx := context.WithValue(r.Context(), tokenInfoCtxKey{}, info)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// bridgeTokenInfo hands the already-verified token info to the MCP SDK for
+// every request. The SDK then (a) passes the current request's token info to
+// tool handlers, so scope checks never use a stale session's token, and (b)
+// refuses a session id used by a different user. It does not verify the
+// token again, so requireValidToken keeps owning the 401/503 responses.
+func bridgeTokenInfo(next http.Handler) http.Handler {
+	return mcpauth.RequireBearerToken(
+		func(_ context.Context, _ string, r *http.Request) (*mcpauth.TokenInfo, error) {
+			info, _ := r.Context().Value(tokenInfoCtxKey{}).(*mcpauth.TokenInfo)
+			if info == nil {
+				return nil, mcpauth.ErrInvalidToken
+			}
+			return info, nil
+		}, nil)(next)
 }
 
 // New builds the MCP server and registers every read-only (GET-equivalent)
@@ -126,7 +177,7 @@ func StartHTTP(server *mcp.Server, verifier *auth.Verifier, meta Metadata, addr 
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(protectedResPath, serveProtectedResourceMetadata(meta))
-	mux.Handle("/mcp", requireValidToken(verifier, meta.PublicBaseURL, handler))
+	mux.Handle("/mcp", requireValidToken(newVerifyFunc(verifier), meta.PublicBaseURL, bridgeTokenInfo(handler)))
 
 	return http.ListenAndServe(addr, mux)
 }
