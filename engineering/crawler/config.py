@@ -18,14 +18,29 @@ THUNDER_VERIFY_TLS = os.getenv("THUNDER_INSECURE_TLS", "true").lower() != "true"
 
 
 # Email alerts for failed crawlers
+def _parse_smtp_port(value):
+    """None for an empty value. Raises for anything that is not a valid port."""
+    if not value:
+        return None
+    try:
+        port = int(value)
+    except ValueError:
+        port = 0
+    if not 1 <= port <= 65535:
+        raise ValueError(f"SMTP_PORT must be a number from 1 to 65535, got '{value}'")
+    return port
+
+
 ALERT_EMAILS_ENABLED = os.getenv("ALERT_EMAILS_ENABLED", "true").lower() == "true"
 SMTP_HOST = os.getenv("SMTP_HOST")
 # How the connection to the SMTP server is secured: "starttls" (upgrade a plain
 # connection, usually port 587), "ssl" (TLS from the start, usually port 465) or
 # "none" (no encryption, only for a trusted relay or a test server)
 SMTP_SECURITY = (os.getenv("SMTP_SECURITY") or "starttls").strip().lower()
-# Left empty, the port depends on SMTP_SECURITY (587, 465 or 25)
-SMTP_PORT = int(os.getenv("SMTP_PORT") or 0) or None
+# Left empty, the port depends on SMTP_SECURITY (587, 465 or 25). It is only parsed
+# when the alerts are enabled, so a wrong value cannot stop a crawler that does not
+# send any email
+SMTP_PORT = _parse_smtp_port(os.getenv("SMTP_PORT")) if ALERT_EMAILS_ENABLED else None
 SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 # Left empty, the email is sent from SMTP_USERNAME

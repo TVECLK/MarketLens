@@ -1,9 +1,11 @@
+import importlib
 from collections import namedtuple
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 
+import config
 from utils import ThunderIDClient
 from utils.crawler_run_manager import CrawlerManager
 from utils.email_alert import EmailAlertService
@@ -241,3 +243,22 @@ def limits(monkeypatch):
     """Pin the thresholds so the tests don't depend on the configured values."""
     monkeypatch.setattr("crawlers.base_crawler.MAX_JOB_FAILURE_RATIO", 0.2)
     monkeypatch.setattr("crawlers.base_crawler.MIN_JOBS_FOR_FAILURE", 20)
+
+
+# ---------- config.py ----------
+
+
+@pytest.fixture
+def load_config(monkeypatch):
+    """Returns a function that sets the alert environment and reloads config.py. The
+    real environment is restored and config.py reloaded again after the test."""
+
+    def _load(enabled: str, port: str):
+        monkeypatch.setenv("ALERT_EMAILS_ENABLED", enabled)
+        monkeypatch.setenv("SMTP_PORT", port)
+        return importlib.reload(config)
+
+    yield _load
+
+    monkeypatch.undo()
+    importlib.reload(config)
