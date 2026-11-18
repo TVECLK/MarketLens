@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"net/http"
 	"slices"
 	"strings"
@@ -181,12 +182,26 @@ const (
 	// manualUploadMaxRetries is how many times jobs that failed transiently
 	// are re-submitted after the first attempt before they are given up on.
 	manualUploadMaxRetries = 3
-	manualUploadRetryDelay = time.Second
+	// manualUploadRetryBaseDelay is the wait before the first retry; each
+	// later retry doubles it (5s, 10s, 20s), long enough for typical LLM
+	// rate-limit windows to clear.
+	manualUploadRetryBaseDelay = 5 * time.Second
+	// manualUploadRetryJitter spreads each wait by +/-20% so retries do not
+	// land in lockstep.
+	manualUploadRetryJitter = 0.2
 )
 
+// retryDelay is the exponential backoff wait before the given retry attempt
+// (1-based), with jitter.
+func retryDelay(attempt int) time.Duration {
+	d := manualUploadRetryBaseDelay << (attempt - 1)
+	jitter := 1 + manualUploadRetryJitter*(2*rand.Float64()-1)
+	return time.Duration(float64(d) * jitter)
+}
+
 // processWithRetry runs the batch, then re-runs only the jobs that failed
-// with a transient (503) error, up to manualUploadMaxRetries times with a
-// growing delay. Permanent failures (4xx: bad input, unextractable job) are
+// with a transient (503) error, up to manualUploadMaxRetries times with
+// exponential backoff. Permanent failures (4xx: bad input, unextractable job) are
 // never retried. Whatever still fails afterwards is returned for reporting.
 func processWithRetry(ctx context.Context, svc *ingestion.IngestionService, jobs []ingestion.RawJobInput) []ingestion.FailedJob {
 	failures := svc.ProcessBatch(ctx, jobs)
@@ -212,7 +227,7 @@ func processWithRetry(ctx context.Context, svc *ingestion.IngestionService, jobs
 		select {
 		case <-ctx.Done():
 			return failures
-		case <-time.After(time.Duration(attempt) * manualUploadRetryDelay):
+		case <-time.After(retryDelay(attempt)):
 		}
 
 		log.Printf("retrying %d transiently failed manual job(s), attempt %d/%d", len(retry), attempt, manualUploadMaxRetries)
