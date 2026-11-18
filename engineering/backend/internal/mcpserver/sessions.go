@@ -119,12 +119,22 @@ func closeIdleSessions(ctx context.Context, server *mcp.Server, tracker *session
 			return
 		}
 		for _, ss := range sessions {
-			if tracker.closeIfIdle(ss.ID()) {
-				if err := ss.Close(); err != nil {
-					log.Printf("closing idle MCP session %s: %v", ss.ID(), err)
-					tracker.release(ss.ID())
-				}
+			id := ss.ID()
+			if !tracker.closeIfIdle(id) {
+				continue
 			}
+			// Each close runs on its own goroutine. Close waits for any tool
+			// still running on the session (one whose client disconnected is no
+			// longer counted as in flight, but keeps running), so closing in
+			// this loop would let one stuck session hold up every other idle
+			// stream. The claim taken above stops later polls starting the same
+			// close again; a failed close releases it so the next poll retries.
+			go func() {
+				if err := ss.Close(); err != nil {
+					log.Printf("closing idle MCP session %s: %v", id, err)
+					tracker.release(id)
+				}
+			}()
 		}
 
 		select {

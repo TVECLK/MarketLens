@@ -137,6 +137,102 @@ func TestSessionTracker_ClaimIsAtomicWithAdmission(t *testing.T) {
 	}
 }
 
+// TestCloseIdleSessions_SlowCloseDoesNotBlockOthers has one session whose
+// tool keeps running after its client gave up, so closing it waits for the
+// tool, and several idle sessions. The idle ones must close promptly all the
+// same: if closes ran one after another, whichever came after the stuck one
+// would wait for it, and HTTP shutdown would wait on their SSE streams.
+func TestCloseIdleSessions_SlowCloseDoesNotBlockOthers(t *testing.T) {
+	const (
+		idleSessions = 4
+		toolDuration = 2 * time.Second
+		closeWithin  = time.Second // well under toolDuration
+	)
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "v0"}, nil)
+	toolStarted := make(chan struct{}, 1)
+	mcp.AddTool(server, &mcp.Tool{Name: "stuck"},
+		func(_ context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
+			toolStarted <- struct{}{}
+			time.Sleep(toolDuration) // ignores its context, like a tool stuck on a database call
+			return nil, map[string]any{"done": true}, nil
+		})
+
+	tracker := newSessionTracker()
+	sdkHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+	ts := httptest.NewServer(tracker.track(sdkHandler))
+	t.Cleanup(ts.Close) // registered first, so it runs after the clients are closed
+
+	connect := func() *mcp.ClientSession {
+		t.Helper()
+		client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0"}, nil)
+		session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: ts.URL}, nil)
+		if err != nil {
+			t.Fatalf("connect: %v", err)
+		}
+		t.Cleanup(func() { session.Close() })
+		return session
+	}
+
+	// The stuck session: its client calls the tool and then gives up. The POST
+	// ends, so the tracker no longer counts it, but the tool keeps running.
+	stuck := connect()
+	stuckID := stuck.ID()
+	callCtx, cancelCall := context.WithCancel(context.Background())
+	defer cancelCall()
+	go stuck.CallTool(callCtx, &mcp.CallToolParams{Name: "stuck"})
+	select {
+	case <-toolStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the tool call never started")
+	}
+	cancelCall()
+	time.Sleep(300 * time.Millisecond)
+
+	tracker.mu.Lock()
+	stillCounted := tracker.inflight[stuckID]
+	tracker.mu.Unlock()
+	if stillCounted != 0 {
+		t.Fatalf("setup: the abandoned POST is still counted as in flight (%d), so the session is not idle", stillCounted)
+	}
+
+	for i := 0; i < idleSessions; i++ {
+		connect()
+	}
+
+	closeCtx, cancelClose := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelClose()
+	go closeIdleSessions(closeCtx, server, tracker)
+
+	// Every idle session must be gone within closeWithin, although closing the
+	// stuck one is still waiting for its tool.
+	otherSessions := func() int {
+		n := 0
+		for ss := range server.Sessions() {
+			if ss.ID() != stuckID {
+				n++
+			}
+		}
+		return n
+	}
+	deadline := time.Now().Add(closeWithin)
+	for otherSessions() > 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d idle sessions were still open after %v: closing the stuck session held them up", otherSessions(), closeWithin)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// The stuck session was claimed too, so the test really did have a close
+	// that was waiting on the tool, not a session that was skipped.
+	tracker.mu.Lock()
+	stuckClaimed := tracker.claimed[stuckID]
+	tracker.mu.Unlock()
+	if !stuckClaimed {
+		t.Error("the stuck session was never claimed for closing, so the scenario was not exercised")
+	}
+}
+
 // TestShutdown_WithOpenSSEStream runs the real SDK handler behind the session
 // tracker, connects a client whose standalone SSE stream stays open, and
 // shuts the server down. Shutdown must not wait for the stream to end by
