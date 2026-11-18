@@ -322,8 +322,11 @@ func finalRunStatus(interrupted bool, savedCount int) string {
 
 // registerManualUploadTools registers the newspaper upload tools. shutdown is
 // cancelled when the process starts shutting down; a submission in progress
-// then stops retrying and is cut off after drainWorkBudget.
+// then stops retrying, and all ingestion is cut off drainWorkBudget after
+// shutdown began, however late each submission started.
 func registerManualUploadTools(server *mcp.Server, shutdown context.Context, svcs *service.Services, ingestionSvc *ingestion.IngestionService) {
+	budget := newDrainBudget(shutdown, drainWorkBudget)
+
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "select_manual_source",
 		Description: "Let the user choose which manual source (newspaper) an uploaded newspaper image came from. " +
@@ -523,9 +526,10 @@ func registerManualUploadTools(server *mcp.Server, shutdown context.Context, svc
 			jobsByID[id] = j
 		}
 
-		// Once shutdown begins, ingestion gets drainWorkBudget to finish; the
-		// rest of the grace period is left to close the run and answer.
-		workCtx, cancelWork := withDrainBudget(ctx, shutdown, drainWorkBudget)
+		// Ingestion is cut off at one fixed point after shutdown begins, so the
+		// rest of the grace period is left to close the run and answer. A
+		// submission that got here late has only the time that remains, or none.
+		workCtx, cancelWork := budget.withCutoff(ctx)
 		defer cancelWork()
 
 		failures, interrupted := processWithRetry(workCtx, shutdown, ingestionSvc, rawJobs, retryDelay)
