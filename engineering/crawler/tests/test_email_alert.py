@@ -169,13 +169,29 @@ async def test_ssl_security_connects_with_tls_from_the_start(smtp, make_service)
 
 
 async def test_none_security_sends_without_encryption(smtp, make_service):
-    service = make_service(smtp_security="none", smtp_port=None)
+    service = make_service(
+        smtp_security="none", smtp_port=None, smtp_username="", smtp_password=""
+    )
 
     await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
 
     assert email_alert.smtplib.SMTP.call_args.args == ("smtp.test", 25)
     smtp.starttls.assert_not_called()
     sent_message(smtp)
+
+
+async def test_refuses_to_send_a_password_without_encryption(
+    smtp, make_service, caplog
+):
+    service = make_service(smtp_security="none", smtp_port=None)
+
+    with caplog.at_level(logging.DEBUG):
+        await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
+
+    smtp.login.assert_not_called()
+    smtp.send_message.assert_not_called()
+    assert [r.levelno for r in caplog.records] == [logging.ERROR]
+    assert "unencrypted" in caplog.text
 
 
 async def test_starttls_is_the_security_by_default(smtp, make_service):

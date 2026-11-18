@@ -202,6 +202,14 @@ class EmailAlertService:
                 "skipping."
             )
             return False
+        # Without encryption, login() would send the password in plain text, readable
+        # by anyone on the network path
+        if self._smtp_security == "none" and self._smtp_username:
+            logger.error(
+                "Email alert: SMTP_SECURITY 'none' would send the SMTP password "
+                "unencrypted. Use starttls or ssl, or remove the login, skipping."
+            )
+            return False
         return True
 
     # Blocking: it is run in a thread by _deliver. It returns the recipients the
