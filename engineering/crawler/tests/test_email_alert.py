@@ -125,14 +125,15 @@ async def test_a_smtp_failure_does_not_raise(smtp, service):
     await service.send_failure_alert([FailedCrawler("ikman", "down")], 1)
 
 
-async def test_skips_quietly_when_disabled(smtp, make_service, caplog):
+async def test_logs_that_alerts_are_disabled_and_skips(smtp, make_service, caplog):
     with caplog.at_level(logging.DEBUG):
         await make_service(enabled=False).send_failure_alert(
             [FailedCrawler("ikman", "down")], 1
         )
 
     smtp.send_message.assert_not_called()
-    assert caplog.records == []
+    assert [r.levelno for r in caplog.records] == [logging.INFO]
+    assert "disabled" in caplog.text
 
 
 @pytest.mark.parametrize(

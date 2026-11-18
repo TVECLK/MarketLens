@@ -178,8 +178,10 @@ class EmailAlertService:
         self._app_name = APP_NAME
 
     def _is_ready(self) -> bool:
-        # Turning the alerts off is a choice, so it is not logged
         if not self._enabled:
+            logger.info(
+                "Email alert: alerts are disabled (ALERT_EMAILS_ENABLED), skipping."
+            )
             return False
         if self._smtp_security not in DEFAULT_SMTP_PORTS:
             logger.error(
