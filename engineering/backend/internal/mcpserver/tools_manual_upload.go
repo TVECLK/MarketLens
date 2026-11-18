@@ -159,7 +159,8 @@ type failedVacancyOutput struct {
 type submitNewspaperVacanciesOutput struct {
 	Message     string                `json:"message"`
 	Source      string                `json:"source"`
-	Submitted   int                   `json:"submitted"`
+	Submitted   int                   `json:"submitted" jsonschema:"number of jobs sent, including any that failed"`
+	SavedCount  int                   `json:"saved_count" jsonschema:"number of jobs that did not fail: saved, or matched an existing duplicate"`
 	FailedCount int                   `json:"failed_count"`
 	Failed      []failedVacancyOutput `json:"failed,omitempty"`
 
@@ -318,8 +319,8 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 			"is empty, unclear or doesn't match any job, ask the user in chat what they meant instead of " +
 			"guessing), show the updated jobs in the chat, then " +
 			"call this tool again with the updated jobs so they confirm again. On success (the user " +
-			"chose Yes) the result has no status; it has 'submitted', 'failed_count' and 'failed' - " +
-			"tell the user how many were submitted and list any that failed.\n\n" +
+			"chose Yes) the result has no status; it has 'submitted' (jobs sent), 'saved_count', 'failed_count' and 'failed' - " +
+			"tell the user how many were saved and list any that failed.\n\n" +
 			"If the client cannot show the form, this tool says so: then ask the user in chat and call " +
 			"it again with user_confirmed=true only after their explicit yes.\n\n" +
 			"IMPORTANT: never invent a source name - it must be one returned by select_manual_source.",
@@ -416,9 +417,10 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 		runStatus = "COMPLETED"
 
 		out := submitNewspaperVacanciesOutput{
-			Message:     "Vacancies processed. Jobs not listed under 'failed' were saved or matched an existing duplicate.",
+			Message:     "Vacancies processed. 'saved_count' jobs were saved or matched an existing duplicate; the jobs listed under 'failed' were not saved.",
 			Source:      source.Name,
 			Submitted:   len(rawJobs),
+			SavedCount:  len(rawJobs) - len(failures),
 			FailedCount: len(failures),
 		}
 
