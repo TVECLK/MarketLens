@@ -65,15 +65,13 @@ func clientSupportsElicitation(req *mcp.CallToolRequest) bool {
 }
 
 // confirmationMessage renders the jobs and source for the confirmation form.
+// Descriptions are shown in full: the user is approving exactly what will be
+// saved, so nothing may be cut off.
 func confirmationMessage(source string, jobs []newspaperJob) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Save these %d vacancies from %q?\n\n", len(jobs), source)
 	for i, j := range jobs {
-		desc := []rune(strings.TrimSpace(j.Description))
-		if len(desc) > 200 {
-			desc = append(desc[:200], '…')
-		}
-		fmt.Fprintf(&b, "%d. %s - %s (%s)\n   %s\n", i+1, j.JobRole, j.Employer, j.Location, string(desc))
+		fmt.Fprintf(&b, "%d. %s - %s (%s)\n   %s\n", i+1, j.JobRole, j.Employer, j.Location, strings.TrimSpace(j.Description))
 	}
 	return b.String()
 }
