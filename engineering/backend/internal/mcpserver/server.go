@@ -192,6 +192,13 @@ const (
 	readHeaderTimeout = 10 * time.Second
 	idleTimeout       = 2 * time.Minute
 
+	// sessionTimeout closes an MCP session that has received no request for
+	// this long. The SDK default (zero) never closes one, so abandoned
+	// sessions would pile up in memory. A client whose session expired gets
+	// 404 on its next request and starts a new session, as the MCP spec
+	// requires of clients.
+	sessionTimeout = 30 * time.Minute
+
 	// shutdownGracePeriod is how long in-flight requests get to finish after
 	// SIGTERM. Keep it below the platform's kill deadline (Kubernetes
 	// terminationGracePeriodSeconds, 30s by default), or the process is killed
@@ -207,7 +214,7 @@ const (
 func StartHTTP(ctx context.Context, server *mcp.Server, verifier *auth.Verifier, meta Metadata, addr string) error {
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return server
-	}, nil)
+	}, &mcp.StreamableHTTPOptions{SessionTimeout: sessionTimeout})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(protectedResPath, serveProtectedResourceMetadata(meta))
