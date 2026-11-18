@@ -63,6 +63,7 @@ const chartBody = (data: VacancyTrendPoint[]) => (
       />
       <YAxis
         tick={{ fontSize: 10, fill: TICK_COLOR }}
+        allowDecimals={false}
         label={{
           value: "No. of Vacancies",
           angle: -90,

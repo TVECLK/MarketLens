@@ -82,7 +82,7 @@ export default function AnalysisBreakdownCharts({
           >
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={childrenBreakdown} layout="vertical" margin={{ left: 20, right: 20 }}>
-                <XAxis type="number" tick={{ fontSize: 10, fill: TICK_COLOR }} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: TICK_COLOR }} allowDecimals={false} />
                 <YAxis
                   dataKey="name"
                   type="category"
@@ -114,7 +114,7 @@ export default function AnalysisBreakdownCharts({
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={sectorData} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
                   <XAxis dataKey="name" tick={{ fontSize: 10, fill: TICK_COLOR }} />
-                  <YAxis tick={{ fontSize: 10, fill: TICK_COLOR }} />
+                  <YAxis tick={{ fontSize: 10, fill: TICK_COLOR }} allowDecimals={false} />
                   <Tooltip
                     contentStyle={CHART_TOOLTIP_STYLE}
                     itemStyle={CHART_TOOLTIP_ITEM_STYLE}
@@ -333,7 +333,7 @@ export default function AnalysisBreakdownCharts({
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={nvqData} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: TICK_COLOR }} />
-                <YAxis tick={{ fontSize: 10, fill: TICK_COLOR }} />
+                <YAxis tick={{ fontSize: 10, fill: TICK_COLOR }} allowDecimals={false} />
                 <Tooltip
                   contentStyle={CHART_TOOLTIP_STYLE}
                   itemStyle={CHART_TOOLTIP_ITEM_STYLE}
