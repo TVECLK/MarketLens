@@ -140,7 +140,7 @@ type manualSourceOutput struct {
 	Name string `json:"name"`
 }
 
-const noMatchingSourceMessage = "If there is no matching source, you should add source from the dashboard and then try again."
+const noMatchingSourceMessage = "If there is no matching source, you should add a source from the dashboard and then try again."
 
 type selectManualSourceOutput struct {
 	Status  string               `json:"status" jsonschema:"selected, choose_in_chat, cancelled or no_sources"`

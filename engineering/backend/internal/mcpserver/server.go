@@ -65,7 +65,7 @@ const labourMarketInstructions = `Labour market data tools - how they fit togeth
 
 const newspaperInstructions = `Newspaper vacancy upload workflow. When the user uploads a newspaper image:
 1. Read the image yourself and extract every job ad: employer, job role, location, description.
-2. Call select_manual_source so the user chooses which newspaper the image came from. The user may only choose a source it offers. If it returns status choose_in_chat, list those names and ask the user to pick one. If it returns status cancelled (the user closed the select box without choosing), stop and relay its message. If the user says none match, or there are no sources, tell them: "If there is no matching source, you should add source from the dashboard and then try again." Do not continue without a selected source.
+2. Call select_manual_source so the user chooses which newspaper the image came from. The user may only choose a source it offers. If it returns status choose_in_chat, list those names and ask the user to pick one. If it returns status cancelled (the user closed the select box without choosing), stop and relay its message. If the user says none match, or there are no sources, tell them: "If there is no matching source, you should add a source from the dashboard and then try again." Do not continue without a selected source.
 3. Show the extracted jobs in the chat as a numbered table (employer, role, location, description) together with the chosen source.
 4. Call submit_newspaper_vacancies. It shows the user a Yes / No / Edit form and saves only on Yes.
    - status cancelled (user chose No): stop. Nothing was saved.
