@@ -27,6 +27,7 @@ def _getenv(name, default=None):
 # Email alerts for failed crawlers
 def _parse_smtp_port(value):
     """None for an empty value. Raises for anything that is not a valid port."""
+    value = (value or "").strip()
     if not value:
         return None
     try:
