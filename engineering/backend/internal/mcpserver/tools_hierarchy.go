@@ -132,8 +132,8 @@ type levelInput struct {
 	// step when a level is added or renamed.
 	Level    string `json:"level" jsonschema:"the hierarchy level name, and it must belong to the chosen standard. For standard 'occupation': 'major-group', 'sub-major-group', 'minor-group', 'unit-group' or 'occupation-group'. For standard 'industry': 'industry-sector', 'industry-division', 'industry-group', 'industry-class' or 'industry-subclass'"`
 	ID       uint   `json:"id" jsonschema:"the numeric id at that level"`
-	FromDate string `json:"from_date" jsonschema:"start date, format YYYY-MM-DD"`
-	ToDate   string `json:"to_date" jsonschema:"end date, format YYYY-MM-DD"`
+	FromDate string `json:"from_date" jsonschema:"start date, format YYYY-MM-DD. If the user gave no period, use January 1 of the current year and tell them the period you used"`
+	ToDate   string `json:"to_date" jsonschema:"end date, format YYYY-MM-DD. If the user gave no period, use today"`
 }
 
 // parseLevelInput parses the shared level/id/date fields used by every

@@ -17,8 +17,8 @@ func registerAnalysisTools(server *mcp.Server, svcs *service.Services) {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in struct {
 		Level    string `json:"level" jsonschema:"occupation hierarchy level: 'major-group', 'sub-major-group', 'minor-group', 'unit-group' or 'occupation-group'"`
 		ID       uint   `json:"id" jsonschema:"the numeric id at that level"`
-		FromDate string `json:"from_date" jsonschema:"start date, format YYYY-MM-DD"`
-		ToDate   string `json:"to_date" jsonschema:"end date, format YYYY-MM-DD"`
+		FromDate string `json:"from_date" jsonschema:"start date, format YYYY-MM-DD. If the user gave no period, use January 1 of the current year and tell them the period you used"`
+		ToDate   string `json:"to_date" jsonschema:"end date, format YYYY-MM-DD. If the user gave no period, use today"`
 		Limit    int    `json:"limit,omitempty" jsonschema:"max rows to return, default 20, max 100"`
 		Offset   int    `json:"offset,omitempty" jsonschema:"rows to skip, default 0"`
 	}) (*mcp.CallToolResult, any, error) {
@@ -39,8 +39,8 @@ func registerAnalysisTools(server *mcp.Server, svcs *service.Services) {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in struct {
 		Level    string `json:"level" jsonschema:"occupation hierarchy level: 'major-group', 'sub-major-group', 'minor-group', 'unit-group' or 'occupation-group'"`
 		ID       uint   `json:"id" jsonschema:"the numeric id at that level"`
-		FromDate string `json:"from_date" jsonschema:"start date, format YYYY-MM-DD"`
-		ToDate   string `json:"to_date" jsonschema:"end date, format YYYY-MM-DD"`
+		FromDate string `json:"from_date" jsonschema:"start date, format YYYY-MM-DD. If the user gave no period, use January 1 of the current year and tell them the period you used"`
+		ToDate   string `json:"to_date" jsonschema:"end date, format YYYY-MM-DD. If the user gave no period, use today"`
 		Limit    int    `json:"limit,omitempty" jsonschema:"max rows to return, default 5, max 100"`
 	}) (*mcp.CallToolResult, any, error) {
 		from, to, err := service.ParseDateRange(in.FromDate, in.ToDate)

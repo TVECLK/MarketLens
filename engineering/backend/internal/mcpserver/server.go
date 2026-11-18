@@ -184,8 +184,8 @@ func registerIDTool[T any](server *mcp.Server, name, description string, fn func
 
 // dateRangeInput is used for tools scoped to a from/to date window.
 type dateRangeInput struct {
-	FromDate string `json:"from_date" jsonschema:"start date, format YYYY-MM-DD"`
-	ToDate   string `json:"to_date" jsonschema:"end date, format YYYY-MM-DD"`
+	FromDate string `json:"from_date" jsonschema:"start date, format YYYY-MM-DD. If the user gave no period, use January 1 of the current year and tell them the period you used"`
+	ToDate   string `json:"to_date" jsonschema:"end date, format YYYY-MM-DD. If the user gave no period, use today"`
 }
 
 // idAndYearInput is used for the occupation-scoped year-filtered tools
@@ -199,8 +199,8 @@ type idAndYearInput struct {
 // from/to date window (e.g. industry-scoped year analytics).
 type idAndDateRangeInput struct {
 	ID       uint   `json:"id" jsonschema:"the numeric id to look up"`
-	FromDate string `json:"from_date" jsonschema:"start date, format YYYY-MM-DD"`
-	ToDate   string `json:"to_date" jsonschema:"end date, format YYYY-MM-DD"`
+	FromDate string `json:"from_date" jsonschema:"start date, format YYYY-MM-DD. If the user gave no period, use January 1 of the current year and tell them the period you used"`
+	ToDate   string `json:"to_date" jsonschema:"end date, format YYYY-MM-DD. If the user gave no period, use today"`
 }
 
 // plainGetAll adapts a CRUDService's unified GetAll (limit/offset/date-range
