@@ -4,7 +4,6 @@ import { clsx } from "clsx";
 interface ChartCardProps {
   title: ReactNode;
   subtitle?: string;
-  headline?: ReactNode;
   heightClassName: string;
   bodyClassName?: string;
   headerRight?: ReactNode;
@@ -27,7 +26,6 @@ function CardMessage({ children }: { children: ReactNode }) {
 export default function ChartCard({
   title,
   subtitle,
-  headline,
   heightClassName,
   bodyClassName,
   headerRight,
@@ -41,15 +39,10 @@ export default function ChartCard({
   return (
     <div
       className={clsx(
-        "bg-white border border-zinc-200 p-5 rounded-xl shadow-sm flex flex-col",
+        "bg-white border border-zinc-200 p-5 rounded-xl shadow-sm flex flex-col overflow-hidden",
         heightClassName,
       )}
     >
-      {headline && (
-        <div className="mb-4 pb-4 border-b border-zinc-100">
-          <p className="w-2/3 text-2xl font-normal text-zinc-900 whitespace-pre-line leading-snug">{headline}</p>
-        </div>
-      )}
       <div
         className={clsx(
           "flex flex-wrap items-start border-b border-zinc-100 pb-2 gap-2",
@@ -62,7 +55,7 @@ export default function ChartCard({
         </div>
         {headerRight}
       </div>
-      <div className={clsx("flex-1 mt-4 min-w-0", bodyClassName)}>
+      <div className={clsx("flex-1 mt-4 min-w-0 min-h-0", bodyClassName)}>
         {isLoading ? (
           <CardMessage>{loadingLabel}</CardMessage>
         ) : isError ? (

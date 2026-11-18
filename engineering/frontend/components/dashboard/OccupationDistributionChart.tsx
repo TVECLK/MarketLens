@@ -59,7 +59,7 @@ export default function OccupationDistributionChart({
     isEmpty: isEmptyChartData(data, (d) => d.value),
     loadingLabel: "Loading occupation data...",
     footer: (
-      <div className="pt-8 flex justify-end">
+      <div className="pt-2 flex justify-end">
         <Link
           href={linkHref}
           className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1 transition-colors"
@@ -72,7 +72,7 @@ export default function OccupationDistributionChart({
 
   const chart = (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} layout="vertical" margin={{ left: 20, right: 20, bottom: 12 }}>
+      <BarChart data={data} layout="vertical" margin={{ left: 8, right: 12, bottom: 12 }}>
         <XAxis
           type="number"
           tick={{ fontSize: 10, fill: TICK_COLOR }}
@@ -88,17 +88,10 @@ export default function OccupationDistributionChart({
           dataKey="name"
           type="category"
           tick={{ fontSize: 10, fill: TICK_COLOR }}
-          width="auto"
+          width={90}
           tickFormatter={(v) =>
             v.length > MAX_LABEL_LENGTH ? `${v.substring(0, MAX_LABEL_LENGTH)}...` : v
           }
-          label={{
-            value: "Occupation",
-            angle: -90,
-            position: "insideLeft",
-            fontSize: 11,
-            fill: TICK_COLOR,
-          }}
         />
         <Tooltip
           contentStyle={CHART_TOOLTIP_STYLE}
@@ -113,7 +106,10 @@ export default function OccupationDistributionChart({
 
   return (
     <SignedOut fallback={<ChartCard {...sharedProps}>{chart}</ChartCard>}>
-      <ChartCard {...sharedProps} headline={headline}>{chart}</ChartCard>
+      <div className="flex flex-col gap-3">
+        {headline && <p className="w-full md:w-2/3 text-xl md:text-2xl font-normal text-zinc-900 leading-snug">{headline}</p>}
+        <ChartCard {...sharedProps}>{chart}</ChartCard>
+      </div>
     </SignedOut>
   );
 }

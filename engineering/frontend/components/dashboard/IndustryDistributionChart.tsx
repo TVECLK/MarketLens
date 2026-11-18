@@ -105,7 +105,10 @@ export default function IndustryDistributionChart({
 
   return (
     <SignedOut fallback={<ChartCard {...sharedProps}>{chart}</ChartCard>}>
-      <ChartCard {...sharedProps} headline={headline}>{chart}</ChartCard>
+      <div className="flex flex-col gap-3">
+        {headline && <p className="w-full md:w-2/3 text-xl md:text-2xl font-normal text-zinc-900 leading-snug">{headline}</p>}
+        <ChartCard {...sharedProps}>{chart}</ChartCard>
+      </div>
     </SignedOut>
   );
 }
