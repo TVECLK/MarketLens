@@ -61,7 +61,7 @@ export default function OccupationDistributionChart({
       <div className="pt-2 flex justify-end">
         <Link
           href={linkHref}
-          className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1 transition-colors"
+          className="text-sm font-bold text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1 transition-colors"
         >
           See More →
         </Link>

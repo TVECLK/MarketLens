@@ -52,17 +52,17 @@ export default function ChartCard({
       )}
       <div
         className={clsx(
-          "flex flex-wrap items-start border-b border-zinc-100 pb-2 gap-2",
+          "flex flex-wrap items-start border-b border-zinc-100 pb-1 gap-2",
           headerRight && "justify-between",
         )}
       >
         <div>
-          <h4 className="text-sm font-bold text-zinc-900">{title}</h4>
-          {subtitle && <p className="text-[11px] text-zinc-400">{subtitle}</p>}
+          <h4 className="text-base font-semibold text-zinc-900 leading-none">{title}</h4>
+          {subtitle && <p className="text-sm text-zinc-600 leading-none mt-1">{subtitle}</p>}
         </div>
         {headerRight}
       </div>
-      <div className={clsx("flex-1 mt-4 min-w-0 min-h-0", bodyClassName)}>
+      <div className={clsx("flex-1 mt-3 min-w-0 min-h-0", bodyClassName)}>
         {isLoading ? (
           <CardMessage>{loadingLabel}</CardMessage>
         ) : isError ? (
