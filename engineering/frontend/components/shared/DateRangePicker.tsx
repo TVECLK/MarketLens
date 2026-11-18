@@ -2,6 +2,7 @@
 
 import { clsx } from "clsx";
 import { toISODate } from "@/lib/date-range";
+import InfoTooltip from "@/components/shared/InfoTooltip";
 
 interface DateRangePickerProps {
   fromDate: string;
@@ -44,15 +45,21 @@ export default function DateRangePicker({
         <div className="flex items-center pl-6">
           <div className="flex flex-col items-center justify-center gap-0.5 pr-8">
             <p className="text-2xl font-semibold text-gray-700 leading-none">5</p>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Sources</p>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+              Sources <InfoTooltip text="Number of job listing sources scraped" className="text-zinc-400 hover:text-zinc-600" />
+            </p>
           </div>
           <div className="flex flex-col items-center justify-center gap-0.5 border-l-2 border-indigo-300 px-8">
             <p className="text-2xl font-semibold text-gray-700 leading-none">200k+</p>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Total Jobs</p>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+              Total Jobs <InfoTooltip text="Total job vacancies collected across all sources" className="text-zinc-400 hover:text-zinc-600" />
+            </p>
           </div>
           <div className="flex flex-col items-center justify-center gap-0.5 border-l-2 border-indigo-300 pl-8">
             <p className="text-2xl font-semibold text-gray-700 leading-none">21</p>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Industries</p>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+              Industries <InfoTooltip text="Number of industries classified under SLSIC" className="text-zinc-400 hover:text-zinc-600" />
+            </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
