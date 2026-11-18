@@ -40,22 +40,22 @@ export default function DateRangePicker({
           {error}
         </p>
       )}
-      <div className="flex items-center justify-between gap-3 pl-12">
-        <div className="flex items-center">
-          <div className="flex flex-col items-center justify-center gap-0.75 pr-8">
-            <p className="text-2xl font-semibold text-gray-700 leading-none">5</p>
+      <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-3">
+        <div className="flex items-center gap-4 md:gap-6">
+          <div className="flex flex-col gap-0.5 border-l-2 border-indigo-300 pl-3">
+            <p className="text-xl md:text-2xl font-semibold text-gray-700 leading-none">5</p>
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Sources</p>
           </div>
-          <div className="flex flex-col items-center justify-center gap-0.75 border-l-2 border-indigo-300 px-8">
-            <p className="text-2xl font-semibold  text-gray-700 leading-none">200k+</p>
+          <div className="flex flex-col gap-0.5 border-l-2 border-indigo-300 pl-3">
+            <p className="text-xl md:text-2xl font-semibold text-gray-700 leading-none">200k+</p>
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Total Jobs</p>
           </div>
-          <div className="flex flex-col items-center justify-center gap-0.75 border-l-2 border-indigo-300 pl-8">
-            <p className="text-2xl font-semibold text-gray-700 leading-none">21</p>
+          <div className="flex flex-col gap-0.5 border-l-2 border-indigo-300 pl-3">
+            <p className="text-xl md:text-2xl font-semibold text-gray-700 leading-none">21</p>
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Industries</p>
           </div>
         </div>
-      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 bg-zinc-100 px-3 py-2 rounded-md">
           <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
             From
@@ -87,7 +87,7 @@ export default function DateRangePicker({
             className="bg-transparent text-xs font-bold text-zinc-700 outline-none [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:rounded [&::-webkit-calendar-picker-indicator]:p-0.5 [&::-webkit-calendar-picker-indicator]:hover:bg-zinc-300 [&::-webkit-calendar-picker-indicator]:active:bg-zinc-400 [&::-webkit-calendar-picker-indicator]:transition-colors"
           />
         </div>
-      </div>
+        </div>
       </div>
     </div>
   );
