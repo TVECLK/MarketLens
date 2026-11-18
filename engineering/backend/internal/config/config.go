@@ -50,7 +50,13 @@ func (c MCPConfig) Validate() error {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
 		return fmt.Errorf("MCP_PUBLIC_BASE_URL must be an absolute http(s) URL such as https://mcp.example.com, got %q", c.PublicBaseURL)
 	}
-	if u.RawQuery != "" || u.Fragment != "" {
+	// Look for the literal delimiters, not u.RawQuery / u.Fragment: url.Parse
+	// keeps a lone "?" as an empty query and drops a lone "#" altogether, so
+	// "https://host?" and "https://host#" would pass those checks. The metadata
+	// path is appended to the original string, so either would send clients to
+	// the wrong path. Percent-encoded characters in a path prefix (%3F) are
+	// still fine, because they contain no literal "?" or "#".
+	if strings.ContainsAny(c.PublicBaseURL, "?#") {
 		return fmt.Errorf("MCP_PUBLIC_BASE_URL must not contain a query or fragment, got %q", c.PublicBaseURL)
 	}
 	if strings.HasSuffix(c.PublicBaseURL, "/") {
