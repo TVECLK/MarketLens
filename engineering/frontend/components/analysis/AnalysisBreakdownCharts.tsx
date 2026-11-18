@@ -114,8 +114,8 @@ export default function AnalysisBreakdownCharts({
               <SectionMessage />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={sectorData} margin={{ top: 10, right: 10, left: 10, bottom: 30 }}>
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: TICK_COLOR }} label={{ value: "Sector", position: "insideBottom", offset: -15, fontSize: 11, fill: TICK_COLOR }} />
+                <BarChart data={sectorData} margin={{ top: 10, right: 10, left: 10, bottom: 40 }}>
+                  <XAxis dataKey="name" tick={(props) => <XAxisStraightTooltipTick {...props} maxLength={10} fontSize={9} fill={TICK_COLOR} />} interval={0} height={50} label={{ value: "Sector", position: "insideBottom", offset: -30, fontSize: 11, fill: TICK_COLOR }} />
                   <YAxis tick={{ fontSize: 10, fill: TICK_COLOR }} allowDecimals={false} label={{ value: "No. of Vacancies", angle: -90, position: "center", fontSize: 11, fill: TICK_COLOR }} />
                   <Tooltip
                     contentStyle={CHART_TOOLTIP_STYLE}
