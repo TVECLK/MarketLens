@@ -47,6 +47,20 @@ func NewMockLLM(t *testing.T, respond Responder) *llm.Client {
 	return llm.NewClient(llm.Config{APIKey: "test", Model: "test", APIURL: server.URL}, server.Client())
 }
 
+// NewMockLLMStatus is like NewMockLLM, but every request is answered with
+// the given HTTP status and an empty body, to simulate the LLM API
+// rejecting calls (a bad key, a wrong URL, rate limiting, an outage).
+func NewMockLLMStatus(t *testing.T, status int) *llm.Client {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+	}))
+	t.Cleanup(server.Close)
+
+	return llm.NewClient(llm.Config{APIKey: "test", Model: "test", APIURL: server.URL}, server.Client())
+}
+
 // FirstListedID scans a classifier prompt (built by AskToPick) for the
 // first "N: label" line and returns N — a simple, generic way to have a
 // mock respond with a plausible pick without hardcoding specific ids.

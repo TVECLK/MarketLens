@@ -125,7 +125,7 @@ type updateMajorGroupInput struct {
 }
 
 type majorGroupListResponse struct {
-	Count       int                `json:"count"`
+	Count       int                 `json:"count"`
 	MajorGroups []models.MajorGroup `json:"major_groups"`
 }
 

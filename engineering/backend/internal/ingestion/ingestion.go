@@ -29,16 +29,12 @@ type RawJobInput struct {
 	Source       string
 }
 
-// hasNoUsableText reports whether raw has no content in any text
-// field — such a job produces a degenerate MinHash signature (every
-// element stays at its max-value default), making it look identical
-// to every other such job.
-func hasNoUsableText(raw RawJobInput) bool {
-	return strings.TrimSpace(raw.Employer) == "" &&
-		strings.TrimSpace(raw.JobRole) == "" &&
-		strings.TrimSpace(raw.Location) == "" &&
-		strings.TrimSpace(raw.Description) == ""
-}
+// tooLittleTextMessage is the error for a job whose text is shorter than
+// one shingle, whether it is empty or just a character or two.
+var tooLittleTextMessage = fmt.Sprintf(
+	"job has too little text: employer, job_role, location and description together are under %d characters",
+	shingleSize,
+)
 
 // FailedJob reports one job's save failure, keyed by the crawler-generated
 // job_id. A job not present in a ProcessBatch response's failures either
@@ -55,6 +51,7 @@ type FailedJob struct {
 type IngestionService struct {
 	jobPosts             *service.JobPostService
 	sources              *service.SourceService
+	crawlerRuns          *service.CrawlerRunService
 	llmClient            *llm.Client
 	model                string
 	metadataBuilder      *MetadataBuilder
@@ -73,6 +70,7 @@ type IngestionService struct {
 func NewIngestionService(
 	jobPosts *service.JobPostService,
 	sources *service.SourceService,
+	crawlerRuns *service.CrawlerRunService,
 	llmClient *llm.Client,
 	model string,
 	industryClassifier *IndustryClassifier,
@@ -86,6 +84,7 @@ func NewIngestionService(
 	return &IngestionService{
 		jobPosts:             jobPosts,
 		sources:              sources,
+		crawlerRuns:          crawlerRuns,
 		llmClient:            llmClient,
 		model:                model,
 		metadataBuilder:      metadataBuilder,
@@ -106,13 +105,56 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 	var failures []FailedJob
 	// A batch nearly always comes from one source, so look each name up once.
 	sourceChecks := make(map[string]*FailedJob)
+	// Likewise a batch nearly always carries one crawler_run_id.
+	runChecks := make(map[uint]*FailedJob)
 
 	for _, raw := range rawJobs {
-		if hasNoUsableText(raw) {
+		jobData := JobData{
+			Employer:    raw.Employer,
+			JobRole:     raw.JobRole,
+			Location:    raw.Location,
+			Description: raw.Description,
+		}
+
+		// Checked first: it is plain string work, so a job with no
+		// fingerprintable text costs no database lookup.
+		if !hasUsableText(jobData) {
+			log.Printf("ingestion: job %s rejected: %v", raw.JobID, ErrTooLittleText)
 			failures = append(failures, FailedJob{
 				JobID:      raw.JobID,
 				StatusCode: http.StatusBadRequest,
-				Error:      "job has no usable text content",
+				Error:      tooLittleTextMessage,
+			})
+			continue
+		}
+
+		// ids start at 1, so a missing crawler_run_id (decoded as 0) is
+		// rejected here without a database lookup.
+		if raw.CrawlerRunID == 0 {
+			log.Printf("ingestion: job %s rejected: no crawler_run_id", raw.JobID)
+			failures = append(failures, FailedJob{
+				JobID:      raw.JobID,
+				StatusCode: http.StatusBadRequest,
+				Error:      "job has no crawler_run_id",
+			})
+			continue
+		}
+
+		// The run must exist and be RUNNING, or the save fails on the foreign key only after
+		// the LLM work. A lookup error is 503 and not cached, so it is retried.
+		runCheck, cached := runChecks[raw.CrawlerRunID]
+		if !cached {
+			runCheck = s.checkCrawlerRun(ctx, raw.CrawlerRunID)
+			if runCheck == nil || runCheck.StatusCode != http.StatusServiceUnavailable {
+				runChecks[raw.CrawlerRunID] = runCheck
+			}
+		}
+		if runCheck != nil {
+			log.Printf("ingestion: job %s rejected: %s", raw.JobID, runCheck.Error)
+			failures = append(failures, FailedJob{
+				JobID:      raw.JobID,
+				StatusCode: runCheck.StatusCode,
+				Error:      runCheck.Error,
 			})
 			continue
 		}
@@ -135,13 +177,18 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 			continue
 		}
 
-		jobData := JobData{
-			Employer:    raw.Employer,
-			JobRole:     raw.JobRole,
-			Location:    raw.Location,
-			Description: raw.Description,
+		// hasUsableText passed above, so this only fails if the two ever
+		// disagree; keep it as a safety net.
+		sig, lshIndexes, err := GenerateMinHashAndLSH(jobData, s.numPerm, s.numBands)
+		if err != nil {
+			log.Printf("ingestion: job %s rejected: %v", raw.JobID, err)
+			failures = append(failures, FailedJob{
+				JobID:      raw.JobID,
+				StatusCode: http.StatusBadRequest,
+				Error:      tooLittleTextMessage,
+			})
+			continue
 		}
-		sig, lshIndexes := GenerateMinHashAndLSH(jobData, s.numPerm, s.numBands)
 
 		isDuplicate, matchedJobID, err := CheckDuplicate(ctx, s.jobPosts, lshIndexes, sig, raw.Location, s.jaccardThreshold)
 		if err != nil {
@@ -153,10 +200,14 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 			continue
 		}
 		if isDuplicate {
-			if err := s.jobPosts.UpdateDuplicateJob(ctx, uint(matchedJobID), raw.CrawlerRunID); err != nil {
+			if err := s.jobPosts.UpdateDuplicateJob(ctx, matchedJobID, raw.CrawlerRunID); err != nil {
+				statusCode := http.StatusServiceUnavailable
+				if errors.Is(err, repositories.ErrPermanentSaveFailure) {
+					statusCode = http.StatusUnprocessableEntity
+				}
 				failures = append(failures, FailedJob{
 					JobID:      raw.JobID,
-					StatusCode: http.StatusServiceUnavailable,
+					StatusCode: statusCode,
 					Error:      fmt.Sprintf("updating duplicate job: %v", err),
 				})
 			}
@@ -199,6 +250,25 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 	}
 
 	return failures
+}
+
+// checkCrawlerRun reports why jobs for the crawler run must be rejected, or
+// nil if the run exists and is RUNNING. JobID is left for the caller to fill
+// in. An unknown run, or one already COMPLETED or FAILED (including one a
+// newer run marked FAILED), is 422 so the crawler does not retry it; a
+// lookup failure is 503 so it does.
+func (s *IngestionService) checkCrawlerRun(ctx context.Context, id uint) *FailedJob {
+	status, err := s.crawlerRuns.GetCrawlerRunStatus(ctx, id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return &FailedJob{StatusCode: http.StatusUnprocessableEntity, Error: fmt.Sprintf("crawler run %d does not exist", id)}
+	}
+	if err != nil {
+		return &FailedJob{StatusCode: http.StatusServiceUnavailable, Error: fmt.Sprintf("looking up crawler run %d: %v", id, err)}
+	}
+	if status != "RUNNING" {
+		return &FailedJob{StatusCode: http.StatusUnprocessableEntity, Error: fmt.Sprintf("crawler run %d is not running (status %s)", id, status)}
+	}
+	return nil
 }
 
 // checkSource reports why jobs from the named source must be rejected, or
@@ -311,16 +381,13 @@ func (s *IngestionService) extractAndClassify(ctx context.Context, raw RawJobInp
 	experienceID := validateID("experience_id", extracted.MetaData.ExperienceID, options.validExperiences)
 	crawlerRunID := raw.CrawlerRunID
 
-	workMode := extracted.WorkMode
-	if workMode == "" {
-		workMode = string(models.WorkModeOnsite) 
-	}
+	workMode := normalizeWorkMode(extracted.WorkMode)
 
 	return models.JobPost{
 		Employer:       &models.Employer{Name: raw.Employer},
 		JobType:        &models.JobType{Type: extracted.JobType.Type},
 		JobRole:        raw.JobRole,
-		WorkMode:       models.WorkMode(workMode),
+		WorkMode:       workMode,
 		JobDescription: raw.Description,
 		Location:       raw.Location,
 		NoOfVacancies:  extracted.NoOfVacancies,
@@ -343,6 +410,18 @@ func (s *IngestionService) extractAndClassify(ctx context.Context, raw RawJobInp
 			MinhashSignature:      ToPQArray(sig),
 		},
 	}, nil
+}
+
+// normalizeWorkMode lower-cases and trims the LLM's work_mode and accepts
+// only remote, onsite or hybrid. Anything else ("Remote ", "on-site", "")
+// falls back to onsite: an invalid enum value would fail the insert, and
+// the retries would each rerun the LLM extraction for nothing.
+func normalizeWorkMode(raw string) models.WorkMode {
+	switch m := models.WorkMode(strings.ToLower(strings.TrimSpace(raw))); m {
+	case models.WorkModeRemote, models.WorkModeOnsite, models.WorkModeHybrid:
+		return m
+	}
+	return models.WorkModeOnsite
 }
 
 func parsePostedAt(raw string) (time.Time, error) {

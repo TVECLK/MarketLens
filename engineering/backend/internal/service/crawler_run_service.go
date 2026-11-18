@@ -19,6 +19,12 @@ func (s *CrawlerRunService) CreateCrawlerRun(ctx context.Context) (models.Crawle
 	return s.store.CreateCrawlerRun(ctx)
 }
 
+// GetCrawlerRunStatus returns the status of a crawler run, or
+// gorm.ErrRecordNotFound if no such run is recorded.
+func (s *CrawlerRunService) GetCrawlerRunStatus(ctx context.Context, id uint) (string, error) {
+	return s.store.GetCrawlerRunStatus(ctx, id)
+}
+
 // validCrawlerRunStatuses are the only values a caller may set via
 // CompleteCrawlerRun — anything else (a typo, a stray value) is rejected
 // instead of being written straight into the crawler_runs.status column,

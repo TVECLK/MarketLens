@@ -5,12 +5,14 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"log"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"marketlens-go-backend/internal/service"
 
@@ -35,13 +37,36 @@ type LSHIndex struct {
 	BucketKey string
 }
 
-// GenerateMinHashAndLSH computes the MinHash signature and LSH bucket
-// keys for a job.
-func GenerateMinHashAndLSH(job JobData, numPerm, numBands int) ([]uint32, []LSHIndex) {
+// ErrTooLittleText means a job's normalized text is shorter than one
+// shingle, so it has no MinHash signature to compare.
+var ErrTooLittleText = errors.New("too little text to fingerprint")
+
+// normalizeText joins a job's text fields, lowercases them and collapses
+// runs of whitespace: the text a signature is built from, and the text
+// whose length decides whether there is enough to fingerprint.
+func normalizeText(job JobData) string {
 	text := strings.ToLower(strings.Join([]string{
 		job.Employer, job.JobRole, job.Location, job.Description,
 	}, " "))
-	text = strings.Join(strings.Fields(text), " ")
+	return strings.Join(strings.Fields(text), " ")
+}
+
+// hasUsableText reports whether a job's normalized text is at least one
+// shingle long. Shorter text (including none at all) gives no shingles, so
+// every such job would get the same all-max signature and match the first
+// one as a duplicate.
+func hasUsableText(job JobData) bool {
+	return utf8.RuneCountInString(normalizeText(job)) >= shingleSize
+}
+
+// GenerateMinHashAndLSH computes the MinHash signature and LSH bucket
+// keys for a job. It returns ErrTooLittleText when the job has no usable
+// text, so no caller can get a signature that matches every other short job.
+func GenerateMinHashAndLSH(job JobData, numPerm, numBands int) ([]uint32, []LSHIndex, error) {
+	text := normalizeText(job)
+	if utf8.RuneCountInString(text) < shingleSize {
+		return nil, nil, ErrTooLittleText
+	}
 
 	shingles := shingle(text, shingleSize)
 
@@ -74,7 +99,7 @@ func GenerateMinHashAndLSH(job JobData, numPerm, numBands int) ([]uint32, []LSHI
 		lshIndexes = append(lshIndexes, LSHIndex{BandNo: band, BucketKey: bucketKey})
 	}
 
-	return sig, lshIndexes
+	return sig, lshIndexes, nil
 }
 
 // seededHash32 gives MinHash num_perm independent hash functions by
@@ -139,7 +164,7 @@ func wordSet(s string, stop map[string]struct{}) map[string]struct{} {
 	return out
 }
 
-// ToPQArray converts a []uint32 signature into a pq.Int64Array 
+// ToPQArray converts a []uint32 signature into a pq.Int64Array
 func ToPQArray(sig []uint32) pq.Int64Array {
 	out := make(pq.Int64Array, len(sig))
 	for i, v := range sig {
@@ -170,7 +195,7 @@ func CheckDuplicate(
 	currentSig []uint32,
 	incomingLocation string,
 	jaccardThreshold float64,
-) (bool, int64, error) {
+) (bool, uint, error) {
 	bucketKeys := make([]string, len(lshIndexes))
 	for i, idx := range lshIndexes {
 		bucketKeys[i] = idx.BucketKey
@@ -209,7 +234,7 @@ func CheckDuplicate(
 
 		if jaccardValue >= jaccardThreshold {
 			log.Printf("duplicate found: jaccard=%.2f matched_job_id=%d", jaccardValue, job.ID)
-			return true, int64(job.ID), nil
+			return true, job.ID, nil
 		}
 	}
 

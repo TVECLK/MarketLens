@@ -139,9 +139,12 @@ func (r *Store) SaveOneJob(ctx context.Context, job *models.JobPost, lshIndexRec
 // crawlerRunID, in its own transaction.
 func (r *Store) UpdateDuplicateJob(ctx context.Context, jobPostID uint, crawlerRunID uint) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return tx.Table("meta_data").
+		if err := tx.Table("meta_data").
 			Where("job_post_id = ?", jobPostID).
-			Update("crawler_run_id", crawlerRunID).Error
+			Update("crawler_run_id", crawlerRunID).Error; err != nil {
+			return wrapSaveErr(err, "duplicate job update failed")
+		}
+		return nil
 	})
 }
 

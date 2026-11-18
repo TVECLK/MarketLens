@@ -33,8 +33,8 @@ type industrySubclassesByParentResponse struct {
 }
 
 // Industry levels by parent ids
-//This function returns industry divisions under an industry sector, currently-active by default,
-//or active during a given date range if from-date and to-date query params are provided
+// This function returns industry divisions under an industry sector, currently-active by default,
+// or active during a given date range if from-date and to-date query params are provided
 func (h *Handler) GetIndustryDivisionsByIndustrySectorHandler(c *gin.Context) {
 	id, ok := parseIDParamMsg(c, "id", "Invalid industry sector id parameter")
 	if !ok {
@@ -54,8 +54,8 @@ func (h *Handler) GetIndustryDivisionsByIndustrySectorHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, industryDivisionsByParentResponse{IndustrySectorID: id, Count: len(items), IndustryDivisions: items})
 }
 
-//This function returns industry groups under an industry division, currently-active by default,
-//or active during a given date range if from-date and to-date query params are provided
+// This function returns industry groups under an industry division, currently-active by default,
+// or active during a given date range if from-date and to-date query params are provided
 func (h *Handler) GetIndustryGroupsByIndustryDivisionHandler(c *gin.Context) {
 	id, ok := parseIDParamMsg(c, "id", "Invalid industry division id parameter")
 	if !ok {
@@ -75,8 +75,8 @@ func (h *Handler) GetIndustryGroupsByIndustryDivisionHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, industryGroupsByParentResponse{IndustryDivisionID: id, Count: len(items), IndustryGroups: items})
 }
 
-//This function returns industry classes under an industry group, currently-active by default,
-//or active during a given date range if from-date and to-date query params are provided
+// This function returns industry classes under an industry group, currently-active by default,
+// or active during a given date range if from-date and to-date query params are provided
 func (h *Handler) GetIndustryClassesByIndustryGroupHandler(c *gin.Context) {
 	id, ok := parseIDParamMsg(c, "id", "Invalid industry group id parameter")
 	if !ok {
@@ -96,8 +96,8 @@ func (h *Handler) GetIndustryClassesByIndustryGroupHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, industryClassesByParentResponse{IndustryGroupID: id, Count: len(items), IndustryClasses: items})
 }
 
-//This function returns industry subclasses under an industry class, currently-active by default,
-//or active during a given date range if from-date and to-date query params are provided
+// This function returns industry subclasses under an industry class, currently-active by default,
+// or active during a given date range if from-date and to-date query params are provided
 func (h *Handler) GetIndustrySubclassesByIndustryClassHandler(c *gin.Context) {
 	id, ok := parseIDParamMsg(c, "id", "Invalid industry class id parameter")
 	if !ok {

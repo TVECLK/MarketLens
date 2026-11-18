@@ -87,7 +87,7 @@ func (h *Handler) ReconcileStaleVacanciesHandler(c *gin.Context) {
 
 	closedCount, err := h.JobPosts.ReconcileStaleVacancies(c.Request.Context(), in.CrawlerRunID, in.Sources)
 	if err != nil {
-		respondError(c, http.StatusInternalServerError, "Global snapshot reconciliation sweeping routine failed", err)
+		respondRepoError(c, "Global snapshot reconciliation sweeping routine failed", err)
 		return
 	}
 
