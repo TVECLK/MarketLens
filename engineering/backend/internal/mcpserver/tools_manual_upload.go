@@ -193,7 +193,7 @@ type submitNewspaperVacanciesOutput struct {
 	Failed      []failedVacancyOutput `json:"failed,omitempty"`
 
 	ReconciledStaleJobs int64  `json:"reconciled_stale_jobs" jsonschema:"number of earlier open vacancies from this source that were closed because they were not in this upload; an upload is treated as the source's full current list"`
-	ReconcileNote       string `json:"reconcile_note,omitempty" jsonschema:"set if closing the earlier vacancies failed, or was skipped because the upload was interrupted; the jobs that were saved stay saved"`
+	ReconcileNote       string `json:"reconcile_note,omitempty" jsonschema:"set if closing the earlier vacancies failed or was skipped: because the upload was interrupted, or because every job was saved but time ran out before they could be closed. The jobs that were saved stay saved"`
 	Interrupted         bool   `json:"interrupted,omitempty" jsonschema:"true if the upload was stopped before it finished; the jobs under 'failed' were not all rejected, some were never processed. Submit the full list again, never only the failed jobs"`
 }
 
@@ -320,6 +320,26 @@ func newSubmitOutput(source string, submitted int, failures []ingestion.FailedJo
 		out.Failed = append(out.Failed, failedVacancyOutput{JobRole: j.JobRole, Employer: j.Employer, Error: f.Error})
 	}
 	return out
+}
+
+// uploadEnded decides how a submission ended, keeping two questions apart:
+// whether every job was processed, and whether there is still time to
+// reconcile.
+//
+// interrupted means some jobs were not processed. It is true when retries were
+// given up (retryGaveUp), or when the work context ended and at least one job
+// failed. A work context that ended after every job had already succeeded is
+// not an interruption: the vacancies are saved, and calling that a failed run
+// would make the client replay a list that was fully ingested.
+//
+// reconcile is true only if the upload finished and the work context is still
+// live. When every job succeeded but time (or the connection) ran out,
+// interrupted is false and reconcile is false: report the saved vacancies and
+// leave closing the earlier ones to a repeat of the same submission.
+func uploadEnded(retryGaveUp, workCtxEnded bool, failures int) (interrupted, reconcile bool) {
+	interrupted = retryGaveUp || (workCtxEnded && failures > 0)
+	reconcile = !interrupted && !workCtxEnded
+	return interrupted, reconcile
 }
 
 // finalRunStatus is the status a manual submission's crawler run is closed
@@ -547,8 +567,8 @@ func registerManualUploadTools(server *mcp.Server, shutdown context.Context, svc
 		workCtx, cancelWork := budget.withCutoff(ctx)
 		defer cancelWork()
 
-		failures, interrupted := processWithRetry(workCtx, shutdown, ingestionSvc, rawJobs, retryDelay)
-		interrupted = interrupted || workCtx.Err() != nil
+		failures, retryGaveUp := processWithRetry(workCtx, shutdown, ingestionSvc, rawJobs, retryDelay)
+		interrupted, canReconcile := uploadEnded(retryGaveUp, workCtx.Err() != nil, len(failures))
 
 		out := newSubmitOutput(source.Name, len(rawJobs), failures, jobsByID, interrupted)
 		runStatus = finalRunStatus(interrupted, out.SavedCount)
@@ -558,6 +578,13 @@ func registerManualUploadTools(server *mcp.Server, shutdown context.Context, svc
 		// never processed would be among them.
 		if interrupted {
 			out.ReconcileNote = "earlier vacancies were not closed because the upload did not finish"
+			return nil, out, nil
+		}
+		// Every job was processed, but the time ran out (or the connection was
+		// lost) before reconciling. The upload itself succeeded.
+		if !canReconcile {
+			out.ReconcileNote = "all vacancies were saved, but earlier vacancies were not closed because the server ran out of time " +
+				"or the connection was lost; submit the same list again to finish closing them"
 			return nil, out, nil
 		}
 

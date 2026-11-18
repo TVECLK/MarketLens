@@ -469,6 +469,36 @@ func TestProcessWithRetry(t *testing.T) {
 	}
 }
 
+func TestUploadEnded(t *testing.T) {
+	tests := []struct {
+		name            string
+		retryGaveUp     bool
+		workCtxEnded    bool
+		failures        int
+		wantInterrupted bool
+		wantReconcile   bool
+	}{
+		{"finished cleanly", false, false, 0, false, true},
+		{"some jobs rejected, nothing cut short: a normal partial failure", false, false, 2, false, true},
+		{"retries were given up", true, false, 1, true, false},
+		{"work context ended while jobs were still failing", false, true, 3, true, false},
+		{"retries given up and the work context ended", true, true, 1, true, false},
+		// The reviewer's case: the last save committed just before the budget
+		// ran out. Nothing is left unprocessed, so this is not an interruption;
+		// only reconciling is skipped.
+		{"every job saved, then the work context ended", false, true, 0, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			interrupted, reconcile := uploadEnded(tt.retryGaveUp, tt.workCtxEnded, tt.failures)
+			if interrupted != tt.wantInterrupted || reconcile != tt.wantReconcile {
+				t.Errorf("uploadEnded(retryGaveUp=%v, workCtxEnded=%v, failures=%d) = interrupted %v, reconcile %v; want %v, %v",
+					tt.retryGaveUp, tt.workCtxEnded, tt.failures, interrupted, reconcile, tt.wantInterrupted, tt.wantReconcile)
+			}
+		})
+	}
+}
+
 func TestFinalRunStatus(t *testing.T) {
 	tests := []struct {
 		name        string
