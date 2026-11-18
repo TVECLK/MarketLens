@@ -70,7 +70,7 @@ const newspaperInstructions = `Newspaper vacancy upload workflow. When the user 
 4. Call submit_newspaper_vacancies. It shows the user a Yes / No / Edit form and saves only on Yes.
    - status cancelled (user chose No): stop. Nothing was saved.
    - status edits_requested (user chose Edit): apply the returned edits to the jobs (if none were given, ask the user in the chat what to change), show the updated numbered table in the chat, then call submit_newspaper_vacancies again with the updated jobs so the user confirms again.
-   - saved: tell the user how many were submitted and list any that failed.
+   - On success (the user chose Yes) the result has no status; it has 'submitted', 'failed_count' and 'failed'. Tell the user how many were submitted and list any that failed.
 5. Only if the tool says the client cannot show a confirmation form: ask the user in the chat, and call it again with user_confirmed=true only after their explicit yes.
 Never save without the user's explicit Yes, and never set user_confirmed on your own.`
 
