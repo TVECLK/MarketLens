@@ -1,10 +1,15 @@
 package api
 
 import (
+	"context"
+	"database/sql/driver"
 	"errors"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
+	"syscall"
 	"time"
 
 	"marketlens-go-backend/internal/repositories"
@@ -101,11 +106,36 @@ const (
 	postgresForeignKeyViolation = "23503"
 )
 
+// isTransientDBFailure reports whether err is a database outage a retry can
+// cure: a retryable Postgres error (see repositories.IsTransientDBError) or
+// a failure with no SQLSTATE that is recognizably about the connection — a
+// timeout, a refused or reset connection, a dropped driver connection or a
+// connection closed mid-read. repositories.IsTransientDBError treats every
+// error without a SQLSTATE as transient, which suits the ingestion retry
+// loop but would turn any unexpected error here into a 503, so those are
+// matched narrowly instead.
+func isTransientDBFailure(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return repositories.IsTransientDBError(err)
+	}
+	var connErr *pgconn.ConnectError
+	var netErr net.Error
+	return errors.As(err, &connErr) ||
+		errors.As(err, &netErr) ||
+		errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, driver.ErrBadConn) ||
+		errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.ECONNREFUSED)
+}
+
 // respondRepoError maps a repository/service error to the right HTTP
 // status: a missing row (gorm.ErrRecordNotFound) is a 404, a rejected
 // business rule (service.ErrValidation) is a 400, a unique or foreign key
 // violation (duplicate name, deleting a row that is still referenced) is a
-// 409, a transient database failure is a 503 so the client may retry, and
+// 409, a transient database failure (a retryable Postgres error or a lost connection) is a 503 so the client may retry, and
 // anything else is an unexpected server error (logged, 500).
 func respondRepoError(c *gin.Context, publicMessage string, err error) {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -126,10 +156,10 @@ func respondRepoError(c *gin.Context, publicMessage string, err error) {
 			c.JSON(http.StatusConflict, gin.H{"error": publicMessage + ": conflicts with related records"})
 			return
 		}
-		if repositories.IsTransientDBError(err) {
-			respondError(c, http.StatusServiceUnavailable, publicMessage+": database temporarily unavailable", err)
-			return
-		}
+	}
+	if isTransientDBFailure(err) {
+		respondError(c, http.StatusServiceUnavailable, publicMessage+": database temporarily unavailable", err)
+		return
 	}
 	respondError(c, http.StatusInternalServerError, publicMessage, err)
 }

@@ -1,9 +1,13 @@
 package api
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"syscall"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +29,11 @@ func TestRespondRepoError_Status(t *testing.T) {
 		{"unique violation", &pgconn.PgError{Code: "23505"}, http.StatusConflict},
 		{"foreign key violation", &pgconn.PgError{Code: "23503"}, http.StatusConflict},
 		{"transient db error", &pgconn.PgError{Code: "40001"}, http.StatusServiceUnavailable},
+		{"connection reset", fmt.Errorf("query: %w", syscall.ECONNRESET), http.StatusServiceUnavailable},
+		{"connection refused", &pgconn.ConnectError{}, http.StatusServiceUnavailable},
+		{"dropped connection", fmt.Errorf("query: %w", io.ErrUnexpectedEOF), http.StatusServiceUnavailable},
+		{"timeout", fmt.Errorf("query: %w", context.DeadlineExceeded), http.StatusServiceUnavailable},
+		{"permanent postgres error", &pgconn.PgError{Code: "42P01"}, http.StatusInternalServerError},
 		{"unexpected", errors.New("boom"), http.StatusInternalServerError},
 	}
 	for _, tt := range tests {
