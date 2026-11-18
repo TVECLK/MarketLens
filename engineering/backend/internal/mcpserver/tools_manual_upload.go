@@ -229,7 +229,8 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 			"manual sources; pass the returned 'source' to submit_newspaper_vacancies. If the client cannot show " +
 			"a select box, the result has status 'choose_in_chat' and a list of sources: ask the user to pick one " +
 			"of exactly those names. The user may only choose a listed source - never invent or guess one. " +
-			"If no source matches, relay the 'message' to the user.",
+			"Status 'cancelled' means the user closed the select box without choosing: stop and relay the " +
+			"'message'. If no source matches, relay the 'message' to the user.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
 		active := true
 		sources, err := svcs.Sources.ListSources(ctx, string(models.SourceTypeManual), &active)
