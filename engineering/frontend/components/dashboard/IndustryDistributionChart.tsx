@@ -86,7 +86,7 @@ export default function IndustryDistributionChart({
           label={{
             value: "No. of Vacancies",
             angle: -90,
-            position: "insideLeft",
+            position: "center",
             fontSize: 11,
             fill: TICK_COLOR,
           }}

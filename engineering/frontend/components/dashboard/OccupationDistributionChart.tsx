@@ -71,7 +71,7 @@ export default function OccupationDistributionChart({
 
   const chart = (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} layout="vertical" margin={{ left: 8, right: 12, bottom: 12 }}>
+      <BarChart data={data} layout="vertical" margin={{ left: 28, right: 12, bottom: 12 }}>
         <XAxis
           type="number"
           tick={{ fontSize: 10, fill: TICK_COLOR }}
@@ -89,6 +89,7 @@ export default function OccupationDistributionChart({
           type="category"
           tick={(props) => <YAxisTooltipTick {...props} maxLength={18} fontSize={10} fill={TICK_COLOR} />}
           width={130}
+          label={{ value: "Occupation Type", angle: -90, position: "insideLeft", dx: -22, fontSize: 11, fill: TICK_COLOR }}
         />
         <Tooltip
           contentStyle={CHART_TOOLTIP_STYLE}

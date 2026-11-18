@@ -159,7 +159,7 @@ export default function OccupationAnalysisPage() {
 
       <div>
         <h2 className="text-base md:text-lg font-black text-zinc-900 tracking-tight">
-          Occupation Analysis (SLSO)
+          Occupation Analysis (SLSCO)
         </h2>
         <p className="text-xs text-zinc-400 mt-1 font-medium">
           Analyze through the occupation classification hierarchy
