@@ -162,14 +162,14 @@ class EmailAlertService:
             )
             return False
         if not (self._smtp_host and self._recipients and self._from_email):
-            logger.warning(
+            logger.error(
                 "Email alert: SMTP host, sender or recipients are missing, skipping."
             )
             return False
         # The login is optional, but a username without a password (or the other way
         # round) is a mistake
         if bool(self._smtp_username) != bool(self._smtp_password):
-            logger.warning(
+            logger.error(
                 "Email alert: SMTP_USERNAME and SMTP_PASSWORD must be set together, "
                 "skipping."
             )

@@ -313,6 +313,28 @@ async def test_manager_alerts_even_when_no_active_source_has_a_crawler(
     alert_service.send_missing_crawlers_alert.assert_awaited_once_with(["glassdoor"])
 
 
+@pytest.mark.parametrize(
+    "missing",
+    [
+        {"smtp_host": ""},
+        {"from_email": "", "smtp_username": "", "smtp_password": ""},
+        {"recipients": []},
+        {"smtp_password": ""},
+    ],
+    ids=["host", "sender", "recipients", "half-login"],
+)
+async def test_a_misconfigured_alert_is_logged_as_an_error(
+    smtp, make_service, caplog, missing
+):
+    with caplog.at_level(logging.DEBUG):
+        await make_service(**missing).send_failure_alert(
+            [FailedCrawler("ikman", "down")], 1
+        )
+
+    smtp.send_message.assert_not_called()
+    assert [r.levelno for r in caplog.records] == [logging.ERROR]
+
+
 async def test_crash_alert_describes_the_error(smtp, service):
     await service.send_crash_alert(RuntimeError("backend <down>"))
 
