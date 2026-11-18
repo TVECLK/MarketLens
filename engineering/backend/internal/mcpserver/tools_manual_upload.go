@@ -354,7 +354,7 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 					Message: "The user chose No. The submission was cancelled and nothing was saved.",
 				}, nil
 			case confirmEdit:
-				msg := "The user chose Edit. Apply their edits to the jobs, show the updated jobs in the chat, then call this tool again with the updated jobs."
+				msg := "The user chose Edit. Apply their edits to the jobs, show the updated jobs in the chat, then call this tool again with the updated jobs. If the edits are unclear or don't match any job, ask the user in the chat what they meant before changing anything - don't guess."
 				if edits == "" {
 					msg = "The user chose Edit but gave no details. Ask them in the chat what to change, update the jobs, show them in the chat, then call this tool again."
 				}
