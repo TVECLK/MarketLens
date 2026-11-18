@@ -169,7 +169,8 @@ type submitNewspaperVacanciesOutput struct {
 	Failed      []failedVacancyOutput `json:"failed,omitempty"`
 
 	ReconciledStaleJobs int64  `json:"reconciled_stale_jobs" jsonschema:"number of earlier open vacancies from this source that were closed because they were not in this upload; an upload is treated as the source's full current list"`
-	ReconcileNote       string `json:"reconcile_note,omitempty" jsonschema:"set only if closing the earlier vacancies failed; the submitted jobs were still saved"`
+	ReconcileNote       string `json:"reconcile_note,omitempty" jsonschema:"set if closing the earlier vacancies failed, or was skipped because the upload was interrupted; the jobs that were saved stay saved"`
+	Interrupted         bool   `json:"interrupted,omitempty" jsonschema:"true if the upload was stopped before it finished; the jobs under 'failed' were not all rejected, some were never processed. Submit the full list again, never only the failed jobs"`
 }
 
 // hasScope reports whether the token on the current request carries scope.
@@ -207,12 +208,22 @@ func retryDelay(attempt int) time.Duration {
 	return time.Duration(float64(d) * jitter)
 }
 
+// batchProcessor is the part of the ingestion service processWithRetry uses.
+type batchProcessor interface {
+	ProcessBatch(ctx context.Context, jobs []ingestion.RawJobInput) []ingestion.FailedJob
+}
+
 // processWithRetry runs the batch, then re-runs only the jobs that failed
-// with a transient (503) error, up to manualUploadMaxRetries times with
-// exponential backoff. Permanent failures (4xx: bad input, unextractable job) are
-// never retried. Whatever still fails afterwards is returned for reporting.
-func processWithRetry(ctx context.Context, svc *ingestion.IngestionService, jobs []ingestion.RawJobInput) []ingestion.FailedJob {
-	failures := svc.ProcessBatch(ctx, jobs)
+// with a transient (503) error, up to manualUploadMaxRetries times, waiting
+// delay(attempt) before each. Permanent failures (4xx: bad input,
+// unextractable job) are never retried. Whatever still fails afterwards is
+// returned for reporting.
+//
+// interrupted is true when it gave up on retries early: because shutdown has
+// begun (a retry wait could outlast the grace period, so none is started) or
+// because ctx ended during a wait. The failures it returns were not retried.
+func processWithRetry(ctx, shutdown context.Context, svc batchProcessor, jobs []ingestion.RawJobInput, delay func(attempt int) time.Duration) (failures []ingestion.FailedJob, interrupted bool) {
+	failures = svc.ProcessBatch(ctx, jobs)
 	byID := make(map[string]ingestion.RawJobInput, len(jobs))
 	for _, j := range jobs {
 		byID[j.JobID] = j
@@ -229,22 +240,53 @@ func processWithRetry(ctx context.Context, svc *ingestion.IngestionService, jobs
 			}
 		}
 		if len(retry) == 0 {
-			return failures
+			return failures, false
+		}
+		if shutdown.Err() != nil {
+			return failures, true
 		}
 
 		select {
 		case <-ctx.Done():
-			return failures
-		case <-time.After(retryDelay(attempt)):
+			return failures, true
+		case <-time.After(delay(attempt)):
 		}
 
 		log.Printf("retrying %d transiently failed manual job(s), attempt %d/%d", len(retry), attempt, manualUploadMaxRetries)
 		failures = append(permanent, svc.ProcessBatch(ctx, retry)...)
 	}
-	return failures
+	return failures, false
 }
 
-func registerManualUploadTools(server *mcp.Server, svcs *service.Services, ingestionSvc *ingestion.IngestionService) {
+// newSubmitOutput builds the result of a submission from what processing
+// returned. interrupted means the upload was stopped before it finished, so
+// the jobs under 'failed' were not all rejected: some were never processed.
+func newSubmitOutput(source string, submitted int, failures []ingestion.FailedJob, jobsByID map[string]newspaperJob, interrupted bool) submitNewspaperVacanciesOutput {
+	out := submitNewspaperVacanciesOutput{
+		Message:     "Vacancies processed. 'saved_count' jobs were saved or matched an existing duplicate; the jobs listed under 'failed' were not saved.",
+		Source:      source,
+		Submitted:   submitted,
+		SavedCount:  submitted - len(failures),
+		FailedCount: len(failures),
+		Interrupted: interrupted,
+	}
+	if interrupted {
+		out.Message = "The upload was stopped before it finished (the server is shutting down or the connection was lost). " +
+			"'saved_count' jobs were saved or matched an existing duplicate; the jobs listed under 'failed' were not processed. " +
+			"Submit the full list of jobs again: jobs already saved are recognised as duplicates, so nothing is saved twice. " +
+			"Do not submit only the failed jobs."
+	}
+	for _, f := range failures {
+		j := jobsByID[f.JobID]
+		out.Failed = append(out.Failed, failedVacancyOutput{JobRole: j.JobRole, Employer: j.Employer, Error: f.Error})
+	}
+	return out
+}
+
+// registerManualUploadTools registers the newspaper upload tools. shutdown is
+// cancelled when the process starts shutting down; a submission in progress
+// then stops retrying and is cut off after drainWorkBudget.
+func registerManualUploadTools(server *mcp.Server, shutdown context.Context, svcs *service.Services, ingestionSvc *ingestion.IngestionService) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "select_manual_source",
 		Description: "Let the user choose which manual source (newspaper) an uploaded newspaper image came from. " +
@@ -338,7 +380,11 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 			"source's full current list: earlier open vacancies from the same source that are not in this " +
 			"upload are closed, and 'reconciled_stale_jobs' is how many were closed. If it is above 0, tell " +
 			"the user that many earlier vacancies from the source were closed. If 'reconcile_note' is set, " +
-			"the jobs were saved but closing the earlier vacancies failed - tell the user.\n\n" +
+			"tell the user what it says; the jobs that were saved stay saved. If 'interrupted' is true, the " +
+			"upload was stopped before it finished and no earlier vacancies were closed: tell the user, and " +
+			"call this tool again with the FULL list of jobs (jobs already saved are recognised as " +
+			"duplicates, so nothing is saved twice) - never with only the failed jobs, because closing " +
+			"earlier vacancies would then close the ones already saved.\n\n" +
 			"If the client cannot show the form, this tool says so: then ask the user in chat and call " +
 			"it again with user_confirmed=true only after their explicit yes.\n\n" +
 			"IMPORTANT: never invent a source name - it must be one returned by select_manual_source.",
@@ -431,15 +477,25 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 			jobsByID[id] = j
 		}
 
-		failures := processWithRetry(ctx, ingestionSvc, rawJobs)
-		runStatus = "COMPLETED"
+		// Once shutdown begins, ingestion gets drainWorkBudget to finish; the
+		// rest of the grace period is left to close the run and answer.
+		workCtx, cancelWork := withDrainBudget(ctx, shutdown, drainWorkBudget)
+		defer cancelWork()
 
-		out := submitNewspaperVacanciesOutput{
-			Message:     "Vacancies processed. 'saved_count' jobs were saved or matched an existing duplicate; the jobs listed under 'failed' were not saved.",
-			Source:      source.Name,
-			Submitted:   len(rawJobs),
-			SavedCount:  len(rawJobs) - len(failures),
-			FailedCount: len(failures),
+		failures, interrupted := processWithRetry(workCtx, shutdown, ingestionSvc, rawJobs, retryDelay)
+		interrupted = interrupted || workCtx.Err() != nil
+		if !interrupted {
+			runStatus = "COMPLETED"
+		}
+
+		out := newSubmitOutput(source.Name, len(rawJobs), failures, jobsByID, interrupted)
+
+		// An interrupted upload must not reconcile: it closes every earlier open
+		// vacancy of the source that is not in this run, and the jobs that were
+		// never processed would be among them.
+		if interrupted {
+			out.ReconcileNote = "earlier vacancies were not closed because the upload did not finish"
+			return nil, out, nil
 		}
 
 		closed, err := svcs.JobPosts.ReconcileStaleVacancies(ctx, run.ID, []string{source.Name})
@@ -448,10 +504,6 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 			out.ReconcileNote = "vacancies were saved, but closing stale vacancies failed"
 		}
 		out.ReconciledStaleJobs = closed
-		for _, f := range failures {
-			j := jobsByID[f.JobID]
-			out.Failed = append(out.Failed, failedVacancyOutput{JobRole: j.JobRole, Employer: j.Employer, Error: f.Error})
-		}
 		return nil, out, nil
 	})
 }

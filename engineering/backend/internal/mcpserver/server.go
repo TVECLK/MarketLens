@@ -78,7 +78,7 @@ const newspaperInstructions = `Newspaper vacancy upload workflow. When the user 
 4. Call submit_newspaper_vacancies. It shows the user a Yes / No / Edit form and saves only on Yes.
    - status cancelled (user chose No): stop. Nothing was saved.
    - status edits_requested (user chose Edit): apply the returned edits to the jobs (if none were given, or they are unclear or don't match any job, ask the user in the chat what they meant instead of guessing), show the updated numbered table in the chat, then call submit_newspaper_vacancies again with the updated jobs so the user confirms again.
-   - On success (the user chose Yes) the result has no status; it has 'submitted' (jobs sent), 'saved_count', 'failed_count' and 'failed'. Tell the user how many were saved (saved_count, which includes jobs that matched an existing duplicate) and list any that failed. Each upload is treated as the source's full current list: earlier open vacancies from the same source that are not in this upload are closed, and 'reconciled_stale_jobs' is how many were closed. If it is above 0, tell the user that many earlier vacancies from the source were closed. If 'reconcile_note' is set, the jobs were saved but closing the earlier vacancies failed - tell the user.
+   - On success (the user chose Yes) the result has no status; it has 'submitted' (jobs sent), 'saved_count', 'failed_count' and 'failed'. Tell the user how many were saved (saved_count, which includes jobs that matched an existing duplicate) and list any that failed. Each upload is treated as the source's full current list: earlier open vacancies from the same source that are not in this upload are closed, and 'reconciled_stale_jobs' is how many were closed. If it is above 0, tell the user that many earlier vacancies from the source were closed. If 'reconcile_note' is set, tell the user what it says; the jobs that were saved stay saved. If 'interrupted' is true, the upload was stopped before it finished and no earlier vacancies were closed: tell the user, and call submit_newspaper_vacancies again with the FULL list of jobs (jobs already saved are recognised as duplicates, so nothing is saved twice) - never with only the failed jobs, because closing earlier vacancies would then close the ones already saved.
 5. Only if the tool says the client cannot show a confirmation form: ask the user in the chat, and call it again with user_confirmed=true only after their explicit yes.
 Never save without the user's explicit Yes, and never set user_confirmed on your own.`
 
@@ -170,7 +170,12 @@ func bridgeTokenInfo(next http.Handler) http.Handler {
 
 // New builds the MCP server and registers every read-only (GET-equivalent)
 // tool against the given services.
-func New(svcs *service.Services, ingestionSvc *ingestion.IngestionService) *mcp.Server {
+//
+// shutdown is cancelled when the process starts shutting down. A newspaper
+// submission in progress then stops retrying and is cut off after
+// drainWorkBudget, so it can close its crawler run and answer before
+// shutdownGracePeriod runs out.
+func New(shutdown context.Context, svcs *service.Services, ingestionSvc *ingestion.IngestionService) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "marketlens-mcp",
 		Version: "v1.0.0",
@@ -179,7 +184,7 @@ func New(svcs *service.Services, ingestionSvc *ingestion.IngestionService) *mcp.
 	registerLookupTools(server, svcs)
 	registerHierarchyTools(server, svcs)
 	registerAnalysisTools(server, svcs)
-	registerManualUploadTools(server, svcs, ingestionSvc)
+	registerManualUploadTools(server, shutdown, svcs, ingestionSvc)
 
 	return server
 }
@@ -202,7 +207,8 @@ const (
 	// shutdownGracePeriod is how long in-flight requests get to finish after
 	// SIGTERM. Keep it below the platform's kill deadline (Kubernetes
 	// terminationGracePeriodSeconds, 30s by default), or the process is killed
-	// before this expires.
+	// before this expires. A newspaper submission is held to drainWorkBudget
+	// of it, so it cannot outlast the period.
 	shutdownGracePeriod = 25 * time.Second
 )
 

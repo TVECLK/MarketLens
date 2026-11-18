@@ -53,18 +53,20 @@ func main() {
 		ingestionSvc = ingestion.NewServiceFromConfig(services, cfg.LLM, cfg.Ingestion)
 	}
 
-	mcpServer := mcpserver.New(services, ingestionSvc)
+	// SIGTERM (a Kubernetes pod stop) or Ctrl-C starts a graceful shutdown. The
+	// same context goes to the server, so it stops accepting connections, and
+	// to the tools, so an in-flight newspaper submission stops retrying and
+	// closes its crawler run within the grace period.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	mcpServer := mcpserver.New(ctx, services, ingestionSvc)
 
 	meta := mcpserver.Metadata{
 		ResourceID:    cfg.MCP.ResourceID,
 		IssuerURL:     cfg.Auth.Issuer,
 		PublicBaseURL: cfg.MCP.PublicBaseURL,
 	}
-
-	// SIGTERM (a Kubernetes pod stop) or Ctrl-C starts a graceful shutdown, so
-	// an in-flight newspaper submission can finish and close its crawler run.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	log.Println("MCP server listening on :9090/mcp")
 	if err := mcpserver.StartHTTP(ctx, mcpServer, mcpVerifier, meta, ":9090"); err != nil {

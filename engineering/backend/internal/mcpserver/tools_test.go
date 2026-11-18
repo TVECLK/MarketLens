@@ -87,7 +87,7 @@ func TestNew_RegistersTools(t *testing.T) {
 		"select_manual_source", "submit_newspaper_vacancies",
 	}
 
-	server := New(service.NewServices(repositories.NewStore(nil)), nil)
+	server := New(context.Background(), service.NewServices(repositories.NewStore(nil)), nil)
 	session := connectInMemory(t, server, nil)
 
 	listed, err := session.ListTools(context.Background(), nil)
@@ -126,7 +126,7 @@ func TestNew_RegistersTools(t *testing.T) {
 // tools the workflow depends on, so renaming a tool cannot silently leave the
 // instructions pointing at a name that no longer exists.
 func TestNew_Instructions(t *testing.T) {
-	server := New(service.NewServices(repositories.NewStore(nil)), nil)
+	server := New(context.Background(), service.NewServices(repositories.NewStore(nil)), nil)
 	session := connectInMemory(t, server, nil)
 
 	instructions := session.InitializeResult().Instructions
