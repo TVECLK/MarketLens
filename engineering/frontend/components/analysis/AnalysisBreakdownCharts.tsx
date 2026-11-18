@@ -26,7 +26,7 @@ import {
   buildProvincePalette,
   type HierarchyAccent,
 } from "@/lib/chart-theme";
-import { YAxisTooltipTick } from "@/lib/chart-ticks";
+import { YAxisTooltipTick, XAxisStraightTooltipTick } from "@/lib/chart-ticks";
 import SectionMessage from "@/components/analysis/SectionMessage";
 import type { AnalysisSectionErrors } from "@/types/analysis";
 import type { ChartDatum, ShareDatum } from "@/types/chart";
@@ -81,14 +81,14 @@ export default function AnalysisBreakdownCharts({
             style={{ height: Math.max(childrenBreakdown.length * 44 + 40, 160) }}
           >
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={childrenBreakdown} layout="vertical" margin={{ left: 30, right: 20, bottom: 30 }}>
+              <BarChart data={childrenBreakdown} layout="vertical" margin={{ left: 16, right: 20, bottom: 30 }}>
                 <XAxis type="number" tick={{ fontSize: 10, fill: TICK_COLOR }} allowDecimals={false} label={{ value: "No. of Vacancies", position: "insideBottom", offset: -15, fontSize: 11, fill: TICK_COLOR }} />
                 <YAxis
                   dataKey="name"
                   type="category"
-                  tick={(props) => <YAxisTooltipTick {...props} maxLength={38} fontSize={10} fill={TICK_COLOR} />}
-                  width={280}
-                  label={{ value: "Occupation", angle: -90, position: "insideLeft", dx: -20, fontSize: 11, fill: TICK_COLOR }}
+                  tick={(props) => <YAxisTooltipTick {...props} maxLength={26} fontSize={10} fill={TICK_COLOR} />}
+                  width={180}
+                  label={{ value: childrenBreakdownTitle.toLowerCase().includes("industry") ? "Industry" : "Occupation", angle: -90, position: "insideLeft", dx: -8, fontSize: 11, fill: TICK_COLOR }}
                 />
                 <Tooltip
                   contentStyle={CHART_TOOLTIP_STYLE}
@@ -142,8 +142,8 @@ export default function AnalysisBreakdownCharts({
               <SectionMessage />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={expData} margin={{ top: 10, right: 10, left: 10, bottom: 30 }}>
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: TICK_COLOR }} label={{ value: "Experience Level", position: "insideBottom", offset: -15, fontSize: 11, fill: TICK_COLOR }} />
+                <BarChart data={expData} margin={{ top: 10, right: 10, left: 10, bottom: 40 }}>
+                  <XAxis dataKey="name" tick={(props) => <XAxisStraightTooltipTick {...props} maxLength={8} fontSize={9} fill={TICK_COLOR} />} interval={0} height={50} label={{ value: "Experience Level", position: "insideBottom", offset: -30, fontSize: 11, fill: TICK_COLOR }} />
                   <YAxis tick={{ fontSize: 10, fill: TICK_COLOR }} allowDecimals={false} label={{ value: "No. of Vacancies", angle: -90, position: "center", fontSize: 11, fill: TICK_COLOR }} />
                   <Tooltip
                     contentStyle={CHART_TOOLTIP_STYLE}
