@@ -65,18 +65,22 @@ func TestRequireValidToken_Responses(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
+	const metadataURL = testBaseURL + protectedResPath
+	noToken := `Bearer resource_metadata="` + metadataURL + `"`
+	rejected := `Bearer error="invalid_token", resource_metadata="` + metadataURL + `"`
+
 	tests := []struct {
 		name       string
 		authHeader string
 		wantStatus int
-		wantHeader bool
+		wantHeader string // exact WWW-Authenticate value; empty means none
 	}{
-		{"no header", "", http.StatusUnauthorized, true},
-		{"not bearer", "Basic abc", http.StatusUnauthorized, true},
-		{"invalid token", "Bearer nope", http.StatusUnauthorized, false},
-		{"token without subject", "Bearer no-subject", http.StatusUnauthorized, false},
-		{"jwks unavailable", "Bearer jwks-down", http.StatusServiceUnavailable, false},
-		{"valid token", "Bearer alice-upload", http.StatusOK, false},
+		{"no header", "", http.StatusUnauthorized, noToken},
+		{"not bearer", "Basic abc", http.StatusUnauthorized, noToken},
+		{"invalid token", "Bearer nope", http.StatusUnauthorized, rejected},
+		{"token without subject", "Bearer no-subject", http.StatusUnauthorized, rejected},
+		{"jwks unavailable", "Bearer jwks-down", http.StatusServiceUnavailable, ""},
+		{"valid token", "Bearer alice-upload", http.StatusOK, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -90,8 +94,8 @@ func TestRequireValidToken_Responses(t *testing.T) {
 			if w.Code != tt.wantStatus {
 				t.Errorf("status = %d, want %d", w.Code, tt.wantStatus)
 			}
-			if got := w.Header().Get("WWW-Authenticate") != ""; got != tt.wantHeader {
-				t.Errorf("WWW-Authenticate set = %v, want %v", got, tt.wantHeader)
+			if got := w.Header().Get("WWW-Authenticate"); got != tt.wantHeader {
+				t.Errorf("WWW-Authenticate = %q, want %q", got, tt.wantHeader)
 			}
 		})
 	}

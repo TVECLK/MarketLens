@@ -107,14 +107,25 @@ func newVerifyFunc(verifier *auth.Verifier) verifyFunc {
 	}
 }
 
+// bearerChallenge is the WWW-Authenticate value for a 401. The MCP auth spec
+// wants the resource metadata URL on every 401 so the client knows to log in
+// again. A token that was sent but rejected (invalid or expired) also gets
+// error="invalid_token" (RFC 6750); a request with no token gets none.
+func bearerChallenge(publicBaseURL string, tokenRejected bool) string {
+	challenge := `Bearer `
+	if tokenRejected {
+		challenge += `error="invalid_token", `
+	}
+	return challenge + `resource_metadata="` + publicBaseURL + protectedResPath + `"`
+}
+
 // requireValidToken verifies the bearer token on every request and keeps the
 // token info in the request context for bridgeTokenInfo.
 func requireValidToken(verify verifyFunc, publicBaseURL string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
-			w.Header().Set("WWW-Authenticate",
-				`Bearer resource_metadata="`+publicBaseURL+protectedResPath+`"`)
+			w.Header().Set("WWW-Authenticate", bearerChallenge(publicBaseURL, false))
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -124,9 +135,12 @@ func requireValidToken(verify verifyFunc, publicBaseURL string, next http.Handle
 		if err != nil {
 			log.Printf("mcp token verification failed: %v", err)
 			if errors.Is(err, auth.ErrJWKSUnavailable) {
+				// Not a login problem, so no challenge: sending clients to log
+				// in again would only add load while the key set is down.
 				w.WriteHeader(http.StatusServiceUnavailable)
 				return
 			}
+			w.Header().Set("WWW-Authenticate", bearerChallenge(publicBaseURL, true))
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
