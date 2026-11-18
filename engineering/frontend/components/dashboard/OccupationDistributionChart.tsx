@@ -44,7 +44,7 @@ export default function OccupationDistributionChart({
   const headline = count && topOccupation && topPercent ? (
     <>
       <span className="bg-indigo-200 text-indigo-800 font-semibold px-1">{topOccupation.name}</span>
-      {" "}leads demand with{" "}
+      {" "}lead demand with{" "}
       <span className="bg-indigo-200 text-indigo-800 font-semibold px-1">{topPercent}%</span>
       {" "}of vacancies classified under the Sri Lanka Standard Classification of Occupations (SLSCO).
     </>

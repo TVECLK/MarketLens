@@ -37,7 +37,7 @@ export default function IndustryDistributionChart({
   const headline = topIndustry ? (
     <>
       <span className="bg-yellow-200 text-yellow-950 font-semibold px-1">{topIndustry.name}</span>
-      {" "}has the highest job count according to the Sri Lanka Standard Industrial Classification (SLSIC).
+      {" "}have the highest job count according to the Sri Lanka Standard Industrial Classification (SLSIC).
     </>
   ) : undefined;
 
