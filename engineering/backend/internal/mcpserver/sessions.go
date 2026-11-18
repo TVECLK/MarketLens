@@ -23,30 +23,50 @@ const (
 // standalone SSE GET a client keeps open is deliberately not counted: it
 // lasts as long as the session, and it is exactly what shutdown must not wait
 // for.
+//
+// A session is also "claimed" when shutdown decides to close it. Deciding that
+// the session is idle and closing it must not be separate steps: a POST that
+// slipped in between would find its session gone. So the decision is made
+// under the same lock that admits POSTs (closeIfIdle), and once a session is
+// claimed, later POSTs for it are refused with a retryable response, while
+// those already admitted finish normally.
 type sessionTracker struct {
 	mu       sync.Mutex
 	inflight map[string]int
+	claimed  map[string]bool // sessions being closed: no new POST is admitted
 }
 
 func newSessionTracker() *sessionTracker {
-	return &sessionTracker{inflight: make(map[string]int)}
+	return &sessionTracker{inflight: make(map[string]int), claimed: make(map[string]bool)}
 }
 
-// track wraps next, counting each session's in-flight POST requests.
+// track wraps next, counting each session's in-flight POST requests. A POST
+// for a session that is being closed is refused with 503 and Retry-After, so
+// the client retries instead of finding the session gone halfway through.
 func (t *sessionTracker) track(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if id := r.Header.Get(sessionIDHeader); id != "" && r.Method == http.MethodPost {
-			t.begin(id)
+			if !t.begin(id) {
+				w.Header().Set("Retry-After", "1")
+				http.Error(w, "the server is shutting down, retry shortly", http.StatusServiceUnavailable)
+				return
+			}
 			defer t.end(id)
 		}
 		next.ServeHTTP(w, r)
 	})
 }
 
-func (t *sessionTracker) begin(id string) {
+// begin admits a POST for the session, or reports false if the session is
+// being closed.
+func (t *sessionTracker) begin(id string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.claimed[id] {
+		return false
+	}
 	t.inflight[id]++
+	return true
 }
 
 func (t *sessionTracker) end(id string) {
@@ -57,11 +77,28 @@ func (t *sessionTracker) end(id string) {
 	}
 }
 
-// idle reports whether the session has no POST request in flight.
-func (t *sessionTracker) idle(id string) bool {
+// closeIfIdle claims the session for closing if it has no POST in flight, and
+// reports whether it did. Checking and claiming happen under one lock, so no
+// POST can be admitted in between; from then on begin refuses the session. It
+// returns false if a POST is in flight or the session was already claimed, so
+// a session is claimed once. The caller closes the session after this returns,
+// without the lock held.
+func (t *sessionTracker) closeIfIdle(id string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.inflight[id] == 0
+	if t.inflight[id] > 0 || t.claimed[id] {
+		return false
+	}
+	t.claimed[id] = true
+	return true
+}
+
+// release gives up a claim, for a session whose close failed, so POSTs are
+// admitted again and the close can be retried.
+func (t *sessionTracker) release(id string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.claimed, id)
 }
 
 // closeIdleSessions closes every MCP session as soon as it has no request in
@@ -82,9 +119,10 @@ func closeIdleSessions(ctx context.Context, server *mcp.Server, tracker *session
 			return
 		}
 		for _, ss := range sessions {
-			if tracker.idle(ss.ID()) {
+			if tracker.closeIfIdle(ss.ID()) {
 				if err := ss.Close(); err != nil {
 					log.Printf("closing idle MCP session %s: %v", ss.ID(), err)
+					tracker.release(ss.ID())
 				}
 			}
 		}

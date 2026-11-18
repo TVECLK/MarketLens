@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,130 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+func TestSessionTracker_Claim(t *testing.T) {
+	type step struct {
+		op   string // "begin", "end", "claim" or "release"
+		id   string
+		want bool // begin: admitted; claim: claimed; ignored for end and release
+	}
+	tests := []struct {
+		name  string
+		steps []step
+	}{
+		{"an idle session can be claimed", []step{{"claim", "s1", true}}},
+		{"a claimed session refuses new POSTs", []step{{"claim", "s1", true}, {"begin", "s1", false}}},
+		{"a session with an admitted POST is not claimed", []step{
+			{"begin", "s1", true}, {"claim", "s1", false}, {"end", "s1", false}, {"claim", "s1", true},
+		}},
+		{"a session is claimed only once", []step{{"claim", "s1", true}, {"claim", "s1", false}}},
+		{"a claim does not affect other sessions", []step{{"claim", "s1", true}, {"begin", "s2", true}}},
+		{"a released claim admits POSTs again", []step{{"claim", "s1", true}, {"release", "s1", false}, {"begin", "s1", true}}},
+		{"POSTs admitted before the claim attempt keep the session open until all finish", []step{
+			{"begin", "s1", true}, {"begin", "s1", true},
+			{"end", "s1", false}, {"claim", "s1", false},
+			{"end", "s1", false}, {"claim", "s1", true},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tracker := newSessionTracker()
+			for i, s := range tt.steps {
+				switch s.op {
+				case "begin":
+					if got := tracker.begin(s.id); got != s.want {
+						t.Fatalf("step %d: begin(%s) = %v, want %v", i, s.id, got, s.want)
+					}
+				case "claim":
+					if got := tracker.closeIfIdle(s.id); got != s.want {
+						t.Fatalf("step %d: closeIfIdle(%s) = %v, want %v", i, s.id, got, s.want)
+					}
+				case "end":
+					tracker.end(s.id)
+				case "release":
+					tracker.release(s.id)
+				}
+			}
+		})
+	}
+}
+
+func TestSessionTracker_Track(t *testing.T) {
+	tests := []struct {
+		name           string
+		method         string
+		sessionID      string
+		wantStatus     int
+		wantRetryAfter string
+	}{
+		{"POST for a session being closed is refused, retryably", http.MethodPost, "closing", http.StatusServiceUnavailable, "1"},
+		{"POST for another session is admitted", http.MethodPost, "other", http.StatusOK, ""},
+		{"GET stream of a session being closed is not refused", http.MethodGet, "closing", http.StatusOK, ""},
+		{"POST without a session id (initialize) is admitted", http.MethodPost, "", http.StatusOK, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tracker := newSessionTracker()
+			if !tracker.closeIfIdle("closing") {
+				t.Fatal("could not claim the session for the test")
+			}
+			handler := tracker.track(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			req := httptest.NewRequest(tt.method, "/mcp", nil)
+			if tt.sessionID != "" {
+				req.Header.Set(sessionIDHeader, tt.sessionID)
+			}
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", w.Code, tt.wantStatus)
+			}
+			if got := w.Header().Get("Retry-After"); got != tt.wantRetryAfter {
+				t.Errorf("Retry-After = %q, want %q", got, tt.wantRetryAfter)
+			}
+			// A request, admitted or refused, must not leave a count behind.
+			if len(tracker.inflight) != 0 {
+				t.Errorf("in-flight counts left behind: %v", tracker.inflight)
+			}
+		})
+	}
+}
+
+// TestSessionTracker_ClaimIsAtomicWithAdmission races a POST being admitted
+// against the decision to close its session. Exactly one of them may win: if
+// the POST was admitted the session must not be claimed, and if the session
+// was claimed the POST must be refused. Both winning is the bug where the
+// session is closed under a POST that already got in. The race detector also
+// watches the tracker's state.
+func TestSessionTracker_ClaimIsAtomicWithAdmission(t *testing.T) {
+	for i := 0; i < 2000; i++ {
+		tracker := newSessionTracker()
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		var admitted, claimed bool
+
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-start
+			admitted = tracker.begin("s")
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			claimed = tracker.closeIfIdle("s")
+		}()
+		close(start)
+		wg.Wait()
+
+		if admitted == claimed {
+			t.Fatalf("iteration %d: admitted=%v claimed=%v, want exactly one", i, admitted, claimed)
+		}
+	}
+}
 
 // TestShutdown_WithOpenSSEStream runs the real SDK handler behind the session
 // tracker, connects a client whose standalone SSE stream stays open, and
