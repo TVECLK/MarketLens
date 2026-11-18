@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 
 	"marketlens-go-backend/internal/ingestion"
@@ -298,11 +299,8 @@ func TestProcessBatch_Failures(t *testing.T) {
 			wantJobs:     0,
 		},
 		{
-			// A DB error that isn't a constraint violation (here a timeout) is
-			// retryable, so 503. A constraint violation is permanent (422), the
-			// same as on the save path: the row being updated is known to exist,
-			// but the crawler_run_id written into it comes from the request and
-			// may point at a run that doesn't exist.
+			// A DB error that isn't a known-permanent one (here a timeout) is
+			// retryable, so 503.
 			name: "failing to update a duplicate is 503",
 			seed: []ingestion.RawJobInput{ceylonJob},
 			setup: func(t *testing.T, db *gorm.DB) {
@@ -310,6 +308,19 @@ func TestProcessBatch_Failures(t *testing.T) {
 			},
 			batch:        []ingestion.RawJobInput{ceylonRepost},
 			wantFailures: map[string]int{"dup-1": http.StatusServiceUnavailable},
+			wantJobs:     1,
+		},
+		{
+			// A foreign key violation (the crawler_run_id vanished after the
+			// run check) fails identically on every retry, so it is 422, the
+			// same as on the save path.
+			name: "constraint violation updating a duplicate is 422",
+			seed: []ingestion.RawJobInput{ceylonJob},
+			setup: func(t *testing.T, db *gorm.DB) {
+				failWrites(t, db, "meta_data", &pgconn.PgError{Code: "23503"})
+			},
+			batch:        []ingestion.RawJobInput{ceylonRepost},
+			wantFailures: map[string]int{"dup-1": http.StatusUnprocessableEntity},
 			wantJobs:     1,
 		},
 		{

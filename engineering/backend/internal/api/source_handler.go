@@ -65,7 +65,7 @@ func (h *Handler) GetSourceByIDHandler(c *gin.Context) {
 }
 
 // CreateSourceHandler adds a source, or restores a deleted one with the same
-// name. A name used by a live source is a 400 "already exists".
+// name. A name used by a live source is a 409 "already exists".
 func (h *Handler) CreateSourceHandler(c *gin.Context) {
 	var in createSourceInput
 	if err := c.ShouldBindJSON(&in); err != nil {

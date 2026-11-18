@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"marketlens-go-backend/internal/repositories"
 	"marketlens-go-backend/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -93,14 +94,19 @@ func respondError(c *gin.Context, status int, publicMessage string, err error) {
 	c.JSON(status, gin.H{"error": publicMessage})
 }
 
-// postgresUniqueViolation is Postgres's error code for a unique constraint
-// violation (class 23 — Integrity Constraint Violation).
-const postgresUniqueViolation = "23505"
+// Postgres SQLSTATE codes (class 23 — Integrity Constraint Violation)
+// that mean the request conflicts with existing data.
+const (
+	postgresUniqueViolation     = "23505"
+	postgresForeignKeyViolation = "23503"
+)
 
 // respondRepoError maps a repository/service error to the right HTTP
 // status: a missing row (gorm.ErrRecordNotFound) is a 404, a rejected
-// business rule (service.ErrValidation) or a unique constraint violation is
-// a 400, anything else is an unexpected server error (logged, 500).
+// business rule (service.ErrValidation) is a 400, a unique or foreign key
+// violation (duplicate name, deleting a row that is still referenced) is a
+// 409, a transient database failure is a 503 so the client may retry, and
+// anything else is an unexpected server error (logged, 500).
 func respondRepoError(c *gin.Context, publicMessage string, err error) {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": publicMessage + ": not found"})
@@ -111,9 +117,19 @@ func respondRepoError(c *gin.Context, publicMessage string, err error) {
 		return
 	}
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == postgresUniqueViolation {
-		c.JSON(http.StatusBadRequest, gin.H{"error": publicMessage + ": already exists"})
-		return
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case postgresUniqueViolation:
+			c.JSON(http.StatusConflict, gin.H{"error": publicMessage + ": already exists"})
+			return
+		case postgresForeignKeyViolation:
+			c.JSON(http.StatusConflict, gin.H{"error": publicMessage + ": conflicts with related records"})
+			return
+		}
+		if repositories.IsTransientDBError(err) {
+			respondError(c, http.StatusServiceUnavailable, publicMessage+": database temporarily unavailable", err)
+			return
+		}
 	}
 	respondError(c, http.StatusInternalServerError, publicMessage, err)
 }

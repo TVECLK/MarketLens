@@ -24,6 +24,7 @@ func TestChat_StatusClassification(t *testing.T) {
 		// A rejected key or endpoint is the deployment's problem, not the
 		// job's, so it must be retryable.
 		{http.StatusUnauthorized, true},
+		{http.StatusPaymentRequired, true},
 		{http.StatusForbidden, true},
 		{http.StatusNotFound, true},
 		// The LLM refusing this particular prompt is not transient.

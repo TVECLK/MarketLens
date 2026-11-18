@@ -201,9 +201,13 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 		}
 		if isDuplicate {
 			if err := s.jobPosts.UpdateDuplicateJob(ctx, matchedJobID, raw.CrawlerRunID); err != nil {
+				statusCode := http.StatusServiceUnavailable
+				if errors.Is(err, repositories.ErrPermanentSaveFailure) {
+					statusCode = http.StatusUnprocessableEntity
+				}
 				failures = append(failures, FailedJob{
 					JobID:      raw.JobID,
-					StatusCode: http.StatusServiceUnavailable,
+					StatusCode: statusCode,
 					Error:      fmt.Sprintf("updating duplicate job: %v", err),
 				})
 			}
@@ -373,16 +377,13 @@ func (s *IngestionService) extractAndClassify(ctx context.Context, raw RawJobInp
 	experienceID := validateID("experience_id", extracted.MetaData.ExperienceID, options.validExperiences)
 	crawlerRunID := raw.CrawlerRunID
 
-	workMode := extracted.WorkMode
-	if workMode == "" {
-		workMode = string(models.WorkModeOnsite)
-	}
+	workMode := normalizeWorkMode(extracted.WorkMode)
 
 	return models.JobPost{
 		Employer:       &models.Employer{Name: raw.Employer},
 		JobType:        &models.JobType{Type: extracted.JobType.Type},
 		JobRole:        raw.JobRole,
-		WorkMode:       models.WorkMode(workMode),
+		WorkMode:       workMode,
 		JobDescription: raw.Description,
 		Location:       raw.Location,
 		NoOfVacancies:  extracted.NoOfVacancies,
@@ -405,6 +406,18 @@ func (s *IngestionService) extractAndClassify(ctx context.Context, raw RawJobInp
 			MinhashSignature:      ToPQArray(sig),
 		},
 	}, nil
+}
+
+// normalizeWorkMode lower-cases and trims the LLM's work_mode and accepts
+// only remote, onsite or hybrid. Anything else ("Remote ", "on-site", "")
+// falls back to onsite: an invalid enum value would fail the insert, and
+// the retries would each rerun the LLM extraction for nothing.
+func normalizeWorkMode(raw string) models.WorkMode {
+	switch m := models.WorkMode(strings.ToLower(strings.TrimSpace(raw))); m {
+	case models.WorkModeRemote, models.WorkModeOnsite, models.WorkModeHybrid:
+		return m
+	}
+	return models.WorkModeOnsite
 }
 
 func parsePostedAt(raw string) (time.Time, error) {

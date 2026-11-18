@@ -21,29 +21,39 @@ func exclusiveUpperBound(toDate time.Time) time.Time {
 
 // ErrPermanentSaveFailure marks a job save failure as non-retryable: a
 // missing/invalid foreign key (e.g. a province not registered in
-// geo_data) or a Postgres integrity-constraint violation (SQLSTATE class
-// 23: foreign key, unique, not-null, check). Retrying the identical save
-// will fail the same way every time.
+// geo_data) or any database error that is not known to be transient
+// (constraint violation, invalid value, bad syntax...). Retrying the
+// identical save will fail the same way every time.
 var ErrPermanentSaveFailure = errors.New("permanent save failure")
 
-// isPermanentDBError reports whether err is a Postgres integrity-
-// constraint violation, as surfaced by gorm's postgres driver
-// (jackc/pgx) via *pgconn.PgError.Code (SQLSTATE).
-func isPermanentDBError(err error) bool {
+// IsTransientDBError reports whether err is a database failure that a
+// later retry can be expected to cure, as surfaced by gorm's postgres
+// driver (jackc/pgx) via *pgconn.PgError.Code (SQLSTATE): connection
+// exceptions (class 08), serialization failure (40001), deadlock
+// (40P01), insufficient resources (class 53), and admin shutdown /
+// cannot-connect-now (57P01, 57P03). Errors with no SQLSTATE (a dropped
+// connection, a timeout) are transient too. Every other SQLSTATE is
+// treated as permanent, so an unknown error class fails fast instead of
+// being retried, with the full LLM extraction rerun each time.
+func IsTransientDBError(err error) bool {
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return strings.HasPrefix(pgErr.Code, "23")
+	if !errors.As(err, &pgErr) {
+		return true
 	}
-	return false
+	switch pgErr.Code {
+	case "40001", "40P01", "57P01", "57P03":
+		return true
+	}
+	return strings.HasPrefix(pgErr.Code, "08") || strings.HasPrefix(pgErr.Code, "53")
 }
 
-// wrapSaveErr classifies err as permanent (constraint violation) or
-// transient (anything else — connection issues, deadlocks, etc.).
+// wrapSaveErr classifies err as transient (see IsTransientDBError) or
+// permanent (anything else).
 func wrapSaveErr(err error, msg string) error {
-	if isPermanentDBError(err) {
-		return fmt.Errorf("%w: %s: %v", ErrPermanentSaveFailure, msg, err)
+	if IsTransientDBError(err) {
+		return fmt.Errorf("%s: %w", msg, err)
 	}
-	return fmt.Errorf("%s: %w", msg, err)
+	return fmt.Errorf("%w: %s: %v", ErrPermanentSaveFailure, msg, err)
 }
 
 type Store struct {

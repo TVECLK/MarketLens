@@ -13,7 +13,7 @@ import (
 // ErrTransient marks a failure as retryable: a network problem, the LLM
 // timing out (408) or rate limiting (429) or erroring (5xx), the LLM
 // responding with unparseable/empty content, or a rejected key or
-// endpoint (401, 403, 404). None of these are about the prompt's own
+// endpoint or an account out of credit (401, 402, 403, 404). None of these are about the prompt's own
 // content: a retry later should succeed, once the service recovers or an
 // operator fixes the key, URL or model.
 var ErrTransient = errors.New("transient llm failure")
@@ -138,14 +138,15 @@ func (c *Client) Chat(ctx context.Context, prompt string) (string, error) {
 }
 
 // isTransientStatus reports whether an HTTP status says the problem is
-// the LLM service or our configuration of it, not the prompt. 401, 403
-// and 404 (bad or expired key, key without access, wrong LLM_API_URL or
-// model) are included: they affect every job alike, so they must not be
+// the LLM service or our configuration of it, not the prompt. 401, 402,
+// 403 and 404 (bad or expired key, account out of credit, key without
+// access, wrong LLM_API_URL or model) are included: they affect every job alike, so they must not be
 // reported as the job's own fault, which would make the crawler drop it.
 func isTransientStatus(status int) bool {
 	switch status {
 	case http.StatusRequestTimeout, http.StatusTooManyRequests,
-		http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
+		http.StatusUnauthorized, http.StatusPaymentRequired,
+		http.StatusForbidden, http.StatusNotFound:
 		return true
 	}
 	return status >= 500
