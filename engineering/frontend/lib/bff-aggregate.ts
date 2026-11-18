@@ -1,7 +1,7 @@
 import type { SectionError } from "@/types/bff";
 
 /** How long each section's backend call may take before it is aborted. */
-const SECTION_TIMEOUT_MS = 3000;
+const SECTION_TIMEOUT_MS = 10000;
 
 /** The status an optional section is expected to fail with (e.g. `children` on a leaf level). */
 const EXPECTED_OPTIONAL_STATUS = 400;
