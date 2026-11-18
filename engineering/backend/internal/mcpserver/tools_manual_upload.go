@@ -244,8 +244,9 @@ type batchProcessor interface {
 // returned for reporting.
 //
 // interrupted is true when it gave up on retries early: because shutdown has
-// begun (a retry wait could outlast the grace period, so none is started) or
-// because ctx ended during a wait. The failures it returns were not retried.
+// begun, before or during a backoff wait (a retry could not finish in the
+// grace period, so none is started), or because ctx ended. The failures it
+// returns were not retried.
 func processWithRetry(ctx, shutdown context.Context, svc batchProcessor, jobs []ingestion.RawJobInput, delay func(attempt int) time.Duration) (failures []ingestion.FailedJob, interrupted bool) {
 	failures = svc.ProcessBatch(ctx, jobs)
 	byID := make(map[string]ingestion.RawJobInput, len(jobs))
@@ -270,10 +271,23 @@ func processWithRetry(ctx, shutdown context.Context, svc batchProcessor, jobs []
 			return failures, true
 		}
 
+		// Wait out the backoff, but give up the moment shutdown begins or the
+		// work context ends: a wait that outlives either would only start a
+		// retry that cannot finish in the grace period.
+		timer := time.NewTimer(delay(attempt))
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return failures, true
-		case <-time.After(delay(attempt)):
+		case <-shutdown.Done():
+			timer.Stop()
+			return failures, true
+		case <-timer.C:
+		}
+		// select picks at random when several cases are ready, so a timer that
+		// fired together with a shutdown or cancellation can be the one chosen.
+		if shutdown.Err() != nil || ctx.Err() != nil {
+			return failures, true
 		}
 
 		log.Printf("retrying %d transiently failed manual job(s), attempt %d/%d", len(retry), attempt, manualUploadMaxRetries)

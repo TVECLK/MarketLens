@@ -287,11 +287,17 @@ func TestProcessWithRetry(t *testing.T) {
 	quick := func(int) time.Duration { return time.Millisecond }
 
 	tests := []struct {
-		name            string
-		results         func(call int, jobs []ingestion.RawJobInput) []ingestion.FailedJob
-		delay           func(int) time.Duration
-		shutdownBegun   bool
-		cancelCtxAfter  time.Duration // cancel the work context this long after starting; 0 means never
+		name           string
+		results        func(call int, jobs []ingestion.RawJobInput) []ingestion.FailedJob
+		delay          func(int) time.Duration
+		shutdownBegun  bool
+		cancelCtxAfter time.Duration // cancel the work context this long after starting; 0 means never
+		shutdownAfter  time.Duration // begin shutdown this long after starting; 0 means never
+		// shutdownInDelay begins shutdown from inside the delay function, so it
+		// lands just after the loop's own shutdown check and just before the
+		// wait: the timer is already due when the select runs.
+		shutdownInDelay bool
+		repeat          int // run the case this many times (default 1), for a race that needs many tries
 		wantCalls       int
 		wantFailures    int
 		wantInterrupted bool
@@ -375,31 +381,89 @@ func TestProcessWithRetry(t *testing.T) {
 			wantFailures:    1,
 			wantInterrupted: true,
 		},
+		{
+			// Shutdown during the wait must end it. The wait is an hour, so only
+			// observing shutdown can end it; the loop below guards against a hang.
+			name: "shutdown begins during the retry wait",
+			results: func(int, []ingestion.RawJobInput) []ingestion.FailedJob {
+				return []ingestion.FailedJob{transient("j1")}
+			},
+			delay:           func(int) time.Duration { return time.Hour },
+			shutdownAfter:   20 * time.Millisecond,
+			wantCalls:       1,
+			wantFailures:    1,
+			wantInterrupted: true,
+		},
+		{
+			// The timer is due (zero wait) at the same moment shutdown begins, so
+			// select may pick either; no retry may start whichever it picks.
+			name: "timer and shutdown ready together: no retry starts",
+			results: func(int, []ingestion.RawJobInput) []ingestion.FailedJob {
+				return []ingestion.FailedJob{transient("j1")}
+			},
+			shutdownInDelay: true,
+			repeat:          300,
+			wantCalls:       1,
+			wantFailures:    1,
+			wantInterrupted: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancelCtx := context.WithCancel(context.Background())
-			defer cancelCtx()
-			if tt.cancelCtxAfter > 0 {
-				time.AfterFunc(tt.cancelCtxAfter, cancelCtx)
-			}
-			shutdown, beginShutdown := context.WithCancel(context.Background())
-			defer beginShutdown()
-			if tt.shutdownBegun {
+			for range max(tt.repeat, 1) {
+				ctx, cancelCtx := context.WithCancel(context.Background())
+				shutdown, beginShutdown := context.WithCancel(context.Background())
+
+				if tt.cancelCtxAfter > 0 {
+					time.AfterFunc(tt.cancelCtxAfter, cancelCtx)
+				}
+				if tt.shutdownAfter > 0 {
+					time.AfterFunc(tt.shutdownAfter, beginShutdown)
+				}
+				if tt.shutdownBegun {
+					beginShutdown()
+				}
+				delay := tt.delay
+				if tt.shutdownInDelay {
+					delay = func(int) time.Duration {
+						beginShutdown()
+						return 0
+					}
+				}
+
+				proc := &scriptedProcessor{results: tt.results}
+				type outcome struct {
+					failures    []ingestion.FailedJob
+					interrupted bool
+				}
+				done := make(chan outcome, 1)
+				go func() {
+					failures, interrupted := processWithRetry(ctx, shutdown, proc, jobs, delay)
+					done <- outcome{failures, interrupted}
+				}()
+
+				// A hang here means the retry wait did not notice shutdown or the
+				// cancelled context.
+				var got outcome
+				select {
+				case got = <-done:
+				case <-time.After(5 * time.Second):
+					cancelCtx()
+					beginShutdown()
+					t.Fatal("processWithRetry did not return: the retry wait ignored shutdown or cancellation")
+				}
+				cancelCtx()
 				beginShutdown()
-			}
 
-			proc := &scriptedProcessor{results: tt.results}
-			failures, interrupted := processWithRetry(ctx, shutdown, proc, jobs, tt.delay)
-
-			if proc.calls != tt.wantCalls {
-				t.Errorf("ProcessBatch calls = %d, want %d", proc.calls, tt.wantCalls)
-			}
-			if len(failures) != tt.wantFailures {
-				t.Errorf("failures = %d (%v), want %d", len(failures), failures, tt.wantFailures)
-			}
-			if interrupted != tt.wantInterrupted {
-				t.Errorf("interrupted = %v, want %v", interrupted, tt.wantInterrupted)
+				if proc.calls != tt.wantCalls {
+					t.Fatalf("ProcessBatch calls = %d, want %d", proc.calls, tt.wantCalls)
+				}
+				if len(got.failures) != tt.wantFailures {
+					t.Fatalf("failures = %d (%v), want %d", len(got.failures), got.failures, tt.wantFailures)
+				}
+				if got.interrupted != tt.wantInterrupted {
+					t.Fatalf("interrupted = %v, want %v", got.interrupted, tt.wantInterrupted)
+				}
 			}
 		})
 	}
