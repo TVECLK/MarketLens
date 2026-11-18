@@ -381,7 +381,9 @@ class EmailAlertService:
             "missing crawlers alert", lambda: self._missing_crawlers_email(names)
         )
 
-    # This function sends an email that the whole crawler run crashed before the
-    # crawlers could finish, so there is no list of failed crawlers. It never raises
+    # This function sends an email that the crawler run stopped with an error and did
+    # not complete, for example when the active sources could not be fetched or the
+    # run could not be started or finalized. The email shows the error, not a list
+    # of failed crawlers. It never raises
     async def send_crash_alert(self, error: Optional[BaseException]) -> None:
         await self._deliver("crash alert", lambda: self._crash_email(error))
