@@ -29,7 +29,7 @@ export default function DateRangePicker({
     <div
       className={clsx(
         "sticky top-0 z-30 px-4 md:px-8 py-3 md:py-4 transition-all duration-300",
-        "bg-white/60 backdrop-blur-md backdrop-saturate-150",
+        "bg-indigo-50/60 backdrop-blur-md backdrop-saturate-150",
         scrolled
           ? "shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] border-b border-zinc-200/60"
           : "border-b border-transparent",
@@ -41,17 +41,17 @@ export default function DateRangePicker({
         </p>
       )}
       <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-3">
-        <div className="flex items-center gap-4 md:gap-6">
-          <div className="flex flex-col gap-0.5 border-l-2 border-indigo-300 pl-3">
-            <p className="text-xl md:text-2xl font-semibold text-gray-700 leading-none">5</p>
+        <div className="flex items-center">
+          <div className="flex flex-col items-center justify-center gap-0.5 pr-8">
+            <p className="text-2xl font-semibold text-gray-700 leading-none">5</p>
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Sources</p>
           </div>
-          <div className="flex flex-col gap-0.5 border-l-2 border-indigo-300 pl-3">
-            <p className="text-xl md:text-2xl font-semibold text-gray-700 leading-none">200k+</p>
+          <div className="flex flex-col items-center justify-center gap-0.5 border-l-2 border-indigo-300 px-8">
+            <p className="text-2xl font-semibold text-gray-700 leading-none">200k+</p>
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Total Jobs</p>
           </div>
-          <div className="flex flex-col gap-0.5 border-l-2 border-indigo-300 pl-3">
-            <p className="text-xl md:text-2xl font-semibold text-gray-700 leading-none">21</p>
+          <div className="flex flex-col items-center justify-center gap-0.5 border-l-2 border-indigo-300 pl-8">
+            <p className="text-2xl font-semibold text-gray-700 leading-none">21</p>
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Industries</p>
           </div>
         </div>
