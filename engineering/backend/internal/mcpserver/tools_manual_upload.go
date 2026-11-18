@@ -307,6 +307,19 @@ func newSubmitOutput(source string, submitted int, failures []ingestion.FailedJo
 	return out
 }
 
+// finalRunStatus is the status a manual submission's crawler run is closed
+// with. A run is COMPLETED only if the upload finished and at least one job
+// succeeded, saved or matched an existing duplicate. An interrupted upload,
+// or one where every job was rejected, is FAILED, so the run does not read as
+// a success when nothing was processed. A run where only some jobs failed is
+// still COMPLETED: the failures are reported to the client.
+func finalRunStatus(interrupted bool, savedCount int) string {
+	if interrupted || savedCount == 0 {
+		return "FAILED"
+	}
+	return "COMPLETED"
+}
+
 // registerManualUploadTools registers the newspaper upload tools. shutdown is
 // cancelled when the process starts shutting down; a submission in progress
 // then stops retrying and is cut off after drainWorkBudget.
@@ -517,11 +530,9 @@ func registerManualUploadTools(server *mcp.Server, shutdown context.Context, svc
 
 		failures, interrupted := processWithRetry(workCtx, shutdown, ingestionSvc, rawJobs, retryDelay)
 		interrupted = interrupted || workCtx.Err() != nil
-		if !interrupted {
-			runStatus = "COMPLETED"
-		}
 
 		out := newSubmitOutput(source.Name, len(rawJobs), failures, jobsByID, interrupted)
+		runStatus = finalRunStatus(interrupted, out.SavedCount)
 
 		// An interrupted upload must not reconcile: it closes every earlier open
 		// vacancy of the source that is not in this run, and the jobs that were

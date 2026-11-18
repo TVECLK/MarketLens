@@ -372,6 +372,29 @@ func TestProcessWithRetry(t *testing.T) {
 	}
 }
 
+func TestFinalRunStatus(t *testing.T) {
+	tests := []struct {
+		name        string
+		interrupted bool
+		savedCount  int
+		want        string
+	}{
+		{"every job saved", false, 3, "COMPLETED"},
+		{"every job matched an existing duplicate", false, 3, "COMPLETED"},
+		{"some jobs failed, some succeeded", false, 1, "COMPLETED"},
+		{"every job failed", false, 0, "FAILED"},
+		{"interrupted with some jobs saved", true, 2, "FAILED"},
+		{"interrupted with nothing saved", true, 0, "FAILED"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := finalRunStatus(tt.interrupted, tt.savedCount); got != tt.want {
+				t.Errorf("finalRunStatus(interrupted=%v, saved=%d) = %q, want %q", tt.interrupted, tt.savedCount, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNewSubmitOutput(t *testing.T) {
 	jobsByID := map[string]newspaperJob{
 		"a": {Employer: "Acme", JobRole: "Engineer"},
