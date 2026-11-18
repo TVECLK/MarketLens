@@ -43,7 +43,7 @@ type submitNewspaperVacanciesInput struct {
 // submitDecisionOutput is returned instead of a save result when the user
 // answers the confirmation form with No or Edit.
 type submitDecisionOutput struct {
-	Status  string `json:"status" jsonschema:"cancelled or edits_requested"`
+	Status  string `json:"status" jsonschema:"cancelled, edits_requested or server_restarting"`
 	Edits   string `json:"edits,omitempty" jsonschema:"the changes the user asked for, in their own words"`
 	Message string `json:"message"`
 }
@@ -138,6 +138,30 @@ func confirmSubmission(ctx context.Context, session *mcp.ServerSession, source s
 		edits, _ = res.Content["edits"].(string)
 	}
 	return confirmEdit, strings.TrimSpace(edits), nil
+}
+
+// statusServerRestarting is returned when shutdown begins while the tool is
+// still waiting for the user's confirmation.
+const statusServerRestarting = "server_restarting"
+
+// confirmUnlessShuttingDown asks the user to confirm, like confirmSubmission,
+// but stops waiting as soon as shutdown begins and reports shuttingDown. The
+// user's answer comes back to the server as a separate request, and shutdown
+// closes the listener before it can arrive, so waiting on would only use up
+// the grace period. Nothing has been saved at this point, so the caller can
+// tell the client to retry. If the user answered first, the answer is
+// returned as usual.
+func confirmUnlessShuttingDown(ctx, shutdown context.Context, session *mcp.ServerSession, source string, jobs []newspaperJob) (choice, edits string, shuttingDown bool, err error) {
+	confirmCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stop := context.AfterFunc(shutdown, cancel)
+	defer stop()
+
+	choice, edits, err = confirmSubmission(confirmCtx, session, source, jobs)
+	if err != nil && shutdown.Err() != nil && ctx.Err() == nil {
+		return "", "", true, nil
+	}
+	return choice, edits, false, err
 }
 
 type manualSourceOutput struct {
@@ -374,7 +398,9 @@ func registerManualUploadTools(server *mcp.Server, shutdown context.Context, svc
 			"'edits_requested' means the user chose Edit - apply their 'edits' to the jobs (if 'edits' " +
 			"is empty, unclear or doesn't match any job, ask the user in chat what they meant instead of " +
 			"guessing), show the updated jobs in the chat, then " +
-			"call this tool again with the updated jobs so they confirm again. On success (the user " +
+			"call this tool again with the updated jobs so they confirm again. Status 'server_restarting' " +
+			"means the server began shutting down before the user answered: nothing was saved, so tell " +
+			"the user and call this tool again with the same jobs after a short wait. On success (the user " +
 			"chose Yes) the result has no status; it has 'submitted' (jobs sent), 'saved_count', 'failed_count' and 'failed' - " +
 			"tell the user how many were saved and list any that failed. Each upload is treated as the " +
 			"source's full current list: earlier open vacancies from the same source that are not in this " +
@@ -424,9 +450,16 @@ func registerManualUploadTools(server *mcp.Server, shutdown context.Context, svc
 		// Confirm only after the cheap checks above, so the user is never asked
 		// to approve a submission that would be rejected anyway.
 		if clientSupportsElicitation(req) {
-			choice, edits, err := confirmSubmission(ctx, req.Session, source.Name, in.Jobs)
+			choice, edits, shuttingDown, err := confirmUnlessShuttingDown(ctx, shutdown, req.Session, source.Name, in.Jobs)
 			if err != nil {
 				return nil, nil, fmt.Errorf("could not get the user's confirmation, nothing was saved: %w", err)
+			}
+			if shuttingDown {
+				return nil, submitDecisionOutput{
+					Status: statusServerRestarting,
+					Message: "The server is restarting, so the confirmation could not be completed and nothing was saved. " +
+						"Tell the user, then call this tool again with the same jobs after a short wait.",
+				}, nil
 			}
 			switch choice {
 			case confirmNo:

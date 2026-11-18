@@ -2,9 +2,15 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"marketlens-go-backend/internal/auth"
+	"marketlens-go-backend/internal/repositories"
+	"marketlens-go-backend/internal/service"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -12,8 +18,6 @@ import (
 
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"marketlens-go-backend/internal/auth"
 )
 
 const testBaseURL = "https://example.test"
@@ -34,30 +38,6 @@ func fakeVerify(raw string) (*mcpauth.TokenInfo, error) {
 		return nil, auth.ErrJWKSUnavailable
 	}
 	return nil, errors.New("bad token")
-}
-
-func TestHasScope(t *testing.T) {
-	withScopes := func(scopes ...string) *mcp.CallToolRequest {
-		return &mcp.CallToolRequest{Extra: &mcp.RequestExtra{TokenInfo: &mcpauth.TokenInfo{Scopes: scopes}}}
-	}
-	tests := []struct {
-		name string
-		req  *mcp.CallToolRequest
-		want bool
-	}{
-		{"nil request", nil, false},
-		{"no extra", &mcp.CallToolRequest{}, false},
-		{"no token info", &mcp.CallToolRequest{Extra: &mcp.RequestExtra{}}, false},
-		{"scope present", withScopes("openid", submitNewspaperVacanciesScope), true},
-		{"scope absent", withScopes("openid"), false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := hasScope(tt.req, submitNewspaperVacanciesScope); got != tt.want {
-				t.Errorf("hasScope = %v, want %v", got, tt.want)
-			}
-		})
-	}
 }
 
 func TestRequireValidToken_Responses(t *testing.T) {
@@ -193,6 +173,253 @@ func TestSession_ScopesPerRequestAndUserBinding(t *testing.T) {
 			}
 			if got := boolField(t, res, "has_scope"); got != step.wantScope {
 				t.Errorf("has_scope = %v, want %v", got, step.wantScope)
+			}
+		})
+	}
+}
+
+// connectInMemory connects a client to server over an in-memory transport.
+func connectInMemory(t *testing.T, server *mcp.Server, opts *mcp.ClientOptions) *mcp.ClientSession {
+	t.Helper()
+	ctx := context.Background()
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	t.Cleanup(func() { serverSession.Close() })
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0"}, opts)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { session.Close() })
+	return session
+}
+
+// boolField returns the boolean field key from a tool result's structured
+// content. It fails the test if the content is not an object, the field is
+// missing, or it is not a boolean, so a malformed response cannot pass as a
+// false value.
+func boolField(t *testing.T, res *mcp.CallToolResult, key string) bool {
+	t.Helper()
+	out, ok := res.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("structured content is %T, want an object", res.StructuredContent)
+	}
+	value, present := out[key]
+	if !present {
+		t.Fatalf("result has no %q field: %v", key, out)
+	}
+	b, ok := value.(bool)
+	if !ok {
+		t.Fatalf("%q is %T (%v), want a bool", key, value, value)
+	}
+	return b
+}
+
+// TestNew_RegistersTools builds the real server and lists its tools. Building
+// it also runs every AddTool call, which panics on a bad input or output
+// schema, so a broken jsonschema tag fails here and not at startup. Registering
+// needs no database: handlers only run when a tool is called.
+func TestNew_RegistersTools(t *testing.T) {
+	wantTools := []string{
+		// reference lists
+		"get_experiences", "get_provinces", "get_job_types", "get_employment_sectors",
+		"get_education_levels", "get_formalities", "get_genders", "get_vocational_educations",
+		// occupation hierarchy
+		"get_major_groups", "get_major_group", "get_sub_major_groups", "get_sub_major_group",
+		"get_minor_groups", "get_minor_group", "get_unit_groups", "get_unit_group",
+		"get_occupation_groups", "get_occupation_group",
+		// industry hierarchy
+		"get_industry_sectors", "get_industry_sector", "get_industry_divisions", "get_industry_division",
+		"get_industry_groups", "get_industry_group", "get_industry_classes", "get_industry_class",
+		"get_industry_subclasses", "get_industry_subclass",
+		// breakdowns by level
+		"get_total_job_count_by_level", "get_employment_sector_by_level", "get_experience_by_level",
+		"get_province_by_level", "get_education_by_level", "get_formality_by_level",
+		"get_gender_by_level", "get_vocational_education_by_level", "get_remote_onsite_by_level",
+		"get_job_type_by_level", "get_hierarchy_children",
+		// analysis
+		"get_all_skills_by_occupation", "get_top_hiring_employers_by_occupation", "get_vacancy_trend",
+		"get_vacancy_total", "get_occupations_by_date_range", "get_industries_by_date_range",
+		// newspaper upload
+		"select_manual_source", "submit_newspaper_vacancies",
+	}
+
+	server := New(context.Background(), service.NewServices(repositories.NewStore(nil)), nil)
+	session := connectInMemory(t, server, nil)
+
+	listed, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("list tools: %v", err)
+	}
+	byName := make(map[string]*mcp.Tool, len(listed.Tools))
+	for _, tool := range listed.Tools {
+		byName[tool.Name] = tool
+	}
+
+	for _, name := range wantTools {
+		t.Run(name, func(t *testing.T) {
+			tool, ok := byName[name]
+			if !ok {
+				t.Fatalf("tool %q is not registered", name)
+			}
+			if strings.TrimSpace(tool.Description) == "" {
+				t.Errorf("tool %q has no description, so the model cannot tell when to use it", name)
+			}
+			if tool.InputSchema == nil {
+				t.Errorf("tool %q has no input schema", name)
+			}
+		})
+	}
+
+	// A tool nobody listed above was added without a test; make that visible.
+	for name := range byName {
+		if !slices.Contains(wantTools, name) {
+			t.Errorf("tool %q is registered but missing from wantTools", name)
+		}
+	}
+}
+
+// TestNew_Instructions checks the instructions sent on initialize mention the
+// tools the workflow depends on, so renaming a tool cannot silently leave the
+// instructions pointing at a name that no longer exists.
+func TestNew_Instructions(t *testing.T) {
+	server := New(context.Background(), service.NewServices(repositories.NewStore(nil)), nil)
+	session := connectInMemory(t, server, nil)
+
+	instructions := session.InitializeResult().Instructions
+	for _, name := range []string{
+		"get_hierarchy_children", "get_major_groups", "get_industry_sectors",
+		"select_manual_source", "submit_newspaper_vacancies",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if !strings.Contains(instructions, name) {
+				t.Errorf("instructions do not mention %q", name)
+			}
+		})
+	}
+}
+
+func TestServeProtectedResourceMetadata(t *testing.T) {
+	tests := []struct {
+		name string
+		meta Metadata
+	}{
+		{"local", Metadata{ResourceID: "http://localhost:9090/mcp", IssuerURL: "http://localhost:8090", PublicBaseURL: "http://localhost:9090"}},
+		{"deployed", Metadata{ResourceID: "https://mcp.example.com/mcp", IssuerURL: "https://auth.example.com", PublicBaseURL: "https://mcp.example.com"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			serveProtectedResourceMetadata(tt.meta)(w, httptest.NewRequest(http.MethodGet, protectedResPath, nil))
+
+			if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+				t.Errorf("Content-Type = %q, want application/json", ct)
+			}
+			var got struct {
+				Resource             string   `json:"resource"`
+				AuthorizationServers []string `json:"authorization_servers"`
+				ScopesSupported      []string `json:"scopes_supported"`
+				BearerMethods        []string `json:"bearer_methods_supported"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+				t.Fatalf("response is not valid JSON: %v", err)
+			}
+			if got.Resource != tt.meta.ResourceID {
+				t.Errorf("resource = %q, want %q", got.Resource, tt.meta.ResourceID)
+			}
+			if !slices.Equal(got.AuthorizationServers, []string{tt.meta.IssuerURL}) {
+				t.Errorf("authorization_servers = %v, want [%s]", got.AuthorizationServers, tt.meta.IssuerURL)
+			}
+			if !slices.Contains(got.ScopesSupported, submitNewspaperVacanciesScope) {
+				t.Errorf("scopes_supported = %v, want it to include %q", got.ScopesSupported, submitNewspaperVacanciesScope)
+			}
+			if !slices.Equal(got.BearerMethods, []string{"header"}) {
+				t.Errorf("bearer_methods_supported = %v, want [header]", got.BearerMethods)
+			}
+		})
+	}
+}
+
+func TestServeUntilDone(t *testing.T) {
+	tests := []struct {
+		name         string
+		sendRequest  bool          // start a request before shutdown begins
+		handlerDelay time.Duration // how long that request takes
+		grace        time.Duration
+		wantErr      bool // serveUntilDone reports in-flight requests were cut off
+		wantFinished bool // the in-flight request got its response
+	}{
+		{name: "idle server stops cleanly", grace: time.Second},
+		{name: "in-flight request finishes within the grace period", sendRequest: true, handlerDelay: 200 * time.Millisecond, grace: 5 * time.Second, wantFinished: true},
+		{name: "in-flight request outlasts the grace period", sendRequest: true, handlerDelay: 10 * time.Second, grace: 100 * time.Millisecond, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			started := make(chan struct{})
+			srv := &http.Server{
+				ReadHeaderTimeout: time.Second,
+				Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					close(started)
+					select {
+					case <-time.After(tt.handlerDelay):
+						w.WriteHeader(http.StatusOK)
+					case <-r.Context().Done(): // connection closed by a forced shutdown
+					}
+				}),
+			}
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			done := make(chan error, 1)
+			go func() { done <- serveUntilDone(ctx, srv, ln, tt.grace, nil) }()
+
+			finished := make(chan bool, 1)
+			if tt.sendRequest {
+				go func() {
+					resp, err := http.Get("http://" + ln.Addr().String())
+					if err != nil {
+						finished <- false
+						return
+					}
+					resp.Body.Close()
+					finished <- resp.StatusCode == http.StatusOK
+				}()
+				select {
+				case <-started:
+				case <-time.After(5 * time.Second):
+					t.Fatal("request never reached the handler")
+				}
+			}
+
+			cancel() // what SIGTERM does
+
+			select {
+			case err := <-done:
+				if (err != nil) != tt.wantErr {
+					t.Errorf("serveUntilDone error = %v, wantErr %v", err, tt.wantErr)
+				}
+			case <-time.After(15 * time.Second):
+				t.Fatal("serveUntilDone did not return")
+			}
+
+			if tt.sendRequest {
+				select {
+				case got := <-finished:
+					if got != tt.wantFinished {
+						t.Errorf("in-flight request finished = %v, want %v", got, tt.wantFinished)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("client never got an outcome for the in-flight request")
+				}
 			}
 		})
 	}

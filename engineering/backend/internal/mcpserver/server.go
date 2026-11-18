@@ -78,6 +78,7 @@ const newspaperInstructions = `Newspaper vacancy upload workflow. When the user 
 4. Call submit_newspaper_vacancies. It shows the user a Yes / No / Edit form and saves only on Yes.
    - status cancelled (user chose No): stop. Nothing was saved.
    - status edits_requested (user chose Edit): apply the returned edits to the jobs (if none were given, or they are unclear or don't match any job, ask the user in the chat what they meant instead of guessing), show the updated numbered table in the chat, then call submit_newspaper_vacancies again with the updated jobs so the user confirms again.
+   - status server_restarting (the server began shutting down before the user answered): nothing was saved. Tell the user, then call submit_newspaper_vacancies again with the same jobs after a short wait.
    - On success (the user chose Yes) the result has no status; it has 'submitted' (jobs sent), 'saved_count', 'failed_count' and 'failed'. Tell the user how many were saved (saved_count, which includes jobs that matched an existing duplicate) and list any that failed. Each upload is treated as the source's full current list: earlier open vacancies from the same source that are not in this upload are closed, and 'reconciled_stale_jobs' is how many were closed. If it is above 0, tell the user that many earlier vacancies from the source were closed. If 'reconcile_note' is set, tell the user what it says; the jobs that were saved stay saved. If 'interrupted' is true, the upload was stopped before it finished and no earlier vacancies were closed: tell the user, and call submit_newspaper_vacancies again with the FULL list of jobs (jobs already saved are recognised as duplicates, so nothing is saved twice) - never with only the failed jobs, because closing earlier vacancies would then close the ones already saved.
 5. Only if the tool says the client cannot show a confirmation form: ask the user in the chat, and call it again with user_confirmed=true only after their explicit yes.
 Never save without the user's explicit Yes, and never set user_confirmed on your own.`
@@ -222,9 +223,11 @@ func StartHTTP(ctx context.Context, server *mcp.Server, verifier *auth.Verifier,
 		return server
 	}, &mcp.StreamableHTTPOptions{SessionTimeout: sessionTimeout})
 
+	tracker := newSessionTracker()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc(protectedResPath, serveProtectedResourceMetadata(meta))
-	mux.Handle("/mcp", requireValidToken(newVerifyFunc(verifier), meta.PublicBaseURL, bridgeTokenInfo(handler)))
+	mux.Handle("/mcp", requireValidToken(newVerifyFunc(verifier), meta.PublicBaseURL, bridgeTokenInfo(tracker.track(handler))))
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -235,13 +238,19 @@ func StartHTTP(ctx context.Context, server *mcp.Server, verifier *auth.Verifier,
 		ReadHeaderTimeout: readHeaderTimeout,
 		IdleTimeout:       idleTimeout,
 	}
-	return serveUntilDone(ctx, srv, ln, shutdownGracePeriod)
+	return serveUntilDone(ctx, srv, ln, shutdownGracePeriod, func(drainCtx context.Context) {
+		closeIdleSessions(drainCtx, server, tracker)
+	})
 }
 
 // serveUntilDone runs srv on ln until it fails or ctx is cancelled. On cancel
 // it shuts down gracefully, waiting up to grace for in-flight requests; if they
 // do not finish in time it closes their connections and reports an error.
-func serveUntilDone(ctx context.Context, srv *http.Server, ln net.Listener, grace time.Duration) error {
+//
+// onShutdown, if set, runs concurrently with the drain, until it returns or
+// the grace period ends. It is how the MCP server ends the long-lived SSE
+// streams that Shutdown would otherwise wait on.
+func serveUntilDone(ctx context.Context, srv *http.Server, ln net.Listener, grace time.Duration, onShutdown func(drainCtx context.Context)) error {
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()
 
@@ -254,6 +263,9 @@ func serveUntilDone(ctx context.Context, srv *http.Server, ln net.Listener, grac
 	log.Printf("MCP server shutting down, waiting up to %s for in-flight requests", grace)
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), grace)
 	defer cancel()
+	if onShutdown != nil {
+		go onShutdown(shutdownCtx)
+	}
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		srv.Close()
 		return fmt.Errorf("graceful shutdown did not finish, in-flight requests were cut off: %w", err)
