@@ -507,7 +507,9 @@ func TestNewSubmitOutput(t *testing.T) {
 		wantSaved       int
 		wantFailedCount int
 		wantMessage     []string
+		wantNotInMsg    []string // text the message must not contain
 		wantFailedRoles []string
+		wantFailedErrs  []string // each failed entry keeps its own error
 	}{
 		{
 			name:        "everything saved",
@@ -521,6 +523,7 @@ func TestNewSubmitOutput(t *testing.T) {
 			wantFailedCount: 1,
 			wantMessage:     []string{"Vacancies processed", "were not saved"},
 			wantFailedRoles: []string{"Clerk"},
+			wantFailedErrs:  []string{"unextractable"},
 		},
 		{
 			name:            "interrupted upload tells the client to resubmit everything",
@@ -529,7 +532,26 @@ func TestNewSubmitOutput(t *testing.T) {
 			wantSaved:       2,
 			wantFailedCount: 1,
 			wantMessage:     []string{"stopped before it finished", "Submit the full list", "Do not submit only the failed jobs"},
+			wantNotInMsg:    []string{"were not processed"},
 			wantFailedRoles: []string{"Clerk"},
+			wantFailedErrs:  []string{"unextractable"},
+		},
+		{
+			// A rejected job and one cut short both appear under failed. The
+			// message must not call the rejected one unprocessed, and each entry
+			// keeps its own error so the two can be told apart.
+			name: "interrupted upload with one rejected job and one that did not finish",
+			failures: []ingestion.FailedJob{
+				{JobID: "b", Error: "unextractable"},
+				{JobID: "c", Error: "context canceled"},
+			},
+			interrupted:     true,
+			wantSaved:       1,
+			wantFailedCount: 2,
+			wantMessage:     []string{"were not saved", "some were rejected", "others did not finish", "'error' says which", "rejected job will fail again"},
+			wantNotInMsg:    []string{"were not processed"},
+			wantFailedRoles: []string{"Clerk", "Driver"},
+			wantFailedErrs:  []string{"unextractable", "context canceled"},
 		},
 	}
 	for _, tt := range tests {
@@ -550,12 +572,21 @@ func TestNewSubmitOutput(t *testing.T) {
 					t.Errorf("message %q does not contain %q", out.Message, want)
 				}
 			}
-			var roles []string
+			for _, notWant := range tt.wantNotInMsg {
+				if strings.Contains(out.Message, notWant) {
+					t.Errorf("message %q contains %q", out.Message, notWant)
+				}
+			}
+			var roles, errs []string
 			for _, f := range out.Failed {
 				roles = append(roles, f.JobRole)
+				errs = append(errs, f.Error)
 			}
 			if strings.Join(roles, ",") != strings.Join(tt.wantFailedRoles, ",") {
 				t.Errorf("failed roles = %v, want %v", roles, tt.wantFailedRoles)
+			}
+			if strings.Join(errs, ",") != strings.Join(tt.wantFailedErrs, ",") {
+				t.Errorf("failed errors = %v, want %v", errs, tt.wantFailedErrs)
 			}
 		})
 	}

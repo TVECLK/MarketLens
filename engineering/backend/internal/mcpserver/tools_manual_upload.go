@@ -310,9 +310,10 @@ func newSubmitOutput(source string, submitted int, failures []ingestion.FailedJo
 	}
 	if interrupted {
 		out.Message = "The upload was stopped before it finished (the server is shutting down or the connection was lost). " +
-			"'saved_count' jobs were saved or matched an existing duplicate; the jobs listed under 'failed' were not processed. " +
-			"Submit the full list of jobs again: jobs already saved are recognised as duplicates, so nothing is saved twice. " +
-			"Do not submit only the failed jobs."
+			"'saved_count' jobs were saved or matched an existing duplicate. The jobs listed under 'failed' were not saved: " +
+			"some were rejected, and others did not finish because the upload was stopped; each entry's 'error' says which. " +
+			"Submit the full list of jobs again: jobs already saved are recognised as duplicates, so nothing is saved twice, " +
+			"and a rejected job will fail again unless it is corrected first. Do not submit only the failed jobs."
 	}
 	for _, f := range failures {
 		j := jobsByID[f.JobID]
