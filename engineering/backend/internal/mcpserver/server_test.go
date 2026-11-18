@@ -191,8 +191,7 @@ func TestSession_ScopesPerRequestAndUserBinding(t *testing.T) {
 			if err != nil {
 				t.Fatalf("call tool: %v", err)
 			}
-			out, _ := res.StructuredContent.(map[string]any)
-			if got, _ := out["has_scope"].(bool); got != step.wantScope {
+			if got := boolField(t, res, "has_scope"); got != step.wantScope {
 				t.Errorf("has_scope = %v, want %v", got, step.wantScope)
 			}
 		})

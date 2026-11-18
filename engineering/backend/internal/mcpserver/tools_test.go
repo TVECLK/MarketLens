@@ -37,6 +37,27 @@ func connectInMemory(t *testing.T, server *mcp.Server, opts *mcp.ClientOptions) 
 	return session
 }
 
+// boolField returns the boolean field key from a tool result's structured
+// content. It fails the test if the content is not an object, the field is
+// missing, or it is not a boolean, so a malformed response cannot pass as a
+// false value.
+func boolField(t *testing.T, res *mcp.CallToolResult, key string) bool {
+	t.Helper()
+	out, ok := res.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("structured content is %T, want an object", res.StructuredContent)
+	}
+	value, present := out[key]
+	if !present {
+		t.Fatalf("result has no %q field: %v", key, out)
+	}
+	b, ok := value.(bool)
+	if !ok {
+		t.Fatalf("%q is %T (%v), want a bool", key, value, value)
+	}
+	return b
+}
+
 // TestNew_RegistersTools builds the real server and lists its tools. Building
 // it also runs every AddTool call, which panics on a bad input or output
 // schema, so a broken jsonschema tag fails here and not at startup. Registering
@@ -154,8 +175,7 @@ func TestClientSupportsElicitation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("call tool: %v", err)
 			}
-			out, _ := res.StructuredContent.(map[string]any)
-			if got, _ := out["supports"].(bool); got != tt.want {
+			if got := boolField(t, res, "supports"); got != tt.want {
 				t.Errorf("clientSupportsElicitation = %v, want %v", got, tt.want)
 			}
 		})
