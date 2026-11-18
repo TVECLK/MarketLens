@@ -159,16 +159,16 @@ func TestRetryDelay(t *testing.T) {
 
 func TestConfirmUnlessShuttingDown(t *testing.T) {
 	tests := []struct {
-		name             string
-		userAnswersYes   bool          // the client answers the form at once
-		shutdownBefore   bool          // shutdown has already begun when the tool starts waiting
-		shutdownAfter    time.Duration // shutdown begins this long after the tool starts waiting; 0 means never
-		wantShuttingDown bool
-		wantConfirmed    bool
+		name                  string
+		userAnswersYes        bool // the client answers the form at once
+		shutdownBefore        bool // shutdown has already begun when the tool starts waiting
+		shutdownWhenFormShown bool // shutdown begins once the client has received the form, while it is unanswered
+		wantShuttingDown      bool
+		wantConfirmed         bool
 	}{
 		{name: "user answers Yes before any shutdown", userAnswersYes: true, wantConfirmed: true},
-		{name: "shutdown begins while waiting for the user", shutdownAfter: 50 * time.Millisecond, wantShuttingDown: true},
-		{name: "shutdown already begun when the form is shown", shutdownBefore: true, wantShuttingDown: true},
+		{name: "shutdown begins while the form is open and unanswered", shutdownWhenFormShown: true, wantShuttingDown: true},
+		{name: "shutdown already begun when the tool starts waiting", shutdownBefore: true, wantShuttingDown: true},
 	}
 	jobs := []newspaperJob{{Employer: "Acme", JobRole: "Engineer", Location: "Colombo", Description: "Builds things"}}
 
@@ -188,10 +188,17 @@ func TestConfirmUnlessShuttingDown(t *testing.T) {
 				})
 
 			// A client that never answers keeps the form open until the test ends.
+			// formShown is signalled when the form reaches the client, so shutdown
+			// can be started at that moment and not after a guessed delay.
 			release := make(chan struct{})
 			defer close(release)
+			formShown := make(chan struct{}, 1)
 			session := connectInMemory(t, server, &mcp.ClientOptions{
 				ElicitationHandler: func(ctx context.Context, _ *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+					select {
+					case formShown <- struct{}{}:
+					default:
+					}
 					if tt.userAnswersYes {
 						return &mcp.ElicitResult{Action: "accept", Content: map[string]any{"decision": confirmYes}}, nil
 					}
@@ -203,21 +210,47 @@ func TestConfirmUnlessShuttingDown(t *testing.T) {
 				},
 			})
 
+			callCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			// Measured from the moment shutdown begins, or from the call when no
+			// shutdown is involved.
+			started := time.Now()
 			if tt.shutdownBefore {
 				beginShutdown()
 			}
-			if tt.shutdownAfter > 0 {
-				time.AfterFunc(tt.shutdownAfter, beginShutdown)
+
+			type callOutcome struct {
+				res *mcp.CallToolResult
+				err error
+			}
+			outcome := make(chan callOutcome, 1)
+			go func() {
+				res, err := session.CallTool(callCtx, &mcp.CallToolParams{Name: "confirm_probe"})
+				outcome <- callOutcome{res: res, err: err}
+			}()
+
+			if tt.shutdownWhenFormShown {
+				select {
+				case <-formShown:
+				case <-time.After(3 * time.Second):
+					t.Fatal("the form never reached the client, so there is no open form to shut down under")
+				}
+				started = time.Now()
+				beginShutdown()
 			}
 
-			callCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			start := time.Now()
-			res, err := session.CallTool(callCtx, &mcp.CallToolParams{Name: "confirm_probe"})
-			if err != nil {
-				t.Fatalf("call tool: %v (the tool kept waiting for an answer that cannot arrive)", err)
+			var res *mcp.CallToolResult
+			select {
+			case got := <-outcome:
+				if got.err != nil {
+					t.Fatalf("call tool: %v (the tool kept waiting for an answer that cannot arrive)", got.err)
+				}
+				res = got.res
+			case <-time.After(4 * time.Second):
+				t.Fatal("the tool did not return: it kept waiting for an answer that cannot arrive")
 			}
-			if elapsed := time.Since(start); elapsed > 2*time.Second {
+			if elapsed := time.Since(started); elapsed > 2*time.Second {
 				t.Errorf("tool took %v to return", elapsed)
 			}
 
