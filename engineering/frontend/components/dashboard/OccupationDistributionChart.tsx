@@ -106,10 +106,7 @@ export default function OccupationDistributionChart({
 
   return (
     <SignedOut fallback={<ChartCard {...sharedProps}>{chart}</ChartCard>}>
-      <div className="flex flex-col gap-3">
-        {headline && <p className="w-full md:w-2/3 text-xl md:text-2xl font-normal text-zinc-900 leading-snug">{headline}</p>}
-        <ChartCard {...sharedProps}>{chart}</ChartCard>
-      </div>
+      <ChartCard {...sharedProps} heightClassName="h-[560px] md:h-[640px]" headline={headline}>{chart}</ChartCard>
     </SignedOut>
   );
 }

@@ -4,6 +4,7 @@ import { clsx } from "clsx";
 interface ChartCardProps {
   title: ReactNode;
   subtitle?: string;
+  headline?: ReactNode;
   heightClassName: string;
   bodyClassName?: string;
   headerRight?: ReactNode;
@@ -26,6 +27,7 @@ function CardMessage({ children }: { children: ReactNode }) {
 export default function ChartCard({
   title,
   subtitle,
+  headline,
   heightClassName,
   bodyClassName,
   headerRight,
@@ -43,6 +45,11 @@ export default function ChartCard({
         heightClassName,
       )}
     >
+      {headline && (
+        <div className="mb-2 pb-3 md:mb-4 md:pb-4 border-b border-zinc-100">
+          <p className="w-full md:w-2/3 text-xl md:text-2xl font-normal text-zinc-900 whitespace-pre-line leading-snug">{headline}</p>
+        </div>
+      )}
       <div
         className={clsx(
           "flex flex-wrap items-start border-b border-zinc-100 pb-2 gap-2",

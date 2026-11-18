@@ -144,20 +144,18 @@ export default function VacancyTrendChart({
         </ChartCard>
       </SignedIn>
       <SignedOut>
-        <div className="flex flex-col gap-3">
-          <p className="w-full md:w-2/3 text-xl md:text-2xl font-normal text-zinc-900 leading-snug">{publicTitle}</p>
-          <ChartCard
-            title="Vacancy Trend"
-            subtitle={subtitle}
-            heightClassName="h-[320px] md:h-[420px]"
-            isLoading={isLoading}
-            isError={isError}
-            isEmpty={isEmptyChartData(data, (point) => point.open_job_count)}
-            loadingLabel="Loading trend data..."
-          >
-            {chartBody(data)}
-          </ChartCard>
-        </div>
+        <ChartCard
+          title="Vacancy Trend"
+          subtitle={subtitle}
+          heightClassName="h-[460px] md:h-[520px]"
+          isLoading={isLoading}
+          isError={isError}
+          isEmpty={isEmptyChartData(data, (point) => point.open_job_count)}
+          loadingLabel="Loading trend data..."
+          headline={publicTitle}
+        >
+          {chartBody(data)}
+        </ChartCard>
       </SignedOut>
     </>
   );
