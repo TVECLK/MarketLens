@@ -500,6 +500,37 @@ func TestProcessBatch_CrawlerRunMustExist(t *testing.T) {
 	}
 }
 
+// TestProcessBatch_CrawlerRunMustBeRunning checks that jobs for a run that
+// is already COMPLETED or FAILED are rejected as a 422 (no retry), while a
+// RUNNING run in the same batch is still processed.
+func TestProcessBatch_CrawlerRunMustBeRunning(t *testing.T) {
+	db := setupDB(t)
+	svc := newIngestionService(t, db, extractionResponder(validExtractionJSON))
+	for id, status := range map[uint]string{300: "COMPLETED", 301: "FAILED"} {
+		if err := db.Create(&models.CrawlerRun{ID: id, Status: status}).Error; err != nil {
+			t.Fatalf("seeding crawler run %d: %v", id, err)
+		}
+	}
+
+	failed := svc.ProcessBatch(context.Background(), []ingestion.RawJobInput{
+		rawJob("job-1", "Lanka Retail Group", "Store Manager", "Kandy", "Manage daily operations.", "Test", 300),
+		rawJob("job-2", "Ceylon Tea Traders", "Accountant", "Galle", "Maintain the books.", "Test", 301),
+		rawJob("job-3", "Island Logistics", "Driver", "Matara", "Deliver goods across the south.", "Test", 100),
+	})
+
+	if len(failed) != 2 {
+		t.Fatalf("expected job-1 and job-2 to fail, got %+v", failed)
+	}
+	for _, f := range failed {
+		if f.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(f.Error, "is not running") {
+			t.Errorf("job %s: expected 422 \"is not running\", got %d %q", f.JobID, f.StatusCode, f.Error)
+		}
+	}
+	if n := countRows(t, db, &models.JobPost{}); n != 1 {
+		t.Errorf("expected only the RUNNING-run job saved, got %d", n)
+	}
+}
+
 // TestProcessBatch_CrawlerRunLookupFailure checks that a database error
 // while looking the run up is a 503 (the crawler retries), not a 422, and
 // that the failure is not cached: every job sharing the run id looks it up

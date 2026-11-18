@@ -140,7 +140,7 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 			continue
 		}
 
-		// The run must exist, or the save fails on the foreign key only after
+		// The run must exist and be RUNNING, or the save fails on the foreign key only after
 		// the LLM work. A lookup error is 503 and not cached, so it is retried.
 		runCheck, cached := runChecks[raw.CrawlerRunID]
 		if !cached {
@@ -253,16 +253,20 @@ func (s *IngestionService) ProcessBatch(ctx context.Context, rawJobs []RawJobInp
 }
 
 // checkCrawlerRun reports why jobs for the crawler run must be rejected, or
-// nil if the run exists. JobID is left for the caller to fill in. An unknown
-// run is 422 so the crawler does not retry it; a lookup failure is 503 so
-// it does.
+// nil if the run exists and is RUNNING. JobID is left for the caller to fill
+// in. An unknown run, or one already COMPLETED or FAILED (including one a
+// newer run marked FAILED), is 422 so the crawler does not retry it; a
+// lookup failure is 503 so it does.
 func (s *IngestionService) checkCrawlerRun(ctx context.Context, id uint) *FailedJob {
-	exists, err := s.crawlerRuns.CrawlerRunExists(ctx, id)
+	status, err := s.crawlerRuns.GetCrawlerRunStatus(ctx, id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return &FailedJob{StatusCode: http.StatusUnprocessableEntity, Error: fmt.Sprintf("crawler run %d does not exist", id)}
+	}
 	if err != nil {
 		return &FailedJob{StatusCode: http.StatusServiceUnavailable, Error: fmt.Sprintf("looking up crawler run %d: %v", id, err)}
 	}
-	if !exists {
-		return &FailedJob{StatusCode: http.StatusUnprocessableEntity, Error: fmt.Sprintf("crawler run %d does not exist", id)}
+	if status != "RUNNING" {
+		return &FailedJob{StatusCode: http.StatusUnprocessableEntity, Error: fmt.Sprintf("crawler run %d is not running (status %s)", id, status)}
 	}
 	return nil
 }
