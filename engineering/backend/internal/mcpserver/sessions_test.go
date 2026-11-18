@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -92,14 +93,61 @@ func TestShutdown_WithOpenSSEStream(t *testing.T) {
 				onShutdown = func(drainCtx context.Context) { closeIdleSessions(drainCtx, server, tracker) }
 			}
 			done := make(chan error, 1)
-			go func() { done <- serveUntilDone(shutdownCtx, srv, ln, tt.grace, onShutdown) }()
+			serverStopped := make(chan struct{})
+			go func() {
+				defer close(serverStopped)
+				done <- serveUntilDone(shutdownCtx, srv, ln, tt.grace, onShutdown)
+			}()
+
+			// stopServer signals shutdown and waits for the server goroutine,
+			// with a bound: serveUntilDone gives up after the grace period, and
+			// if it somehow does not, closing the listener ends it. It is safe
+			// to call more than once, and it runs even if the test fails early.
+			var stopOnce sync.Once
+			stopServer := func() {
+				stopOnce.Do(func() {
+					beginShutdown()
+					select {
+					case <-serverStopped:
+					case <-time.After(tt.grace + 2*time.Second):
+						srv.Close()
+						select {
+						case <-serverStopped:
+						case <-time.After(2 * time.Second):
+							t.Error("the server goroutine did not stop")
+						}
+					}
+				})
+			}
+			t.Cleanup(stopServer)
+
+			// Every client call uses this context, so cleanup can cancel a call
+			// that is still pending when the test fails.
+			callCtx, cancelCalls := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancelCalls()
 
 			client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0"}, nil)
-			session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: "http://" + ln.Addr().String()}, nil)
+			session, err := client.Connect(callCtx, &mcp.StreamableClientTransport{Endpoint: "http://" + ln.Addr().String()}, nil)
 			if err != nil {
 				t.Fatalf("connect: %v", err)
 			}
-			defer session.Close()
+			// Runs before the cleanup above: cancel pending calls, stop the
+			// server and wait for it, and only then close the session, with a
+			// bound, because Close waits for calls that are still pending.
+			t.Cleanup(func() {
+				cancelCalls()
+				stopServer()
+				closed := make(chan struct{})
+				go func() {
+					session.Close()
+					close(closed)
+				}()
+				select {
+				case <-closed:
+				case <-time.After(3 * time.Second):
+					t.Log("closing the client session did not finish within 3s")
+				}
+			})
 
 			// The client opens its standalone stream just after initializing.
 			deadline := time.Now().Add(3 * time.Second)
@@ -113,7 +161,7 @@ func TestShutdown_WithOpenSSEStream(t *testing.T) {
 			callDone := make(chan error, 1)
 			if tt.toolDelay > 0 {
 				go func() {
-					_, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "slow"})
+					_, err := session.CallTool(callCtx, &mcp.CallToolParams{Name: "slow"})
 					callDone <- err
 				}()
 				select {
