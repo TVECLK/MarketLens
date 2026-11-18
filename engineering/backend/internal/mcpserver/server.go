@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"reflect"
 	"strings"
@@ -182,9 +184,27 @@ func New(svcs *service.Services, ingestionSvc *ingestion.IngestionService) *mcp.
 	return server
 }
 
+const (
+	// readHeaderTimeout bounds how long a client may take to send its request
+	// headers, so slow connections cannot tie up the server (Slowloris). There
+	// is deliberately no read or write timeout: tool calls such as a newspaper
+	// submission run for minutes, and the SDK holds long-lived SSE streams.
+	readHeaderTimeout = 10 * time.Second
+	idleTimeout       = 2 * time.Minute
+
+	// shutdownGracePeriod is how long in-flight requests get to finish after
+	// SIGTERM. Keep it below the platform's kill deadline (Kubernetes
+	// terminationGracePeriodSeconds, 30s by default), or the process is killed
+	// before this expires.
+	shutdownGracePeriod = 25 * time.Second
+)
+
 // StartHTTP serves the given MCP server over Streamable HTTP at addr
-// (e.g. ":9090"), authenticating every request against verifier.
-func StartHTTP(server *mcp.Server, verifier *auth.Verifier, meta Metadata, addr string) error {
+// (e.g. ":9090"), authenticating every request against verifier. When ctx is
+// cancelled (SIGTERM) it stops accepting connections and gives in-flight
+// requests shutdownGracePeriod to finish, so a newspaper submission is not
+// cut off half-saved with its crawler run still open.
+func StartHTTP(ctx context.Context, server *mcp.Server, verifier *auth.Verifier, meta Metadata, addr string) error {
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return server
 	}, nil)
@@ -193,7 +213,39 @@ func StartHTTP(server *mcp.Server, verifier *auth.Verifier, meta Metadata, addr 
 	mux.HandleFunc(protectedResPath, serveProtectedResourceMetadata(meta))
 	mux.Handle("/mcp", requireValidToken(newVerifyFunc(verifier), meta.PublicBaseURL, bridgeTokenInfo(handler)))
 
-	return http.ListenAndServe(addr, mux)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	srv := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       idleTimeout,
+	}
+	return serveUntilDone(ctx, srv, ln, shutdownGracePeriod)
+}
+
+// serveUntilDone runs srv on ln until it fails or ctx is cancelled. On cancel
+// it shuts down gracefully, waiting up to grace for in-flight requests; if they
+// do not finish in time it closes their connections and reports an error.
+func serveUntilDone(ctx context.Context, srv *http.Server, ln net.Listener, grace time.Duration) error {
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- srv.Serve(ln) }()
+
+	select {
+	case err := <-serveErr:
+		return err
+	case <-ctx.Done():
+	}
+
+	log.Printf("MCP server shutting down, waiting up to %s for in-flight requests", grace)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), grace)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		srv.Close()
+		return fmt.Errorf("graceful shutdown did not finish, in-flight requests were cut off: %w", err)
+	}
+	return nil
 }
 
 func wrapIfList(v any) any {

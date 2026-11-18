@@ -1,7 +1,11 @@
 package main
 
 import (
+	"context"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"marketlens-go-backend/internal/auth"
 	"marketlens-go-backend/internal/config"
@@ -57,8 +61,14 @@ func main() {
 		PublicBaseURL: cfg.MCP.PublicBaseURL,
 	}
 
+	// SIGTERM (a Kubernetes pod stop) or Ctrl-C starts a graceful shutdown, so
+	// an in-flight newspaper submission can finish and close its crawler run.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	log.Println("MCP server listening on :9090/mcp")
-	if err := mcpserver.StartHTTP(mcpServer, mcpVerifier, meta, ":9090"); err != nil {
+	if err := mcpserver.StartHTTP(ctx, mcpServer, mcpVerifier, meta, ":9090"); err != nil {
 		log.Fatalf("MCP server failed: %v", err)
 	}
+	log.Println("MCP server stopped")
 }
