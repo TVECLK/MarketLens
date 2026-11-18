@@ -163,9 +163,10 @@ func TestSession_ScopesPerRequestAndUserBinding(t *testing.T) {
 
 	for _, step := range steps {
 		t.Run(step.name, func(t *testing.T) {
-			switcher.token.Store(step.token)
-
 			if step.rawRequest {
+				// Sends its own Authorization header and does not touch the
+				// switcher, so the client transport (used by the cleanup that
+				// closes the session) keeps the session owner's token.
 				req, err := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader(`{"jsonrpc":"2.0","id":99,"method":"tools/list"}`))
 				if err != nil {
 					t.Fatal(err)
@@ -185,6 +186,7 @@ func TestSession_ScopesPerRequestAndUserBinding(t *testing.T) {
 				return
 			}
 
+			switcher.token.Store(step.token)
 			res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "scope_check"})
 			if err != nil {
 				t.Fatalf("call tool: %v", err)
