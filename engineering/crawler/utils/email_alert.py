@@ -40,6 +40,32 @@ class FailedCrawler:
     reason: str
 
 
+# How many chained errors (__cause__ or __context__) describe_error looks at
+MAX_ERROR_CHAIN_DEPTH = 5
+
+
+# This function describes an error for the emails. Some errors have no message,
+# for example httpx timeouts, where str(error) is empty, so it falls back to the
+# error that caused it, and then to a text that says there is no message.
+def describe_error(error: Optional[BaseException]) -> str:
+    if error is None:
+        return "Unknown error"
+    name = type(error).__name__
+    message = str(error).strip()
+    if message:
+        return f"{name}: {message}"
+
+    cause = error.__cause__ or error.__context__
+    for _ in range(MAX_ERROR_CHAIN_DEPTH):
+        if cause is None:
+            break
+        cause_message = str(cause).strip()
+        if cause_message:
+            return f"{name} (caused by {type(cause).__name__}: {cause_message})"
+        cause = cause.__cause__ or cause.__context__
+    return f"{name} (no message)"
+
+
 def _truncate(text: str) -> str:
     text = " ".join(str(text).split())
     if len(text) <= MAX_REASON_LENGTH:
@@ -324,9 +350,7 @@ class EmailAlertService:
         return f"[{self._app_name}] {title}", text, html
 
     def _crash_email(self, error: Optional[BaseException]) -> Tuple[str, str, str]:
-        reason = (
-            _truncate(f"{type(error).__name__}: {error}") if error else "Unknown error"
-        )
+        reason = _truncate(describe_error(error))
         title = "Crawler run crashed"
         note = (
             "Please check the crawler "

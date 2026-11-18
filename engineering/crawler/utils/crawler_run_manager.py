@@ -8,7 +8,7 @@ from config import BACKEND_BASE_URL
 
 from crawlers import BaseJobCrawler, CrawlResult
 from crawlers.registry import CRAWLER_REGISTRY
-from .email_alert import EmailAlertService, FailedCrawler
+from .email_alert import EmailAlertService, FailedCrawler, describe_error
 from .thunder_id_client import ThunderAuth, ThunderIDClient
 
 logger = logging.getLogger(__name__)
@@ -188,7 +188,7 @@ class CrawlerManager:
             return result.source_name
         except Exception as e:
             logger.error(f"Crawler '{name}' failed: {e}", exc_info=True)
-            self._failure_reasons[name] = f"{type(e).__name__}: {e}"
+            self._failure_reasons[name] = describe_error(e)
             return None
 
     # This function runs the crawlers of the active sources: it fetches them from the

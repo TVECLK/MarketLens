@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from utils import email_alert
-from utils.email_alert import FailedCrawler
+from utils.email_alert import FailedCrawler, describe_error
 
 
 def sent_message(smtp):
@@ -333,6 +333,77 @@ async def test_a_misconfigured_alert_is_logged_as_an_error(
 
     smtp.send_message.assert_not_called()
     assert [r.levelno for r in caplog.records] == [logging.ERROR]
+
+
+def test_describe_error_shows_the_type_and_the_message():
+    assert describe_error(RuntimeError("site down")) == "RuntimeError: site down"
+
+
+@pytest.mark.parametrize("empty", ["", "   ", "\n"])
+def test_describe_error_says_so_when_the_error_has_no_message(empty):
+    assert describe_error(httpx.ReadTimeout(empty)) == "ReadTimeout (no message)"
+
+
+def test_describe_error_does_not_end_with_a_dangling_colon():
+    # httpx raises timeouts with an empty message, wrapping a TimeoutError()
+    timeout = httpx.ReadTimeout("")
+    timeout.__cause__ = TimeoutError()
+
+    assert describe_error(timeout) == "ReadTimeout (no message)"
+
+
+def test_describe_error_uses_the_message_of_the_error_that_caused_it():
+    error = httpx.ReadTimeout("")
+    error.__cause__ = ConnectionResetError("peer reset the connection")
+
+    assert describe_error(error) == (
+        "ReadTimeout (caused by ConnectionResetError: peer reset the connection)"
+    )
+
+
+def test_describe_error_falls_back_to_the_context_of_the_error():
+    try:
+        try:
+            raise ValueError("root cause")
+        except ValueError:
+            raise httpx.ReadTimeout("")
+    except httpx.ReadTimeout as e:
+        assert describe_error(e) == "ReadTimeout (caused by ValueError: root cause)"
+
+
+def test_describe_error_stops_on_a_chain_of_errors_that_loops():
+    first, second = httpx.ReadTimeout(""), httpx.ReadTimeout("")
+    first.__cause__, second.__cause__ = second, first
+
+    assert describe_error(first) == "ReadTimeout (no message)"
+
+
+def test_describe_error_for_no_error():
+    assert describe_error(None) == "Unknown error"
+
+
+async def test_the_crash_email_has_no_empty_reason_for_a_timeout(smtp, service):
+    await service.send_crash_alert(httpx.ReadTimeout(""))
+
+    message = sent_message(smtp)
+    assert "ReadTimeout (no message)" in html_of(message)
+    assert "ReadTimeout (no message)" in message.get_body(("plain",)).get_content()
+    assert "ReadTimeout: <" not in html_of(message)
+
+
+async def test_a_failed_crawler_with_a_timeout_has_a_reason(
+    manager, alert_service, make_crawler_class
+):
+    manager.fetch_active_crawlers.return_value = {
+        "source_c": make_crawler_class("source_c", error=httpx.ReadTimeout(""))
+    }
+    manager._start_run = AsyncMock(return_value=7)
+    manager._finalize_run = AsyncMock()
+
+    await manager.run_all_crawlers(concurrent=True)
+
+    failed, _ = alert_service.send_failure_alert.await_args.args
+    assert failed[0].reason == "ReadTimeout (no message)"
 
 
 async def test_crash_alert_describes_the_error(smtp, service):
