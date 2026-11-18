@@ -54,6 +54,8 @@ const scopesKey contextKey = "scopes"
 const serverInstructions = labourMarketInstructions + "\n\n" + newspaperInstructions
 
 const labourMarketInstructions = `Labour market data tools - how they fit together:
+- All counts are numbers of job vacancies (from job posts), not numbers of workers or employment. Describe them as vacancies.
+- Statistics tools need from_date and to_date (YYYY-MM-DD). If the user does not give a period, use January 1 of the current year to today and tell them which period you used.
 - Reference lists (get_experiences, get_provinces, get_job_types, get_employment_sectors, get_education_levels, get_formalities, get_genders, get_vocational_educations) only list the available values, with no counts. For vacancy counts by one of those dimensions use the matching get_*_by_level tool.
 - Two classification hierarchies exist: 'occupation' (major-group > sub-major-group > minor-group > unit-group > occupation-group) and 'industry' (industry-sector > industry-division > industry-group > industry-class > industry-subclass). A level must belong to the standard it is used with. Use get_major_groups / get_industry_sectors to get top-level ids, and get_hierarchy_children to go one level down (the leaf levels have no children).
 - To find a specific leaf (occupation group or industry subclass), drill down with get_hierarchy_children rather than paging through get_occupation_groups / get_industry_subclasses.
