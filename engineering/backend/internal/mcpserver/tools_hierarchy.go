@@ -35,8 +35,7 @@ func registerHierarchyTools(server *mcp.Server, svcs *service.Services) {
 		Name: "get_occupation_groups",
 		Description: "List occupation groups (leaf level of the SLSO hierarchy), paginated. To find a " +
 			"specific occupation group, drill down with get_hierarchy_children starting from " +
-			"get_major_groups instead of paging through this list - paging through every leaf row " +
-			"costs many calls, drilling down takes about five small ones. To page: the result has " +
+			"get_major_groups instead of paging through this list (far fewer calls). To page: the result has " +
 			"'total'; the next page starts at offset + limit; stop when offset >= total.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in struct {
 		Limit  int `json:"limit,omitempty" jsonschema:"max rows to return, default 20, max 100"`
@@ -76,8 +75,7 @@ func registerHierarchyTools(server *mcp.Server, svcs *service.Services) {
 		Name: "get_industry_subclasses",
 		Description: "List industry subclasses (leaf level of the SLSIC hierarchy), paginated. To find a " +
 			"specific industry subclass, drill down with get_hierarchy_children starting from " +
-			"get_industry_sectors instead of paging through this list - paging through every leaf row " +
-			"costs many calls, drilling down takes about five small ones. To page: the result has " +
+			"get_industry_sectors instead of paging through this list (far fewer calls). To page: the result has " +
 			"'total'; the next page starts at offset + limit; stop when offset >= total.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in struct {
 		Limit  int `json:"limit,omitempty" jsonschema:"max rows to return, default 20, max 100"`
