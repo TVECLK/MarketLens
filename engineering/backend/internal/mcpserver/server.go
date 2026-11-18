@@ -312,21 +312,6 @@ type dateRangeInput struct {
 	ToDate   string `json:"to_date" jsonschema:"end date, format YYYY-MM-DD. If the user gave no period, use today"`
 }
 
-// idAndYearInput is used for the occupation-scoped year-filtered tools
-// (by-formality, by-gender, top-job-roles).
-type idAndYearInput struct {
-	ID   uint `json:"id" jsonschema:"the numeric id to look up"`
-	Year int  `json:"year" jsonschema:"the calendar year, e.g. 2026"`
-}
-
-// idAndDateRangeInput is used for tools scoped to both a single id and a
-// from/to date window (e.g. industry-scoped year analytics).
-type idAndDateRangeInput struct {
-	ID       uint   `json:"id" jsonschema:"the numeric id to look up"`
-	FromDate string `json:"from_date" jsonschema:"start date, format YYYY-MM-DD. If the user gave no period, use January 1 of the current year and tell them the period you used"`
-	ToDate   string `json:"to_date" jsonschema:"end date, format YYYY-MM-DD. If the user gave no period, use today"`
-}
-
 // plainGetAll adapts a CRUDService's unified GetAll (limit/offset/date-range
 // all optional) to the no-arg shape registerNoArgTool expects, for the MCP
 // lookup tools that always want the full, unfiltered list.
