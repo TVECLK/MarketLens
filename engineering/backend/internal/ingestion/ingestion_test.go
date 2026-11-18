@@ -501,9 +501,12 @@ func TestProcessBatch_CrawlerRunMustExist(t *testing.T) {
 }
 
 // TestProcessBatch_CrawlerRunLookupFailure checks that a database error
-// while looking the run up is a 503 (the crawler retries), not a 422.
+// while looking the run up is a 503 (the crawler retries), not a 422, and
+// that the failure is not cached: every job sharing the run id looks it up
+// again.
 func TestProcessBatch_CrawlerRunLookupFailure(t *testing.T) {
 	db := setupDB(t)
+	runQueries := countQueries(t, db, "crawler_runs")
 	svc := newIngestionService(t, db, extractionResponder(validExtractionJSON))
 
 	err := db.Callback().Query().Before("gorm:query").Register("test:fail:crawler_runs", func(tx *gorm.DB) {
@@ -515,10 +518,21 @@ func TestProcessBatch_CrawlerRunLookupFailure(t *testing.T) {
 		t.Fatalf("registering query callback: %v", err)
 	}
 
-	failed := svc.ProcessBatch(context.Background(), []ingestion.RawJobInput{ceylonJob})
+	failed := svc.ProcessBatch(context.Background(), []ingestion.RawJobInput{
+		rawJob("job-1", "Lanka Retail Group", "Store Manager", "Kandy", "Manage daily operations.", "Test", 100),
+		rawJob("job-2", "Ceylon Tea Traders", "Accountant", "Galle", "Maintain the books.", "Test", 100),
+	})
 
-	if len(failed) != 1 || failed[0].StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("expected one 503 failure, got %+v", failed)
+	if len(failed) != 2 {
+		t.Fatalf("expected two failures, got %+v", failed)
+	}
+	for _, f := range failed {
+		if f.StatusCode != http.StatusServiceUnavailable {
+			t.Errorf("job %s: expected 503, got %d", f.JobID, f.StatusCode)
+		}
+	}
+	if got := runQueries.Load(); got != 2 {
+		t.Errorf("expected 2 crawler run lookups (a failed lookup is not cached), got %d", got)
 	}
 	if n := countRows(t, db, &models.JobPost{}); n != 0 {
 		t.Errorf("expected no job saved, got %d", n)
