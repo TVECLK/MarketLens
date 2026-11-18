@@ -63,10 +63,10 @@ func hasUsableText(job JobData) bool {
 // keys for a job. It returns ErrTooLittleText when the job has no usable
 // text, so no caller can get a signature that matches every other short job.
 func GenerateMinHashAndLSH(job JobData, numPerm, numBands int) ([]uint32, []LSHIndex, error) {
-	if !hasUsableText(job) {
+	text := normalizeText(job)
+	if utf8.RuneCountInString(text) < shingleSize {
 		return nil, nil, ErrTooLittleText
 	}
-	text := normalizeText(job)
 
 	shingles := shingle(text, shingleSize)
 
