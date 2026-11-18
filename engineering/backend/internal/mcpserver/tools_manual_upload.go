@@ -164,8 +164,8 @@ type submitNewspaperVacanciesOutput struct {
 	FailedCount int                   `json:"failed_count"`
 	Failed      []failedVacancyOutput `json:"failed,omitempty"`
 
-	ReconciledStaleJobs int64  `json:"reconciled_stale_jobs"`
-	ReconcileNote       string `json:"reconcile_note,omitempty"`
+	ReconciledStaleJobs int64  `json:"reconciled_stale_jobs" jsonschema:"number of earlier open vacancies from this source that were closed because they were not in this upload; an upload is treated as the source's full current list"`
+	ReconcileNote       string `json:"reconcile_note,omitempty" jsonschema:"set only if closing the earlier vacancies failed; the submitted jobs were still saved"`
 }
 
 // hasScope reports whether the verified token on ctx carries scope.
@@ -320,7 +320,11 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 			"guessing), show the updated jobs in the chat, then " +
 			"call this tool again with the updated jobs so they confirm again. On success (the user " +
 			"chose Yes) the result has no status; it has 'submitted' (jobs sent), 'saved_count', 'failed_count' and 'failed' - " +
-			"tell the user how many were saved and list any that failed.\n\n" +
+			"tell the user how many were saved and list any that failed. Each upload is treated as the " +
+			"source's full current list: earlier open vacancies from the same source that are not in this " +
+			"upload are closed, and 'reconciled_stale_jobs' is how many were closed. If it is above 0, tell " +
+			"the user that many earlier vacancies from the source were closed. If 'reconcile_note' is set, " +
+			"the jobs were saved but closing the earlier vacancies failed - tell the user.\n\n" +
 			"If the client cannot show the form, this tool says so: then ask the user in chat and call " +
 			"it again with user_confirmed=true only after their explicit yes.\n\n" +
 			"IMPORTANT: never invent a source name - it must be one returned by select_manual_source.",
