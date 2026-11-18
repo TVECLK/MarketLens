@@ -28,7 +28,9 @@ func TestIsTransientDBError(t *testing.T) {
 		{"unique violation", &pgconn.PgError{Code: "23505"}, false},
 		{"invalid enum value (class 22)", &pgconn.PgError{Code: "22P02"}, false},
 		{"undefined table", &pgconn.PgError{Code: "42P01"}, false},
-		{"query canceled 57014 is not on the retry list", &pgconn.PgError{Code: "57014"}, false},
+		{"lock timeout", &pgconn.PgError{Code: "55P03"}, true},
+		{"statement timeout or cancellation", &pgconn.PgError{Code: "57014"}, true},
+		{"object in use 55006 is not on the retry list", &pgconn.PgError{Code: "55006"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

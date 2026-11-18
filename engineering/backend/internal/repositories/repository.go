@@ -30,7 +30,8 @@ var ErrPermanentSaveFailure = errors.New("permanent save failure")
 // later retry can be expected to cure, as surfaced by gorm's postgres
 // driver (jackc/pgx) via *pgconn.PgError.Code (SQLSTATE): connection
 // exceptions (class 08), serialization failure (40001), deadlock
-// (40P01), insufficient resources (class 53), and admin shutdown /
+// (40P01), lock timeout (55P03), insufficient resources (class 53),
+// statement timeout or cancellation (57014), and admin shutdown /
 // cannot-connect-now (57P01, 57P03). Errors with no SQLSTATE (a dropped
 // connection, a timeout) are transient too. Every other SQLSTATE is
 // treated as permanent, so an unknown error class fails fast instead of
@@ -41,7 +42,7 @@ func IsTransientDBError(err error) bool {
 		return true
 	}
 	switch pgErr.Code {
-	case "40001", "40P01", "57P01", "57P03":
+	case "40001", "40P01", "55P03", "57014", "57P01", "57P03":
 		return true
 	}
 	return strings.HasPrefix(pgErr.Code, "08") || strings.HasPrefix(pgErr.Code, "53")
