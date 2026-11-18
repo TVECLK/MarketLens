@@ -301,7 +301,9 @@ func registerManualUploadTools(server *mcp.Server, svcs *service.Services, inges
 			"Results: status 'cancelled' means the user chose No - stop, nothing was saved. Status " +
 			"'edits_requested' means the user chose Edit - apply their 'edits' to the jobs (if 'edits' " +
 			"is empty, ask the user in chat what to change), show the updated jobs in the chat, then " +
-			"call this tool again with the updated jobs so they confirm again.\n\n" +
+			"call this tool again with the updated jobs so they confirm again. On success (the user " +
+			"chose Yes) the result has no status; it has 'submitted', 'failed_count' and 'failed' - " +
+			"tell the user how many were submitted and list any that failed.\n\n" +
 			"If the client cannot show the form, this tool says so: then ask the user in chat and call " +
 			"it again with user_confirmed=true only after their explicit yes.\n\n" +
 			"IMPORTANT: never invent a source name - it must be one returned by select_manual_source.",
