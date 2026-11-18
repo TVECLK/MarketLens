@@ -158,11 +158,15 @@ func TestShutdown_WithOpenSSEStream(t *testing.T) {
 				time.Sleep(10 * time.Millisecond)
 			}
 
-			callDone := make(chan error, 1)
+			type callOutcome struct {
+				res *mcp.CallToolResult
+				err error
+			}
+			callDone := make(chan callOutcome, 1)
 			if tt.toolDelay > 0 {
 				go func() {
-					_, err := session.CallTool(callCtx, &mcp.CallToolParams{Name: "slow"})
-					callDone <- err
+					res, err := session.CallTool(callCtx, &mcp.CallToolParams{Name: "slow"})
+					callDone <- callOutcome{res: res, err: err}
 				}()
 				select {
 				case <-toolStarted:
@@ -192,9 +196,24 @@ func TestShutdown_WithOpenSSEStream(t *testing.T) {
 
 			if tt.wantCallOK {
 				select {
-				case err := <-callDone:
-					if err != nil {
-						t.Errorf("the in-flight tool call failed: %v", err)
+				case outcome := <-callDone:
+					// CallTool returns a nil error for a tool that failed, with
+					// IsError set on the result, so the result is checked too.
+					switch {
+					case outcome.err != nil:
+						t.Errorf("the in-flight tool call failed: %v", outcome.err)
+					case outcome.res.IsError:
+						var text []string
+						for _, c := range outcome.res.Content {
+							if tc, ok := c.(*mcp.TextContent); ok {
+								text = append(text, tc.Text)
+							}
+						}
+						t.Errorf("the in-flight tool call returned an error result: %q", text)
+					default:
+						if !boolField(t, outcome.res, "done") {
+							t.Error("the in-flight tool call did not report done: true")
+						}
 					}
 				case <-time.After(3 * time.Second):
 					t.Error("the in-flight tool call never returned")
