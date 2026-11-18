@@ -253,9 +253,11 @@ def load_config(monkeypatch):
     """Returns a function that sets the alert environment and reloads config.py. The
     real environment is restored and config.py reloaded again after the test."""
 
-    def _load(enabled: str, port: str):
+    def _load(enabled: str = "true", port: str = "", **env: str):
         monkeypatch.setenv("ALERT_EMAILS_ENABLED", enabled)
         monkeypatch.setenv("SMTP_PORT", port)
+        for name, value in env.items():
+            monkeypatch.setenv(name, value)
         return importlib.reload(config)
 
     yield _load

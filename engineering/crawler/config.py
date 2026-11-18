@@ -17,6 +17,13 @@ THUNDER_RESOURCE = os.getenv("THUNDER_RESOURCE")
 THUNDER_VERIFY_TLS = os.getenv("THUNDER_INSECURE_TLS", "true").lower() != "true"
 
 
+def _getenv(name, default=None):
+    """The value without the whitespace around it, or `default` when nothing is left.
+    A value of only spaces is easy to leave behind in a .env file or a Kubernetes
+    Secret, and it would count as set."""
+    return (os.getenv(name) or "").strip() or default
+
+
 # Email alerts for failed crawlers
 def _parse_smtp_port(value):
     """None for an empty value. Raises for anything that is not a valid port."""
@@ -32,7 +39,7 @@ def _parse_smtp_port(value):
 
 
 ALERT_EMAILS_ENABLED = os.getenv("ALERT_EMAILS_ENABLED", "true").lower() == "true"
-SMTP_HOST = os.getenv("SMTP_HOST")
+SMTP_HOST = _getenv("SMTP_HOST")
 # How the connection to the SMTP server is secured: "starttls" (upgrade a plain
 # connection, usually port 587), "ssl" (TLS from the start, usually port 465) or
 # "none" (no encryption, only for a trusted relay or a test server)
@@ -41,15 +48,15 @@ SMTP_SECURITY = (os.getenv("SMTP_SECURITY") or "starttls").strip().lower()
 # when the alerts are enabled, so a wrong value cannot stop a crawler that does not
 # send any email
 SMTP_PORT = _parse_smtp_port(os.getenv("SMTP_PORT")) if ALERT_EMAILS_ENABLED else None
-SMTP_USERNAME = os.getenv("SMTP_USERNAME")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+SMTP_USERNAME = _getenv("SMTP_USERNAME")
+SMTP_PASSWORD = _getenv("SMTP_PASSWORD")
 # Left empty, the email is sent from SMTP_USERNAME
-ALERT_FROM_EMAIL = os.getenv("ALERT_FROM_EMAIL") or None
+ALERT_FROM_EMAIL = _getenv("ALERT_FROM_EMAIL")
 ALERT_RECIPIENTS = [
     email.strip()
     for email in os.getenv("ALERT_RECIPIENTS", "").split(",")
     if email.strip()
 ]
-APP_NAME = os.getenv("APP_NAME") or "Labour Market Analysis System"
+APP_NAME = _getenv("APP_NAME", "Labour Market Analysis System")
 # The page the "Open Data Sources Dashboard" button of the email opens
-DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://localhost:3000/data-sources")
+DASHBOARD_URL = _getenv("DASHBOARD_URL", "http://localhost:3000/data-sources")
