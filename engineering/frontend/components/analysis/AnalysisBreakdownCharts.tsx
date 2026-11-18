@@ -26,6 +26,7 @@ import {
   buildProvincePalette,
   type HierarchyAccent,
 } from "@/lib/chart-theme";
+import { YAxisTooltipTick } from "@/lib/chart-ticks";
 import SectionMessage from "@/components/analysis/SectionMessage";
 import type { AnalysisSectionErrors } from "@/types/analysis";
 import type { ChartDatum, ShareDatum } from "@/types/chart";
@@ -85,9 +86,8 @@ export default function AnalysisBreakdownCharts({
                 <YAxis
                   dataKey="name"
                   type="category"
-                  tick={{ fontSize: 10, fill: TICK_COLOR }}
+                  tick={(props) => <YAxisTooltipTick {...props} maxLength={30} fontSize={10} fill={TICK_COLOR} />}
                   width={230}
-                  tickFormatter={(v: string) => (v.length > 34 ? `${v.substring(0, 34)}…` : v)}
                 />
                 <Tooltip
                   contentStyle={CHART_TOOLTIP_STYLE}

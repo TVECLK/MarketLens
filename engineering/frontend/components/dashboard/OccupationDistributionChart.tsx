@@ -13,9 +13,8 @@ import {
   CHART_TOOLTIP_LABEL_STYLE,
   CHART_BAR_CURSOR,
 } from "@/lib/chart-theme";
+import { YAxisTooltipTick } from "@/lib/chart-ticks";
 import type { ChartDatum } from "@/types/chart";
-
-const MAX_LABEL_LENGTH = 22;
 
 interface OccupationDistributionChartProps {
   data: ChartDatum[];
@@ -87,11 +86,8 @@ export default function OccupationDistributionChart({
         <YAxis
           dataKey="name"
           type="category"
-          tick={{ fontSize: 10, fill: TICK_COLOR }}
-          width={90}
-          tickFormatter={(v) =>
-            v.length > MAX_LABEL_LENGTH ? `${v.substring(0, MAX_LABEL_LENGTH)}...` : v
-          }
+          tick={(props) => <YAxisTooltipTick {...props} maxLength={18} fontSize={10} fill={TICK_COLOR} />}
+          width={130}
         />
         <Tooltip
           contentStyle={CHART_TOOLTIP_STYLE}
