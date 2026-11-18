@@ -4,7 +4,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BACKEND_BASE_URL = os.getenv("BACKEND_URL", "http://backend:8080/api/v1/crawler")
+
+def _getenv(name, default=None):
+    """The value without the whitespace around it, or `default` when nothing is left.
+    A value of only spaces is easy to leave behind in a .env file or a Kubernetes
+    Secret, and it would count as set."""
+    return (os.getenv(name) or "").strip() or default
+
+
+BACKEND_BASE_URL = _getenv("BACKEND_URL", "http://backend:8080/api/v1/crawler")
 BATCH_SIZE = 10
 
 MAX_JOB_FAILURE_RATIO = float(os.getenv("MAX_JOB_FAILURE_RATIO") or "0.2")
@@ -15,13 +23,6 @@ THUNDER_CLIENT_ID = os.getenv("THUNDER_CLIENT_ID")
 THUNDER_CLIENT_SECRET = os.getenv("THUNDER_CLIENT_SECRET")
 THUNDER_RESOURCE = os.getenv("THUNDER_RESOURCE")
 THUNDER_VERIFY_TLS = os.getenv("THUNDER_INSECURE_TLS", "true").lower() != "true"
-
-
-def _getenv(name, default=None):
-    """The value without the whitespace around it, or `default` when nothing is left.
-    A value of only spaces is easy to leave behind in a .env file or a Kubernetes
-    Secret, and it would count as set."""
-    return (os.getenv(name) or "").strip() or default
 
 
 # Email alerts for failed crawlers
