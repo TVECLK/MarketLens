@@ -499,6 +499,41 @@ func TestUploadEnded(t *testing.T) {
 	}
 }
 
+func TestReconcileFailedNote(t *testing.T) {
+	tests := []struct {
+		name         string
+		workCtxEnded bool
+		want         []string // text the note must contain
+		wantAbsent   []string // text the note must not contain
+	}{
+		{
+			name:       "database error: no advice to resubmit",
+			want:       []string{"vacancies were saved", "closing stale vacancies failed"},
+			wantAbsent: []string{"ran out of time", "submit the same list again"},
+		},
+		{
+			name:         "budget ran out: resubmitting finishes the job",
+			workCtxEnded: true,
+			want:         []string{"vacancies were saved", "closing stale vacancies failed", "ran out of time", "submit the same list again"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			note := reconcileFailedNote(tt.workCtxEnded)
+			for _, w := range tt.want {
+				if !strings.Contains(note, w) {
+					t.Errorf("note %q does not contain %q", note, w)
+				}
+			}
+			for _, w := range tt.wantAbsent {
+				if strings.Contains(note, w) {
+					t.Errorf("note %q contains %q", note, w)
+				}
+			}
+		})
+	}
+}
+
 func TestFinalRunStatus(t *testing.T) {
 	tests := []struct {
 		name        string

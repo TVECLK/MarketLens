@@ -342,6 +342,19 @@ func uploadEnded(retryGaveUp, workCtxEnded bool, failures int) (interrupted, rec
 	return interrupted, reconcile
 }
 
+// reconcileFailedNote is the reconcile_note when closing the earlier
+// vacancies failed after every job was saved. workCtxEnded says the cause was
+// the budget running out (or the connection being lost) and not a database
+// error, in which case repeating the submission is the way to finish.
+func reconcileFailedNote(workCtxEnded bool) string {
+	note := "vacancies were saved, but closing stale vacancies failed"
+	if workCtxEnded {
+		note += " because the server ran out of time or the connection was lost; " +
+			"submit the same list again to finish closing them"
+	}
+	return note
+}
+
 // finalRunStatus is the status a manual submission's crawler run is closed
 // with. A run is COMPLETED only if the upload finished and at least one job
 // succeeded, saved or matched an existing duplicate. An interrupted upload,
@@ -588,10 +601,14 @@ func registerManualUploadTools(server *mcp.Server, shutdown context.Context, svc
 			return nil, out, nil
 		}
 
-		closed, err := svcs.JobPosts.ReconcileStaleVacancies(ctx, run.ID, []string{source.Name})
+		// Reconcile runs under the work context too, so a database lock cannot
+		// keep it going past the cutoff and use up the time reserved to close the
+		// run and answer. It is one transaction: if the budget cancels it, nothing
+		// is closed, and the jobs saved above are already committed.
+		closed, err := svcs.JobPosts.ReconcileStaleVacancies(workCtx, run.ID, []string{source.Name})
 		if err != nil {
 			log.Printf("reconcile after manual run %d failed: %v", run.ID, err)
-			out.ReconcileNote = "vacancies were saved, but closing stale vacancies failed"
+			out.ReconcileNote = reconcileFailedNote(workCtx.Err() != nil)
 		}
 		out.ReconciledStaleJobs = closed
 		return nil, out, nil
