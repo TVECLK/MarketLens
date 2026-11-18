@@ -47,7 +47,7 @@ func (c MCPConfig) Validate() error {
 	}
 
 	u, err := url.Parse(c.PublicBaseURL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
 		return fmt.Errorf("MCP_PUBLIC_BASE_URL must be an absolute http(s) URL such as https://mcp.example.com, got %q", c.PublicBaseURL)
 	}
 	if u.RawQuery != "" || u.Fragment != "" {
