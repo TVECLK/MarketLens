@@ -1,8 +1,11 @@
 package config
 
 import (
+	"fmt"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"marketlens-go-backend/internal/auth"
@@ -23,6 +26,37 @@ type DBConfig struct {
 type MCPConfig struct {
 	ResourceID    string
 	PublicBaseURL string
+}
+
+// Validate reports missing or malformed MCP settings. PublicBaseURL is put
+// into the WWW-Authenticate header that tells clients where to find the
+// resource metadata, so a wrong value sends every client to a URL that does
+// not exist and login fails with no clear cause. A path prefix is allowed
+// (a proxy may serve the MCP server under one); a trailing slash is not,
+// because the metadata path is appended to the value as it is.
+func (c MCPConfig) Validate() error {
+	var missing []string
+	if c.ResourceID == "" {
+		missing = append(missing, "MCP_RESOURCE_ID")
+	}
+	if c.PublicBaseURL == "" {
+		missing = append(missing, "MCP_PUBLIC_BASE_URL")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required environment variable(s): %s", strings.Join(missing, ", "))
+	}
+
+	u, err := url.Parse(c.PublicBaseURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("MCP_PUBLIC_BASE_URL must be an absolute http(s) URL such as https://mcp.example.com, got %q", c.PublicBaseURL)
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("MCP_PUBLIC_BASE_URL must not contain a query or fragment, got %q", c.PublicBaseURL)
+	}
+	if strings.HasSuffix(c.PublicBaseURL, "/") {
+		return fmt.Errorf("MCP_PUBLIC_BASE_URL must not end with a slash, got %q", c.PublicBaseURL)
+	}
+	return nil
 }
 
 // ServerConfig holds the HTTP server's own settings. GinModeEnv is the raw

@@ -24,6 +24,10 @@ func main() {
 	store := repositories.NewStore(db)
 	services := service.NewServices(store)
 
+	if err := cfg.MCP.Validate(); err != nil {
+		log.Fatalf("mcp misconfigured: %v", err)
+	}
+
 	mcpAuthCfg := auth.Config{
 		BaseURL:     cfg.Auth.BaseURL,
 		Issuer:      cfg.Auth.Issuer,
