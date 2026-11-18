@@ -45,7 +45,7 @@ export default function ChartCard({
         heightClassName,
       )}
     >
-      {headline && (
+      {headline && !isLoading && !isError && (
         <div className="mb-2 pb-3 md:mb-4 md:pb-4 border-b border-zinc-100">
           <p className="w-full md:w-2/3 text-xl md:text-2xl font-normal text-zinc-900 whitespace-pre-line leading-snug">{headline}</p>
         </div>

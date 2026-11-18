@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { SignedIn, SignedOut } from "@thunderid/nextjs";
+import { SignedOut } from "@thunderid/nextjs";
 import ChartCard from "@/components/shared/ChartCard";
 import { isEmptyChartData } from "@/lib/chart-data";
 import {
@@ -118,17 +118,21 @@ export default function VacancyTrendChart({
     </>
   );
 
+  const sharedProps = {
+    title: "Vacancy Trend",
+    subtitle,
+    isLoading,
+    isError,
+    isEmpty: isEmptyChartData(data, (point) => point.open_job_count),
+    loadingLabel: "Loading trend data...",
+  };
+
   return (
-    <>
-      <SignedIn>
+    <SignedOut
+      fallback={
         <ChartCard
-          title="Vacancy Trend"
-          subtitle={subtitle}
+          {...sharedProps}
           heightClassName="h-[320px] md:h-[420px]"
-          isLoading={isLoading}
-          isError={isError}
-          isEmpty={isEmptyChartData(data, (point) => point.open_job_count)}
-          loadingLabel="Loading trend data..."
           headerRight={
             <div className="text-right">
               <p className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
@@ -142,21 +146,15 @@ export default function VacancyTrendChart({
         >
           {chartBody(data)}
         </ChartCard>
-      </SignedIn>
-      <SignedOut>
-        <ChartCard
-          title="Vacancy Trend"
-          subtitle={subtitle}
-          heightClassName="h-[460px] md:h-[520px]"
-          isLoading={isLoading}
-          isError={isError}
-          isEmpty={isEmptyChartData(data, (point) => point.open_job_count)}
-          loadingLabel="Loading trend data..."
-          headline={publicTitle}
-        >
-          {chartBody(data)}
-        </ChartCard>
-      </SignedOut>
-    </>
+      }
+    >
+      <ChartCard
+        {...sharedProps}
+        heightClassName="h-[460px] md:h-[520px]"
+        headline={publicTitle}
+      >
+        {chartBody(data)}
+      </ChartCard>
+    </SignedOut>
   );
 }
