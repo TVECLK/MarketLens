@@ -66,7 +66,7 @@ export default function DateRangePicker({
             min={toISODate(minDate)}
             max={toDate}
             onChange={(e) => onFromDateChange(e.target.value)}
-            className="bg-transparent text-xs font-bold text-zinc-700 outline-none [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+            className="bg-transparent text-xs font-bold text-zinc-700 outline-none [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:rounded [&::-webkit-calendar-picker-indicator]:p-0.5 [&::-webkit-calendar-picker-indicator]:hover:bg-zinc-300 [&::-webkit-calendar-picker-indicator]:active:bg-zinc-400 [&::-webkit-calendar-picker-indicator]:transition-colors"
           />
         </div>
 
@@ -84,7 +84,7 @@ export default function DateRangePicker({
             min={fromDate}
             max={toISODate(maxDate)}
             onChange={(e) => onToDateChange(e.target.value)}
-            className="bg-transparent text-xs font-bold text-zinc-700 outline-none [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+            className="bg-transparent text-xs font-bold text-zinc-700 outline-none [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:rounded [&::-webkit-calendar-picker-indicator]:p-0.5 [&::-webkit-calendar-picker-indicator]:hover:bg-zinc-300 [&::-webkit-calendar-picker-indicator]:active:bg-zinc-400 [&::-webkit-calendar-picker-indicator]:transition-colors"
           />
         </div>
       </div>
