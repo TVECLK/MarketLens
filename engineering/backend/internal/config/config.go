@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -46,9 +47,15 @@ func (c MCPConfig) Validate() error {
 		return fmt.Errorf("missing required environment variable(s): %s", strings.Join(missing, ", "))
 	}
 
+	// None of the errors below repeat the value. It is published to every
+	// client in the WWW-Authenticate header, so it may carry credentials
+	// (user:password@host) that must not also end up in a startup log.
 	u, err := url.Parse(c.PublicBaseURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
-		return fmt.Errorf("MCP_PUBLIC_BASE_URL must be an absolute http(s) URL such as https://mcp.example.com, got %q", c.PublicBaseURL)
+		return errors.New("MCP_PUBLIC_BASE_URL must be an absolute http(s) URL such as https://mcp.example.com")
+	}
+	if u.User != nil {
+		return errors.New("MCP_PUBLIC_BASE_URL must not contain a username or password: the value is published to every client")
 	}
 	// Look for the literal delimiters, not u.RawQuery / u.Fragment: url.Parse
 	// keeps a lone "?" as an empty query and drops a lone "#" altogether, so
@@ -57,10 +64,19 @@ func (c MCPConfig) Validate() error {
 	// the wrong path. Percent-encoded characters in a path prefix (%3F) are
 	// still fine, because they contain no literal "?" or "#".
 	if strings.ContainsAny(c.PublicBaseURL, "?#") {
-		return fmt.Errorf("MCP_PUBLIC_BASE_URL must not contain a query or fragment, got %q", c.PublicBaseURL)
+		return errors.New("MCP_PUBLIC_BASE_URL must not contain a query or fragment")
 	}
 	if strings.HasSuffix(c.PublicBaseURL, "/") {
-		return fmt.Errorf("MCP_PUBLIC_BASE_URL must not end with a slash, got %q", c.PublicBaseURL)
+		return errors.New("MCP_PUBLIC_BASE_URL must not end with a slash")
+	}
+	// The value is written inside a quoted parameter of the WWW-Authenticate
+	// header, so a literal quote, backslash or space in the path would break
+	// the header. url.Parse accepts all of them. Requiring the value to survive
+	// a parse and re-serialise unchanged rejects them, and also non-ASCII
+	// characters and an uppercase scheme, while keeping valid prefixes such as
+	// /team%22west (the encoded form of a quote).
+	if u.String() != c.PublicBaseURL {
+		return errors.New("MCP_PUBLIC_BASE_URL must be in canonical form: a lowercase http or https scheme, and special characters such as quotes, spaces and non-ASCII letters percent-encoded (for example %22 for a quote)")
 	}
 	return nil
 }
