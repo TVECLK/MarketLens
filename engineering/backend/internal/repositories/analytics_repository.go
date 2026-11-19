@@ -706,20 +706,13 @@ func (r *Store) GetTotalVacancyCount(ctx context.Context, fromDate, toDate time.
 func (r *Store) GetDashboardCardData(ctx context.Context) (models.DashboardCardData, error) {
 	var data models.DashboardCardData
 
-	if err := r.db.WithContext(ctx).Table("source").
-		Count(&data.SourceCount).Error; err != nil {
-		return models.DashboardCardData{}, fmt.Errorf("failed to count sources: %w", err)
-	}
-
-	if err := r.db.WithContext(ctx).Table("job_post").
-		Select("COALESCE(SUM(no_of_vacancies), 0)").
-		Scan(&data.TotalJobCount).Error; err != nil {
-		return models.DashboardCardData{}, fmt.Errorf("failed to query all-time total job count: %w", err)
-	}
-
-	if err := r.db.WithContext(ctx).Table("industry_sector").
-		Count(&data.IndustryCount).Error; err != nil {
-		return models.DashboardCardData{}, fmt.Errorf("failed to count industry sectors: %w", err)
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT (SELECT COUNT(*) FROM source) AS source_count,
+		       (SELECT COALESCE(SUM(no_of_vacancies), 0) FROM job_post) AS all_time_vacancy_count,
+		       (SELECT COUNT(*) FROM industry_sector) AS industry_count
+	`).Scan(&data).Error
+	if err != nil {
+		return models.DashboardCardData{}, fmt.Errorf("failed to query dashboard card data: %w", err)
 	}
 
 	return data, nil
