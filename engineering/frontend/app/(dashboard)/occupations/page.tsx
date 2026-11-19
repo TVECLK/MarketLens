@@ -179,7 +179,7 @@ export default function OccupationAnalysisPage() {
         emptyLabel="No occupation groups available."
         prunedNotice={prunedNotice}
         referenceUrl="https://www.statistics.gov.lk/Resource/en/LabourForce/IntenationalStandardClassificationOccupation-ISCO-88.pdf"
-        referenceLinkTooltip="Sri Lanka Standard Classification of Occupations (SLSCO) - click to view source document"
+        referenceLinkTooltip="Click here to view Sri Lanka Standard Classification of Occupations (SLSCO)"
         referenceLinkHoverColor="hover:text-indigo-600"
         onSelect={handleSelect}
         onAddLevel={handleAddLevel}

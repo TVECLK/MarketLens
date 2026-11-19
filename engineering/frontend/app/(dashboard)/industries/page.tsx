@@ -135,7 +135,7 @@ export default function IndustryAnalysisPage() {
         emptyLabel="No industry sectors available."
         prunedNotice={prunedNotice}
         referenceUrl="https://www.statistics.gov.lk/Resource/en/LabourForce/SriLankaStandardClassificationIndustryRevision-3.pdf"
-        referenceLinkTooltip="Sri Lanka Standard Classification of Industries (SLSIC) - click to view source document"
+        referenceLinkTooltip="Click here to view source document Sri Lanka Standard Classification of Industries (SLSIC)"
         onSelect={handleSelect}
         onAddLevel={handleAddLevel}
         onRemoveLevel={handleRemoveLevel}
