@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-bg: #1e1e2e;
   --color-sidebar-hover: #2a2a3e;
   --color-primary-500: #6366f1;

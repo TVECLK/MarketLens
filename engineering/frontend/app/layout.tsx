@@ -9,7 +9,7 @@ import { hasServerPermission } from "@/lib/server-permissions";
 
 export const dynamic = "force-dynamic";
 
-const inter = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
+const inter = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-poppins" });
 
 export const metadata: Metadata = {
   title: "Labour Market Analysis System",
@@ -29,12 +29,14 @@ export default async function RootLayout({
   };
 
   return (
-    <html lang="en">
+    <html lang="en" className={inter.variable}>
       <body className={inter.className}>
         <ThunderIDProvider
           clientId={process.env.NEXT_PUBLIC_THUNDERID_CLIENT_ID}
           baseUrl={process.env.NEXT_PUBLIC_THUNDERID_BASE_URL}
           scopes={scopeString}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          endpoints={{ issuer: "https://thunder:8090" } as any}
         >
           {/* Wrap your entire application structure with the query cache context provider */}
           <QueryProvider>
