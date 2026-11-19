@@ -41,6 +41,7 @@ func RegisterRoutes(r *gin.Engine, h *Handler, verifier *auth.Verifier) {
 		// Dashboard endpoints
 		v1.GET("/vacancy-trend", h.GetVacancyTrendHandler)
 		v1.GET("/total-vacancy", h.GetTotalVacancyCountHandler)
+		v1.GET("/dashboard-card-data", h.GetDashboardCardDataHandler)
 		v1.GET("/analytics/:standard/vacancy-summary", h.GetJobCountByDateRangeHandler)
 		v1.GET("/:standard/:level/:id/total-job-count", h.GetTotalJobCountByLevelHandler)
 		v1.GET("/:standard/:level/:id/children", h.GetLevelChildrenHandler)

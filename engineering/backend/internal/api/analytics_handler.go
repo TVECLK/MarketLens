@@ -515,6 +515,18 @@ func (h *Handler) GetTotalVacancyCountHandler(c *gin.Context) {
 	})
 }
 
+// This function returns all-time dashboard card numbers (source count, total job
+// count, industry sector count), independent of any date range
+func (h *Handler) GetDashboardCardDataHandler(c *gin.Context) {
+	data, err := h.Analytics.GetDashboardCardData(c.Request.Context())
+	if err != nil {
+		respondRepoError(c, "Failed to retrieve dashboard card data", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}
+
 type vacancyTrendResponse struct {
 	FromDate    string                     `json:"from_date"`
 	ToDate      string                     `json:"to_date"`

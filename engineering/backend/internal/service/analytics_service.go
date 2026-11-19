@@ -169,6 +169,10 @@ func (s *AnalyticsService) GetTotalVacancyCount(ctx context.Context, fromDate, t
 	return s.store.GetTotalVacancyCount(ctx, fromDate, toDate)
 }
 
+func (s *AnalyticsService) GetDashboardCardData(ctx context.Context) (models.DashboardCardData, error) {
+	return s.store.GetDashboardCardData(ctx)
+}
+
 const vacancyTrendDailyThresholdDays = 60
 
 func (s *AnalyticsService) GetVacancyTrend(ctx context.Context, fromDate, toDate time.Time) ([]models.VacancyTrendPoint, string, error) {
