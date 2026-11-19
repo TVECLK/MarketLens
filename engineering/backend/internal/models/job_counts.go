@@ -93,3 +93,10 @@ type VocationalEducationJobCount struct {
 	Level        string `json:"level"`
 	OpenJobCount int64  `json:"open_job_count"`
 }
+
+// DashboardCardData holds the all-time headline numbers for the dashboard cards.
+type DashboardCardData struct {
+	SourceCount   int64 `json:"source_count"`
+	TotalJobCount int64 `json:"total_job_count"`
+	IndustryCount int64 `json:"industry_count"`
+}

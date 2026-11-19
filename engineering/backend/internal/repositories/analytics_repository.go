@@ -700,6 +700,31 @@ func (r *Store) GetTotalVacancyCount(ctx context.Context, fromDate, toDate time.
 	return total, nil
 }
 
+// This function returns all-time dashboard card numbers: the number of sources,
+// the total vacancy count across every job post (no date range), and the
+// number of industry sectors.
+func (r *Store) GetDashboardCardData(ctx context.Context) (models.DashboardCardData, error) {
+	var data models.DashboardCardData
+
+	if err := r.db.WithContext(ctx).Table("source").
+		Count(&data.SourceCount).Error; err != nil {
+		return models.DashboardCardData{}, fmt.Errorf("failed to count sources: %w", err)
+	}
+
+	if err := r.db.WithContext(ctx).Table("job_post").
+		Select("COALESCE(SUM(no_of_vacancies), 0)").
+		Scan(&data.TotalJobCount).Error; err != nil {
+		return models.DashboardCardData{}, fmt.Errorf("failed to query all-time total job count: %w", err)
+	}
+
+	if err := r.db.WithContext(ctx).Table("industry_sector").
+		Count(&data.IndustryCount).Error; err != nil {
+		return models.DashboardCardData{}, fmt.Errorf("failed to count industry sectors: %w", err)
+	}
+
+	return data, nil
+}
+
 // Get vacancy trend for a selected date range
 // This function returns job counts grouped day by day within the given date range
 func (r *Store) GetVacancyTrendDaily(ctx context.Context, fromDate, toDate time.Time) ([]models.VacancyTrendPoint, error) {
