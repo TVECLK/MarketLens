@@ -33,7 +33,7 @@ const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 // Animates a number from 0 to `target` over `duration` ms and returns the
 // formatted display string on every frame.
 export function useCountUp(target: number, duration = 1000): string {
-  const [display, setDisplay] = useState("0");
+  const [display, setDisplay] = useState(() => formatStat(0, target));
 
   // Holds the rAF id so we can cancel the loop on cleanup or when target changes
   const rafRef = useRef<number | null>(null);
@@ -43,7 +43,7 @@ export function useCountUp(target: number, duration = 1000): string {
   const startTime = useRef<number | null>(null);
 
   useEffect(() => {
-    if (target === 0) { setDisplay("0"); return; }
+    if (target === 0) return;
 
     // Reset start time so a new animation begins fresh each time target changes
     startTime.current = null;
