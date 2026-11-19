@@ -89,7 +89,7 @@ export default function OccupationDistributionChart({
           type="category"
           tick={(props) => <YAxisTooltipTick {...props} maxLength={18} fontSize={10} fill={TICK_COLOR} />}
           width={130}
-          label={{ value: "Occupation Type", angle: -90, position: "insideLeft", dx: -22, fontSize: 11, fill: TICK_COLOR }}
+          label={{ value: "Occupation", angle: -90, position: "insideLeft", dx: -22, fontSize: 11, fill: TICK_COLOR }}
         />
         <Tooltip
           contentStyle={CHART_TOOLTIP_STYLE}
