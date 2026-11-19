@@ -617,16 +617,32 @@ func (r *Store) GetTotalJobCountByLevel(ctx context.Context, standard, level str
 type hierarchyChain struct {
 	rootTable string
 	joins     []string
-	leafJoin  string
+	// leafTable is the bottom of the chain; meta_data.<leafFKColumn> points at it.
+	leafTable    string
+	leafFKColumn string
 }
 
 // jobCountByRoot groups vacancy counts by a hierarchy's root level, for jobs
 // posted within the given date range.
+//
+// It aggregates first: vacancies are summed per leaf node in one pass over the
+// date-filtered meta_data/job_post rows, and only that small per-leaf result
+// is joined up the taxonomy to the root. Joining the whole taxonomy down to
+// meta_data before grouping made Postgres probe meta_data per leaf node and
+// was several times slower.
 func (r *Store) jobCountByRoot(ctx context.Context, h hierarchyChain, fromDate, toDate time.Time, dest any) error {
 	toDateExclusive := exclusiveUpperBound(toDate)
+	db := r.db.WithContext(ctx)
 
-	query := r.db.WithContext(ctx).Table(h.rootTable).
-		Select(fmt.Sprintf("%s.id, %s.name, COALESCE(SUM(job_post.no_of_vacancies), 0) AS open_job_count", h.rootTable, h.rootTable)).
+	leafCounts := db.Table("meta_data").
+		Select(fmt.Sprintf("meta_data.%s AS leaf_id, SUM(job_post.no_of_vacancies) AS vacancies", h.leafFKColumn)).
+		Joins("JOIN job_post ON job_post.id = meta_data.job_post_id").
+		Where("meta_data.posted_at >= ? AND meta_data.posted_at < ?", fromDate, toDateExclusive).
+		Where(fmt.Sprintf("meta_data.%s IS NOT NULL", h.leafFKColumn)).
+		Group("meta_data." + h.leafFKColumn)
+
+	query := db.Table(h.rootTable).
+		Select(fmt.Sprintf("%s.id, %s.name, COALESCE(SUM(leaf_counts.vacancies), 0) AS open_job_count", h.rootTable, h.rootTable)).
 		Where(h.rootTable+".created_at < ?", toDateExclusive).
 		Where(h.rootTable+".deleted_at IS NULL OR "+h.rootTable+".deleted_at >= ?", fromDate)
 
@@ -635,8 +651,7 @@ func (r *Store) jobCountByRoot(ctx context.Context, h hierarchyChain, fromDate, 
 	}
 
 	return query.
-		Joins("LEFT JOIN meta_data ON "+h.leafJoin+" AND meta_data.posted_at >= ? AND meta_data.posted_at < ?", fromDate, toDateExclusive).
-		Joins("LEFT JOIN job_post ON job_post.id = meta_data.job_post_id").
+		Joins("LEFT JOIN (?) AS leaf_counts ON leaf_counts.leaf_id = "+h.leafTable+".id", leafCounts).
 		Group(h.rootTable + ".id, " + h.rootTable + ".name").
 		Order("open_job_count DESC, " + h.rootTable + ".id ASC").
 		Scan(dest).Error
@@ -657,7 +672,8 @@ func (r *Store) GetJobCountByStandardDateRange(ctx context.Context, standard str
 				"LEFT JOIN unit_group ON unit_group.minor_group_id = minor_group.id",
 				"LEFT JOIN occupation_group ON occupation_group.unit_group_id = unit_group.id",
 			},
-			leafJoin: "meta_data.occupation_group_id = occupation_group.id",
+			leafTable:    "occupation_group",
+			leafFKColumn: "occupation_group_id",
 		}
 	case "industry":
 		h = hierarchyChain{
@@ -668,7 +684,8 @@ func (r *Store) GetJobCountByStandardDateRange(ctx context.Context, standard str
 				"LEFT JOIN industry_class ON industry_class.industry_group_id = industry_group.id",
 				"LEFT JOIN industry_subclass ON industry_subclass.industry_class_id = industry_class.id",
 			},
-			leafJoin: "meta_data.industry_subclass_id = industry_subclass.id",
+			leafTable:    "industry_subclass",
+			leafFKColumn: "industry_subclass_id",
 		}
 	default:
 		return nil, fmt.Errorf("invalid standard '%s', must be 'occupation' or 'industry'", standard)
