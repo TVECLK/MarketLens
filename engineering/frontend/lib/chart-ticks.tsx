@@ -79,7 +79,7 @@ export function XAxisStraightTooltipTick({ x = 0, y = 0, payload, maxLength, fon
 }
 
 /** XAxis tick — splits label into two lines at the nearest space to the midpoint, rotated -45°. */
-export function XAxisWrappedTick({ x = 0, y = 0, payload, fontSize = 9, fill = "#a1a1aa" }: Omit<TickProps, "maxLength"> & { maxLength?: number }) {
+export function XAxisWrappedTick({ x = 0, y = 0, payload, fontSize = 9, fill = "#a1a1aa" }: TickProps) {
   const full = payload?.value ?? "";
   const mid = Math.floor(full.length / 2);
   // find the space closest to the middle
