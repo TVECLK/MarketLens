@@ -7,13 +7,14 @@ interface TickProps {
   x?: number | string;
   y?: number | string;
   payload?: { value: string };
-  maxLength: number;
+  maxLength?: number;
   fontSize?: number;
   fill?: string;
   [key: string]: unknown;
 }
 
-function truncate(value: string, maxLength: number) {
+function truncate(value: string, maxLength: number | undefined) {
+  if (maxLength === undefined) return value;
   return value.length > maxLength ? `${value.substring(0, maxLength)}…` : value;
 }
 
