@@ -79,13 +79,19 @@ export default function SkillAnalysisPanel({
                 style={{ height: Math.max(topSkills.length * 32 + 40, 200) }}
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topSkills} layout="vertical" margin={{ left: 20, right: 20 }}>
-                    <XAxis type="number" tick={{ fontSize: 10, fill: TICK_COLOR }} />
+                  <BarChart data={topSkills} layout="vertical" margin={{ left: 20, right: 20, bottom: 20 }}>
+                    <XAxis
+                      type="number"
+                      tick={{ fontSize: 10, fill: TICK_COLOR }}
+                      allowDecimals={false}
+                      label={{ value: "No. of Vacancies", position: "insideBottom", offset: -10, fontSize: 11, fill: TICK_COLOR }}
+                    />
                     <YAxis
                       dataKey="name"
                       type="category"
                       tick={{ fontSize: 10, fill: TICK_COLOR }}
                       width={150}
+                      label={{ value: "Skill", angle: -90, position: "insideLeft", dx: 25, fontSize: 11, fill: TICK_COLOR }}
                     />
                     <Tooltip
                       contentStyle={CHART_TOOLTIP_STYLE}
