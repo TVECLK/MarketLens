@@ -111,13 +111,13 @@ export default function VacancyTrendChart({
         : "Vacancy counts";
 
   const total = isLoading ? "…" : totalVacancies === undefined ? "—" : totalVacancies.toLocaleString();
-  const publicTitle = (
+  const publicTitle = fromDate && toDate && totalVacancies !== undefined ? (
     <>
       Sri Lanka saw{" "}
       <span className="bg-violet-200 text-purple-950 font-semibold px-1">{total} job vacancies</span>
       {" "}between {formatDate(fromDate)} and {formatDate(toDate)} listed on tracked job platforms.
     </>
-  );
+  ) : undefined;
 
   const sharedProps = {
     title: "Vacancy Trend",
