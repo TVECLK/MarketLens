@@ -3,6 +3,7 @@ import logging
 import sys
 
 from utils.crawler_run_manager import CrawlerManager
+from utils.email_alert import EmailAlertService
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -13,11 +14,14 @@ logger = logging.getLogger(__name__)
 async def crawl_job():
     logger.info("\n--- Crawling Started ---")
 
+    alert_service = EmailAlertService()
+
     try:
-        manager = CrawlerManager()
+        manager = CrawlerManager(alert_service)
         succeeded_sources = await manager.run_all_crawlers(concurrent=True)
-    except Exception:
+    except Exception as e:
         logger.exception("CRITICAL ERROR encountered during execution lifecycle")
+        await alert_service.send_crash_alert(e)
         sys.exit(1)
 
     # No active source is not a failure, there was just nothing to crawl

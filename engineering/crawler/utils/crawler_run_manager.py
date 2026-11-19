@@ -8,6 +8,7 @@ from config import BACKEND_BASE_URL
 
 from crawlers import BaseJobCrawler, CrawlResult
 from crawlers.registry import CRAWLER_REGISTRY
+from .email_alert import EmailAlertService, FailedCrawler, describe_error
 from .thunder_id_client import ThunderAuth, ThunderIDClient
 
 logger = logging.getLogger(__name__)
@@ -16,8 +17,12 @@ HTTP_CLIENT_TIMEOUT_SECONDS = 300.0
 
 
 class CrawlerManager:
-    def __init__(self):
+    def __init__(self, alert_service: EmailAlertService):
+        self._alert_service = alert_service
         self._registry: Dict[str, Type[BaseJobCrawler]] = {}
+        self._failure_reasons: Dict[str, str] = {}
+        # The active sources of the last fetch that have no crawler written
+        self._sources_without_crawler: List[str] = []
         self._thunder_client = ThunderIDClient()
         self._thunder_auth = ThunderAuth(self._thunder_client)
 
@@ -36,7 +41,8 @@ class CrawlerManager:
             source["name"].strip().lower() for source in response.json()["sources"]
         }
 
-        for name in sorted(active_names - CRAWLER_REGISTRY.keys()):
+        self._sources_without_crawler = sorted(active_names - CRAWLER_REGISTRY.keys())
+        for name in self._sources_without_crawler:
             logger.warning(f"Crawler: Active source '{name}' has no crawler, skipping.")
         for name in sorted(CRAWLER_REGISTRY.keys() - active_names):
             logger.info(f"Crawler: Source '{name}' is not active, skipping.")
@@ -153,6 +159,7 @@ class CrawlerManager:
         crawler_class = self._registry.get(name)
         if not crawler_class:
             logger.warning(f"Crawler '{name}' not found in registry.")
+            self._failure_reasons[name] = "No crawler found for this source"
             return None
 
         try:
@@ -170,6 +177,9 @@ class CrawlerManager:
                     f"Crawler '{name}' returned {type(result).__name__} instead of a "
                     "CrawlResult, treating it as failed."
                 )
+                self._failure_reasons[name] = (
+                    "Crawler finished without reporting a result"
+                )
                 return None
             logger.info(
                 f"--- Finished crawler: {name} ({result.jobs_attempted} jobs attempted, "
@@ -178,6 +188,7 @@ class CrawlerManager:
             return result.source_name
         except Exception as e:
             logger.error(f"Crawler '{name}' failed: {e}", exc_info=True)
+            self._failure_reasons[name] = describe_error(e)
             return None
 
     # This function runs the crawlers of the active sources: it fetches them from the
@@ -188,11 +199,19 @@ class CrawlerManager:
         async with httpx.AsyncClient(timeout=HTTP_CLIENT_TIMEOUT_SECONDS) as client:
             # Fetched before the run starts, so a failure leaves no half-created run
             self._registry = await self.fetch_active_crawlers(client)
+
+            # Such sources are never crawled, so the users are told even when there
+            # is nothing else to crawl
+            await self._alert_service.send_missing_crawlers_alert(
+                self._sources_without_crawler
+            )
+
             if not self._registry:
                 logger.warning("Crawler: No active sources, nothing to crawl.")
                 return None
 
             crawler_run_id = await self._start_run(client)
+            self._failure_reasons = {}
 
             tasks = [
                 self._run_crawler(name, crawler_run_id, client)
@@ -206,6 +225,25 @@ class CrawlerManager:
 
             succeeded_sources = [r for r in results if isinstance(r, str)]
 
-            await self._finalize_run(client, crawler_run_id, succeeded_sources)
+            # The active crawlers that did not succeed. The email is only sent when
+            # there is at least one
+            failed_crawlers = [
+                FailedCrawler(
+                    name, self._failure_reasons.get(name, "Crawler did not succeed")
+                )
+                for name in self._registry
+                if name not in succeeded_sources
+            ]
+
+            # The email is sent even if finalizing fails, so the admins still learn
+            # which crawlers failed. Sending never raises, so a failure of
+            # _finalize_run still reaches the caller.
+            try:
+                await self._finalize_run(client, crawler_run_id, succeeded_sources)
+            finally:
+                await self._alert_service.send_failure_alert(
+                    failed_crawlers, crawler_run_id
+                )
+
             logger.info("Scraper execution pipeline concluded.")
             return succeeded_sources

@@ -1,11 +1,14 @@
+import importlib
 from collections import namedtuple
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 
+import config
 from utils import ThunderIDClient
 from utils.crawler_run_manager import CrawlerManager
+from utils.email_alert import EmailAlertService
 from crawlers import BaseJobCrawler
 from parsers import BaseJobParser
 from fake_sources import SOURCE_A, SOURCE_B, SOURCE_C
@@ -108,10 +111,17 @@ def crawlers(make_crawler_class):
 
 
 @pytest.fixture
-def manager(backend_url, crawlers):
+def alert_service():
+    """A stand-in for the EmailAlertService the manager is given, so no test sends
+    an email."""
+    return AsyncMock(spec=EmailAlertService)
+
+
+@pytest.fixture
+def manager(backend_url, crawlers, alert_service):
     """A CrawlerManager that has `crawlers` as its registry, and whose backend
     reports them as the active ones."""
-    manager = CrawlerManager()
+    manager = CrawlerManager(alert_service)
     manager._registry = crawlers
     manager.fetch_active_crawlers = AsyncMock(return_value=crawlers)
     return manager
@@ -147,3 +157,110 @@ def make_client(backend_url):
         return client
 
     return _make
+
+
+# ---------- Email alerts ----------
+
+
+@pytest.fixture
+def smtp(monkeypatch):
+    """Replaces the SMTP connection. Returns the fake server."""
+    server = MagicMock()
+    server.__enter__.return_value = server
+    # Like the real send_message: no recipient was refused
+    server.send_message.return_value = {}
+    monkeypatch.setattr(
+        "utils.email_alert.smtplib.SMTP", MagicMock(return_value=server)
+    )
+    monkeypatch.setattr(
+        "utils.email_alert.smtplib.SMTP_SSL", MagicMock(return_value=server)
+    )
+    return server
+
+
+# The config.py setting each EmailAlertService setting comes from
+_EMAIL_SETTINGS = {
+    "enabled": "ALERT_EMAILS_ENABLED",
+    "smtp_host": "SMTP_HOST",
+    "smtp_port": "SMTP_PORT",
+    "smtp_security": "SMTP_SECURITY",
+    "smtp_username": "SMTP_USERNAME",
+    "smtp_password": "SMTP_PASSWORD",
+    "from_email": "ALERT_FROM_EMAIL",
+    "recipients": "ALERT_RECIPIENTS",
+    "dashboard_url": "DASHBOARD_URL",
+    "app_name": "APP_NAME",
+}
+
+
+@pytest.fixture
+def make_service(monkeypatch):
+    """Returns a factory for an EmailAlertService with test settings. The service
+    reads config.py, so the settings are set there, and any can be overridden."""
+
+    def _make(**overrides):
+        settings = dict(
+            enabled=True,
+            smtp_host="smtp.test",
+            smtp_port=587,
+            smtp_security="starttls",
+            smtp_username="bot@test.lk",
+            smtp_password="secret",
+            from_email="bot@test.lk",
+            recipients=["a@test.lk", "b@test.lk"],
+            dashboard_url="http://app.test/data-sources",
+            app_name="Test App",
+        )
+        settings.update(overrides)
+        for name, value in settings.items():
+            monkeypatch.setattr(f"utils.email_alert.{_EMAIL_SETTINGS[name]}", value)
+        return EmailAlertService()
+
+    return _make
+
+
+@pytest.fixture
+def service(make_service):
+    return make_service()
+
+
+# ---------- Crawler run manager (real fetch_active_crawlers) ----------
+
+
+# The `manager` fixture mocks fetch_active_crawlers, so these use the real method,
+# with `crawlers` as the crawlers that exist (the registry of all crawlers)
+@pytest.fixture
+def real_manager(backend_url, crawlers, alert_service, monkeypatch):
+    monkeypatch.setattr("utils.crawler_run_manager.CRAWLER_REGISTRY", crawlers)
+    return CrawlerManager(alert_service)
+
+
+# ---------- Crawl failure thresholds ----------
+
+
+@pytest.fixture
+def limits(monkeypatch):
+    """Pin the thresholds so the tests don't depend on the configured values."""
+    monkeypatch.setattr("crawlers.base_crawler.MAX_JOB_FAILURE_RATIO", 0.2)
+    monkeypatch.setattr("crawlers.base_crawler.MIN_JOBS_FOR_FAILURE", 20)
+
+
+# ---------- config.py ----------
+
+
+@pytest.fixture
+def load_config(monkeypatch):
+    """Returns a function that sets the alert environment and reloads config.py. The
+    real environment is restored and config.py reloaded again after the test."""
+
+    def _load(enabled: str = "true", port: str = "", **env: str):
+        monkeypatch.setenv("ALERT_EMAILS_ENABLED", enabled)
+        monkeypatch.setenv("SMTP_PORT", port)
+        for name, value in env.items():
+            monkeypatch.setenv(name, value)
+        return importlib.reload(config)
+
+    yield _load
+
+    monkeypatch.undo()
+    importlib.reload(config)
