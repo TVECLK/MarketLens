@@ -51,7 +51,10 @@ SMTP_SECURITY = (os.getenv("SMTP_SECURITY") or "starttls").strip().lower()
 # send any email
 SMTP_PORT = _parse_smtp_port(os.getenv("SMTP_PORT")) if ALERT_EMAILS_ENABLED else None
 SMTP_USERNAME = _getenv("SMTP_USERNAME")
-SMTP_PASSWORD = _getenv("SMTP_PASSWORD")
+# Unlike the other settings it is not stripped: every character of a password counts,
+# so only a value of nothing but whitespace is treated as not set
+_smtp_password = os.getenv("SMTP_PASSWORD")
+SMTP_PASSWORD = _smtp_password if _smtp_password and _smtp_password.strip() else None
 # Left empty, the email is sent from SMTP_USERNAME
 ALERT_FROM_EMAIL = _getenv("ALERT_FROM_EMAIL")
 ALERT_RECIPIENTS = [

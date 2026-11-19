@@ -43,14 +43,16 @@ def test_whitespace_around_a_setting_is_removed(load_config):
     loaded = load_config(
         SMTP_HOST=" smtp.test ",
         SMTP_USERNAME=" bot@test.lk\n",
-        SMTP_PASSWORD="secret \n",
         ALERT_FROM_EMAIL="  alerts@test.lk ",
     )
 
     assert loaded.SMTP_HOST == "smtp.test"
     assert loaded.SMTP_USERNAME == "bot@test.lk"
-    assert loaded.SMTP_PASSWORD == "secret"
     assert loaded.ALERT_FROM_EMAIL == "alerts@test.lk"
+
+
+def test_a_password_is_kept_exactly_as_written(load_config):
+    assert load_config(SMTP_PASSWORD=" secret \n").SMTP_PASSWORD == " secret \n"
 
 
 def test_the_name_and_the_dashboard_url_fall_back_when_they_are_blank(load_config):
