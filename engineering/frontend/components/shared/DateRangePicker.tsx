@@ -52,7 +52,7 @@ export default function DateRangePicker({
           <div className="flex flex-col items-center justify-center gap-0.5 border-l-2 border-indigo-300 px-8">
             <p className="text-2xl font-semibold text-gray-700 leading-none">200k+</p>
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-              Total Jobs <InfoTooltip text="Total job vacancies collected across all sources" className="text-zinc-400 hover:text-zinc-600" />
+              <span>Total Vacancies</span> <InfoTooltip text="Total job vacancies collected across all sources all time" className="text-zinc-400 hover:text-zinc-600" />
             </p>
           </div>
           <div className="flex flex-col items-center justify-center gap-0.5 border-l-2 border-indigo-300 pl-8">
