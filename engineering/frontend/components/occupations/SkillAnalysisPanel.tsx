@@ -90,9 +90,9 @@ export default function SkillAnalysisPanel({
                     <YAxis
                       dataKey="name"
                       type="category"
-                      tick={(props) => <YAxisTooltipTick {...props} maxLength={20} fontSize={10} fill={TICK_COLOR} />}
+                      tick={(props) => <YAxisTooltipTick {...props} maxLength={10} fontSize={10} fill={TICK_COLOR} />}
                       width={140}
-                      label={{ value: "Skill", angle: -90, position: "insideLeft", dx: 10, fontSize: 11, fill: TICK_COLOR }}
+                      label={{ value: "Skill", angle: -90, position: "insideLeft", dx: 25, fontSize: 11, fill: TICK_COLOR }}
                     />
                     <Tooltip
                       contentStyle={CHART_TOOLTIP_STYLE}

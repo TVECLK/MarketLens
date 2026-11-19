@@ -78,6 +78,26 @@ export function XAxisStraightTooltipTick({ x = 0, y = 0, payload, maxLength, fon
   );
 }
 
+/** XAxis tick — splits label into two lines at the nearest space to the midpoint, rotated -45°. */
+export function XAxisWrappedTick({ x = 0, y = 0, payload, fontSize = 9, fill = "#a1a1aa" }: Omit<TickProps, "maxLength"> & { maxLength?: number }) {
+  const full = payload?.value ?? "";
+  const mid = Math.floor(full.length / 2);
+  // find the space closest to the middle
+  let splitAt = full.indexOf(" ", mid);
+  if (splitAt === -1) splitAt = full.lastIndexOf(" ", mid);
+  const line1 = splitAt !== -1 ? full.slice(0, splitAt) : full;
+  const line2 = splitAt !== -1 ? full.slice(splitAt + 1) : "";
+
+  return (
+    <g transform={`translate(${Number(x)},${Number(y)})`}>
+      <text x={0} y={0} textAnchor="end" fill={fill} fontSize={fontSize} transform="rotate(-45)">
+        <tspan x={0} dy={4}>{line1}</tspan>
+        {line2 && <tspan x={0} dy={fontSize + 2}>{line2}</tspan>}
+      </text>
+    </g>
+  );
+}
+
 /** XAxis tick — truncates to maxLength, rotated -45°, shows full-text portal tooltip on hover/focus. */
 export function XAxisTooltipTick({ x = 0, y = 0, payload, maxLength, fontSize = 9, fill = "#a1a1aa" }: TickProps) {
   const [pos, setPos] = useState<TooltipPos | null>(null);

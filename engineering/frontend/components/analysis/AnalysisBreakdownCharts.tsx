@@ -26,7 +26,7 @@ import {
   buildProvincePalette,
   type HierarchyAccent,
 } from "@/lib/chart-theme";
-import { YAxisTooltipTick, XAxisStraightTooltipTick } from "@/lib/chart-ticks";
+import { YAxisTooltipTick, XAxisStraightTooltipTick, XAxisWrappedTick } from "@/lib/chart-ticks";
 import SectionMessage from "@/components/analysis/SectionMessage";
 import InfoTooltip from "@/components/shared/InfoTooltip";
 import type { AnalysisSectionErrors } from "@/types/analysis";
@@ -333,8 +333,8 @@ export default function AnalysisBreakdownCharts({
             <SectionMessage />
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={nvqData} margin={{ top: 10, right: 10, left: 10, bottom: 40 }}>
-                <XAxis dataKey="name" tick={(props) => <XAxisStraightTooltipTick {...props} maxLength={8} fontSize={9} fill={TICK_COLOR} />} interval={0} height={50} label={{ value: "NVQ Level", position: "insideBottom", offset: -30, fontSize: 11, fill: TICK_COLOR }} />
+              <BarChart data={nvqData} margin={{ top: 10, right: 10, left: 10, bottom: 50 }}>
+                <XAxis dataKey="name" tick={(props) => <XAxisWrappedTick {...props} fontSize={9} fill={TICK_COLOR} />} interval={0} height={70} label={{ value: "NVQ Level", position: "insideBottom", offset: -50, fontSize: 11, fill: TICK_COLOR }} />
                 <YAxis tick={(props) => <YAxisTooltipTick {...props} maxLength={6} fontSize={10} fill={TICK_COLOR} />} width={50} allowDecimals={false} label={{ value: "No. of Vacancies", angle: -90, position: "insideLeft", dx: -5, fontSize: 11, fill: TICK_COLOR }} />
                 <Tooltip
                   contentStyle={CHART_TOOLTIP_STYLE}
