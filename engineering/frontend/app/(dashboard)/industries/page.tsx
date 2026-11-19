@@ -1,5 +1,7 @@
 "use client";
 
+const SLSIC_REFERENCE_URL = "https://www.statistics.gov.lk/Resource/en/LabourForce/SriLankaStandardClassificationIndustryRevision-3.pdf";
+
 import { useMemo } from "react";
 import BackLink from "@/components/shared/BackLink";
 import ClassificationHierarchyPicker from "@/components/analysis/ClassificationHierarchyPicker";
@@ -134,6 +136,8 @@ export default function IndustryAnalysisPage() {
         }
         emptyLabel="No industry sectors available."
         prunedNotice={prunedNotice}
+        referenceUrl={SLSIC_REFERENCE_URL}
+        referenceLinkTooltip="Click here to view source document Sri Lanka Standard Classification of Industries (SLSIC)"
         onSelect={handleSelect}
         onAddLevel={handleAddLevel}
         onRemoveLevel={handleRemoveLevel}

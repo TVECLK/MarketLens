@@ -1,6 +1,7 @@
 "use client";
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { YAxisTooltipTick, XAxisStraightTooltipTick } from "@/lib/chart-ticks";
 import {
   CHART_COLORS,
   TICK_COLOR,
@@ -12,6 +13,7 @@ import {
 import { isEmptyChartData } from "@/lib/chart-data";
 import type { ChartDatum } from "@/types/chart";
 import SectionMessage from "@/components/analysis/SectionMessage";
+import InfoTooltip from "@/components/shared/InfoTooltip";
 import { skillSharePercent } from "@/lib/skill-share";
 import type { SkillStat, EmployerStat, SkillsSectionErrors } from "@/types/occupation";
 
@@ -67,8 +69,8 @@ export default function SkillAnalysisPanel({
       ) : (
         <>
           <div className="border border-zinc-100 p-5 rounded-xl flex flex-col">
-            <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-              Top 15 Skills in Demand
+            <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+              Top 15 Skills in Demand <InfoTooltip text="The 15 most frequently requested skills across vacancies in this occupation" className="text-zinc-900" />
             </h4>
             {sectionErrors.top_15_skills ? (
               <SectionMessage />
@@ -78,13 +80,19 @@ export default function SkillAnalysisPanel({
                 style={{ height: Math.max(topSkills.length * 32 + 40, 200) }}
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topSkills} layout="vertical" margin={{ left: 20, right: 20 }}>
-                    <XAxis type="number" tick={{ fontSize: 10, fill: TICK_COLOR }} />
+                  <BarChart data={topSkills} layout="vertical" margin={{ left: 20, right: 20, bottom: 30 }}>
+                    <XAxis
+                      type="number"
+                      tick={(props) => <XAxisStraightTooltipTick {...props} maxLength={6} fontSize={10} fill={TICK_COLOR} />}
+                      allowDecimals={false}
+                      label={{ value: "No. of Vacancies", position: "insideBottom", offset: -15, fontSize: 11, fill: TICK_COLOR }}
+                    />
                     <YAxis
                       dataKey="name"
                       type="category"
-                      tick={{ fontSize: 10, fill: TICK_COLOR }}
-                      width={150}
+                      tick={(props) => <YAxisTooltipTick {...props} maxLength={10} fontSize={10} fill={TICK_COLOR} />}
+                      width={140}
+                      label={{ value: "Skill", angle: -90, position: "insideLeft", dx: 25, fontSize: 11, fill: TICK_COLOR }}
                     />
                     <Tooltip
                       contentStyle={CHART_TOOLTIP_STYLE}

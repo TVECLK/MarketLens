@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import type {
   HierarchyLevelState,
   PathNode,
@@ -16,6 +18,9 @@ interface ClassificationHierarchyPickerProps<TLevelKey extends string> {
   initialLoadErrorMessage?: string;
   emptyLabel: string;
   prunedNotice: string | null;
+  referenceUrl?: string;
+  referenceLinkTooltip?: string;
+  referenceLinkHoverColor?: string;
   onSelect: (levelIndex: number, idStr: string) => void;
   onAddLevel: () => void;
   onRemoveLevel: () => void;
@@ -31,6 +36,9 @@ export default function ClassificationHierarchyPicker<TLevelKey extends string>(
   initialLoadErrorMessage,
   emptyLabel,
   prunedNotice,
+  referenceUrl,
+  referenceLinkTooltip,
+  referenceLinkHoverColor = "hover:text-teal-600",
   onSelect,
   onAddLevel,
   onRemoveLevel,
@@ -39,9 +47,21 @@ export default function ClassificationHierarchyPicker<TLevelKey extends string>(
 
   return (
     <div className="bg-white border border-zinc-200 p-5 rounded-xl shadow-sm">
-      <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 mb-4">
-        Classification Hierarchy
-      </h4>
+      <div className="flex items-center gap-2 border-b border-zinc-100 pb-2 mb-4">
+        <h4 className="text-sm font-bold text-zinc-900">Classification Hierarchy</h4>
+        {referenceUrl && (
+          <Link
+            href={referenceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={referenceLinkTooltip}
+            className={`text-zinc-400 ${referenceLinkHoverColor} transition-colors`}
+            aria-label={referenceLinkTooltip}
+          >
+            <ArrowTopRightOnSquareIcon className="w-[13px] h-[13px]" />
+          </Link>
+        )}
+      </div>
 
       {isInitializing ? (
         <p className="text-xs text-zinc-400">{initializingLabel}</p>

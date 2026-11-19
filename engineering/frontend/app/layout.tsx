@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ThunderIDProvider } from "@thunderid/nextjs/server";
-import { Inter } from "next/font/google";
+import { Poppins } from "next/font/google";
 import "./globals.css";
 import QueryProvider from "@/providers/query-provider";
 import AppShell from "@/components/layout/AppShell";
@@ -9,7 +9,7 @@ import { hasServerPermission } from "@/lib/server-permissions";
 
 export const dynamic = "force-dynamic";
 
-const inter = Inter({ subsets: ["latin"] });
+const poppins = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-poppins" });
 
 export const metadata: Metadata = {
   title: "Labour Market Analysis System",
@@ -29,8 +29,8 @@ export default async function RootLayout({
   };
 
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" className={poppins.variable}>
+      <body className={poppins.className}>
         <ThunderIDProvider
           clientId={process.env.NEXT_PUBLIC_THUNDERID_CLIENT_ID}
           baseUrl={process.env.NEXT_PUBLIC_THUNDERID_BASE_URL}

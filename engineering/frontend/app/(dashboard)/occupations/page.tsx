@@ -1,5 +1,7 @@
 "use client";
 
+const SLSCO_REFERENCE_URL = "https://www.statistics.gov.lk/Resource/en/LabourForce/IntenationalStandardClassificationOccupation-ISCO-88.pdf";
+
 import { useMemo, useState } from "react";
 import BackLink from "@/components/shared/BackLink";
 import ClassificationHierarchyPicker from "@/components/analysis/ClassificationHierarchyPicker";
@@ -159,7 +161,7 @@ export default function OccupationAnalysisPage() {
 
       <div>
         <h2 className="text-base md:text-lg font-black text-zinc-900 tracking-tight">
-          Occupation Analysis (SLSO)
+          Occupation Analysis (SLSCO)
         </h2>
         <p className="text-xs text-zinc-400 mt-1 font-medium">
           Analyze through the occupation classification hierarchy
@@ -178,6 +180,9 @@ export default function OccupationAnalysisPage() {
         }
         emptyLabel="No occupation groups available."
         prunedNotice={prunedNotice}
+        referenceUrl={SLSCO_REFERENCE_URL}
+        referenceLinkTooltip="Click here to view Sri Lanka Standard Classification of Occupations (SLSCO)"
+        referenceLinkHoverColor="hover:text-indigo-600"
         onSelect={handleSelect}
         onAddLevel={handleAddLevel}
         onRemoveLevel={handleRemoveLevel}

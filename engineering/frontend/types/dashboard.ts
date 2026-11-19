@@ -26,6 +26,12 @@ export interface VacancySummaryResponse {
   data: RootJobCountStat[];
 }
 
+export interface DashboardCardData {
+  source_count: number;
+  all_time_vacancy_count: number;
+  industry_count: number;
+}
+
 export type DashboardSection =
   | "vacancy_trend"
   | "vacancy_total"

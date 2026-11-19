@@ -1,6 +1,7 @@
 "use client";
 
 import DateRangePicker from "@/components/shared/DateRangePicker";
+import DashboardStatCards from "@/components/dashboard/DashboardStatCards";
 import { useScrolled } from "@/hooks/use-scrolled";
 import { getMaxSelectableDate, getMinSelectableDate, isValidDateRange } from "@/lib/date-range";
 import { useDateRange } from "@/providers/date-range-provider";
@@ -20,6 +21,7 @@ export default function DashboardDateRangePicker() {
       maxDate={getMaxSelectableDate()}
       scrolled={scrolled}
       error={isValidDateRange(fromDate, toDate) ? undefined : "Select both a start and an end date, with the start on or before the end."}
+      left={<DashboardStatCards />}
     />
   );
 }

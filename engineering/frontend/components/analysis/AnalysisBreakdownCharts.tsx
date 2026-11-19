@@ -26,7 +26,9 @@ import {
   buildProvincePalette,
   type HierarchyAccent,
 } from "@/lib/chart-theme";
+import { YAxisTooltipTick, XAxisStraightTooltipTick, XAxisWrappedTick } from "@/lib/chart-ticks";
 import SectionMessage from "@/components/analysis/SectionMessage";
+import InfoTooltip from "@/components/shared/InfoTooltip";
 import type { AnalysisSectionErrors } from "@/types/analysis";
 import type { ChartDatum, ShareDatum } from "@/types/chart";
 
@@ -72,7 +74,7 @@ export default function AnalysisBreakdownCharts({
       {childrenBreakdown.length > 0 && (
         <div className="border border-zinc-100 p-5 rounded-xl flex flex-col">
           <div className="border-b border-zinc-100 pb-2">
-            <h4 className="text-sm font-bold text-zinc-900">{childrenBreakdownTitle}</h4>
+            <h4 className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">{childrenBreakdownTitle} <InfoTooltip text="Vacancy breakdown by sub-classification within the selected category" className="text-zinc-900" /></h4>
             <p className="text-[11px] text-zinc-400">{childrenBreakdownDescription}</p>
           </div>
           <div
@@ -80,14 +82,14 @@ export default function AnalysisBreakdownCharts({
             style={{ height: Math.max(childrenBreakdown.length * 44 + 40, 160) }}
           >
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={childrenBreakdown} layout="vertical" margin={{ left: 20, right: 20 }}>
-                <XAxis type="number" tick={{ fontSize: 10, fill: TICK_COLOR }} />
+              <BarChart data={childrenBreakdown} layout="vertical" margin={{ left: 16, right: 20, bottom: 30 }}>
+                <XAxis type="number" tick={{ fontSize: 10, fill: TICK_COLOR }} allowDecimals={false} label={{ value: "No. of Vacancies", position: "insideBottom", offset: -15, fontSize: 11, fill: TICK_COLOR }} />
                 <YAxis
                   dataKey="name"
                   type="category"
-                  tick={{ fontSize: 10, fill: TICK_COLOR }}
-                  width={230}
-                  tickFormatter={(v: string) => (v.length > 34 ? `${v.substring(0, 34)}…` : v)}
+                  tick={(props) => <YAxisTooltipTick {...props} maxLength={26} fontSize={10} fill={TICK_COLOR} />}
+                  width={180}
+                  label={{ value: childrenBreakdownTitle.toLowerCase().includes("industry") ? "Industry" : "Occupation", angle: -90, position: "insideLeft", dx: -8, fontSize: 11, fill: TICK_COLOR }}
                 />
                 <Tooltip
                   contentStyle={CHART_TOOLTIP_STYLE}
@@ -104,17 +106,17 @@ export default function AnalysisBreakdownCharts({
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-            Employment Sector
+          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+            Employment Sector <InfoTooltip text="Distribution of vacancies by employment sector" className="text-zinc-900" />
           </h4>
           <div className="flex-1 mt-4 min-w-0">
             {sectionErrors.employment_sector ? (
               <SectionMessage />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={sectorData} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: TICK_COLOR }} />
-                  <YAxis tick={{ fontSize: 10, fill: TICK_COLOR }} />
+                <BarChart data={sectorData} margin={{ top: 10, right: 10, left: 10, bottom: 40 }}>
+                  <XAxis dataKey="name" tick={(props) => <XAxisStraightTooltipTick {...props} maxLength={10} fontSize={9} fill={TICK_COLOR} />} interval={0} height={50} label={{ value: "Sector", position: "insideBottom", offset: -30, fontSize: 11, fill: TICK_COLOR }} />
+                  <YAxis tick={(props) => <YAxisTooltipTick {...props} maxLength={6} fontSize={10} fill={TICK_COLOR} />} width={50} allowDecimals={false} label={{ value: "No. of Vacancies", angle: -90, position: "insideLeft", dx: -5, fontSize: 11, fill: TICK_COLOR }} />
                   <Tooltip
                     contentStyle={CHART_TOOLTIP_STYLE}
                     itemStyle={CHART_TOOLTIP_ITEM_STYLE}
@@ -133,17 +135,17 @@ export default function AnalysisBreakdownCharts({
         </div>
 
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-            Experience
+          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+            Experience <InfoTooltip text="Required years of experience for the vacancies" className="text-zinc-900" />
           </h4>
           <div className="flex-1 mt-4 min-w-0">
             {sectionErrors.experience ? (
               <SectionMessage />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={expData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: TICK_COLOR }} />
-                  <YAxis tick={{ fontSize: 10, fill: TICK_COLOR }} />
+                <BarChart data={expData} margin={{ top: 10, right: 10, left: 10, bottom: 40 }}>
+                  <XAxis dataKey="name" tick={(props) => <XAxisStraightTooltipTick {...props} maxLength={8} fontSize={9} fill={TICK_COLOR} />} interval={0} height={50} label={{ value: "Experience Level", position: "insideBottom", offset: -30, fontSize: 11, fill: TICK_COLOR }} />
+                  <YAxis tick={(props) => <YAxisTooltipTick {...props} maxLength={6} fontSize={10} fill={TICK_COLOR} />} width={50} allowDecimals={false} label={{ value: "No. of Vacancies", angle: -90, position: "insideLeft", dx: -5, fontSize: 11, fill: TICK_COLOR }} />
                   <Tooltip
                     contentStyle={CHART_TOOLTIP_STYLE}
                     itemStyle={CHART_TOOLTIP_ITEM_STYLE}
@@ -160,8 +162,8 @@ export default function AnalysisBreakdownCharts({
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-            Province
+          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+            Province <InfoTooltip text="Distribution of vacancies by province" className="text-zinc-900" />
           </h4>
           <div className="flex-1 flex items-center justify-center min-w-0">
             {sectionErrors.province ? (
@@ -200,8 +202,8 @@ export default function AnalysisBreakdownCharts({
         </div>
 
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-            Education Level
+          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+            Education Level <InfoTooltip text="Required education level for the vacancies" className="text-zinc-900" />
           </h4>
           <div className="flex-1 flex items-center justify-center min-w-0">
             {sectionErrors.education ? (
@@ -242,8 +244,8 @@ export default function AnalysisBreakdownCharts({
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-            Formal / Informal
+          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+            Formal / Informal <InfoTooltip text="Proportion of formal vs informal sector vacancies" className="text-zinc-900" />
           </h4>
           <div className="flex-1 flex items-center justify-center min-w-0">
             {sectionErrors.formality ? (
@@ -282,8 +284,8 @@ export default function AnalysisBreakdownCharts({
         </div>
 
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-            Gender
+          <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+            Gender <InfoTooltip text="Gender preference specified in vacancy listings" className="text-zinc-900" />
           </h4>
           <div className="flex-1 flex items-center justify-center min-w-0">
             {sectionErrors.gender ? (
@@ -323,17 +325,17 @@ export default function AnalysisBreakdownCharts({
       </div>
 
       <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
-        <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-          Vocational Education (NVQ Level)
+        <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
+          Vocational Education (NVQ Level) <InfoTooltip text="Distribution of vacancies by NVQ vocational education level" className="text-zinc-900" />
         </h4>
         <div className="flex-1 mt-4 min-w-0">
           {sectionErrors.vocational_education ? (
             <SectionMessage />
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={nvqData} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: TICK_COLOR }} />
-                <YAxis tick={{ fontSize: 10, fill: TICK_COLOR }} />
+              <BarChart data={nvqData} margin={{ top: 10, right: 10, left: 10, bottom: 50 }}>
+                <XAxis dataKey="name" tick={(props) => <XAxisWrappedTick {...props} fontSize={9} fill={TICK_COLOR} />} interval={0} height={70} label={{ value: "NVQ Level", position: "insideBottom", offset: -50, fontSize: 11, fill: TICK_COLOR }} />
+                <YAxis tick={(props) => <YAxisTooltipTick {...props} maxLength={6} fontSize={10} fill={TICK_COLOR} />} width={50} allowDecimals={false} label={{ value: "No. of Vacancies", angle: -90, position: "insideLeft", dx: -5, fontSize: 11, fill: TICK_COLOR }} />
                 <Tooltip
                   contentStyle={CHART_TOOLTIP_STYLE}
                   itemStyle={CHART_TOOLTIP_ITEM_STYLE}
