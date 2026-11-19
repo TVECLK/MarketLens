@@ -35,7 +35,7 @@ export default function IndustryDistributionChart({
     ? data.reduce((max, d) => d.value > max.value ? d : max, data[0])
     : null;
 
-  const headline = topIndustry ? (
+  const headline = topIndustry && topIndustry.value > 0 ? (
     <>
       <span className="bg-yellow-200 text-yellow-950 font-semibold px-1">{topIndustry.name}</span>
       {" "}have the highest job count according to the Sri Lanka Standard Industrial Classification (SLSIC).
