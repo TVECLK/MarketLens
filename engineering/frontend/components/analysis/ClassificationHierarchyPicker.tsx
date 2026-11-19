@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
+import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import type {
   HierarchyLevelState,
   PathNode,
@@ -58,7 +58,7 @@ export default function ClassificationHierarchyPicker<TLevelKey extends string>(
             className={`text-zinc-400 ${referenceLinkHoverColor} transition-colors`}
             aria-label={referenceLinkTooltip}
           >
-            <ExternalLink size={13} strokeWidth={2} />
+            <ArrowTopRightOnSquareIcon className="w-[13px] h-[13px]" />
           </Link>
         )}
       </div>

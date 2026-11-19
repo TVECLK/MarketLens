@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Info } from "lucide-react";
+import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import { HoverTooltip, type TooltipPos } from "@/lib/hover-tooltip";
 
 interface InfoTooltipProps {
@@ -20,7 +20,7 @@ export default function InfoTooltip({ text, className }: InfoTooltipProps) {
       onMouseLeave={() => setPos(null)}
       style={{ display: "inline-flex", alignItems: "center", cursor: "default" }}
     >
-      <Info size={13} strokeWidth={2} />
+      <InformationCircleIcon className="w-[13px] h-[13px]" />
       {pos && <HoverTooltip text={text} pos={pos} />}
     </span>
   );
