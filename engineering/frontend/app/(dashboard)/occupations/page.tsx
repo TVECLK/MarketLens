@@ -1,5 +1,7 @@
 "use client";
 
+const SLSCO_REFERENCE_URL = "https://www.statistics.gov.lk/Resource/en/LabourForce/IntenationalStandardClassificationOccupation-ISCO-88.pdf";
+
 import { useMemo, useState } from "react";
 import BackLink from "@/components/shared/BackLink";
 import ClassificationHierarchyPicker from "@/components/analysis/ClassificationHierarchyPicker";
@@ -178,7 +180,7 @@ export default function OccupationAnalysisPage() {
         }
         emptyLabel="No occupation groups available."
         prunedNotice={prunedNotice}
-        referenceUrl="https://www.statistics.gov.lk/Resource/en/LabourForce/IntenationalStandardClassificationOccupation-ISCO-88.pdf"
+        referenceUrl={SLSCO_REFERENCE_URL}
         referenceLinkTooltip="Click here to view Sri Lanka Standard Classification of Occupations (SLSCO)"
         referenceLinkHoverColor="hover:text-indigo-600"
         onSelect={handleSelect}
