@@ -35,8 +35,6 @@ export default async function RootLayout({
           clientId={process.env.NEXT_PUBLIC_THUNDERID_CLIENT_ID}
           baseUrl={process.env.NEXT_PUBLIC_THUNDERID_BASE_URL}
           scopes={scopeString}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          endpoints={{ issuer: "https://thunder:8090" } as any}
         >
           {/* Wrap your entire application structure with the query cache context provider */}
           <QueryProvider>
