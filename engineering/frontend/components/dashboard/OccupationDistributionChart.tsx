@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { SignedOut } from "@thunderid/nextjs";
+import { SignedIn, SignedOut } from "@thunderid/nextjs";
 import ChartCard from "@/components/shared/ChartCard";
 import { isEmptyChartData } from "@/lib/chart-data";
 import {
@@ -103,8 +103,13 @@ export default function OccupationDistributionChart({
   );
 
   return (
-    <SignedOut fallback={<ChartCard {...sharedProps}>{chart}</ChartCard>}>
-      <ChartCard {...sharedProps} heightClassName="h-[560px] md:h-[640px]" headline={headline}>{chart}</ChartCard>
-    </SignedOut>
+    <>
+      <SignedIn>
+        <ChartCard {...sharedProps}>{chart}</ChartCard>
+      </SignedIn>
+      <SignedOut>
+        <ChartCard {...sharedProps} heightClassName="h-[560px] md:h-[640px]" headline={headline}>{chart}</ChartCard>
+      </SignedOut>
+    </>
   );
 }

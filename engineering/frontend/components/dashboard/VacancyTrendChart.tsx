@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { SignedOut } from "@thunderid/nextjs";
+import { SignedIn, SignedOut } from "@thunderid/nextjs";
 import ChartCard from "@/components/shared/ChartCard";
 import { isEmptyChartData } from "@/lib/chart-data";
 import {
@@ -129,8 +129,8 @@ export default function VacancyTrendChart({
   };
 
   return (
-    <SignedOut
-      fallback={
+    <>
+      <SignedIn>
         <ChartCard
           {...sharedProps}
           heightClassName="h-[320px] md:h-[420px]"
@@ -147,15 +147,16 @@ export default function VacancyTrendChart({
         >
           {chartBody(data)}
         </ChartCard>
-      }
-    >
-      <ChartCard
-        {...sharedProps}
-        heightClassName="h-[460px] md:h-[520px]"
-        headline={publicTitle}
-      >
-        {chartBody(data)}
-      </ChartCard>
-    </SignedOut>
+      </SignedIn>
+      <SignedOut>
+        <ChartCard
+          {...sharedProps}
+          heightClassName="h-[460px] md:h-[520px]"
+          headline={publicTitle}
+        >
+          {chartBody(data)}
+        </ChartCard>
+      </SignedOut>
+    </>
   );
 }
