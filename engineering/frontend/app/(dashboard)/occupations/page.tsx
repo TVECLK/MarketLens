@@ -182,7 +182,6 @@ export default function OccupationAnalysisPage() {
         prunedNotice={prunedNotice}
         referenceUrl={SLSCO_REFERENCE_URL}
         referenceLinkTooltip="Click here to view Sri Lanka Standard Classification of Occupations (SLSCO)"
-        referenceLinkHoverColor="hover:text-indigo-600"
         onSelect={handleSelect}
         onAddLevel={handleAddLevel}
         onRemoveLevel={handleRemoveLevel}
