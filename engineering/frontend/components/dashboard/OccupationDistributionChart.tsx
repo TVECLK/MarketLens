@@ -53,6 +53,7 @@ export default function OccupationDistributionChart({
     title: "Job Distribution by Occupation (SLSCO)",
     subtitle,
     heightClassName: "h-[420px] md:h-[540px]",
+    bodyClassName: "pb-6",
     isLoading,
     isError,
     isEmpty: isEmptyChartData(data, (d) => d.value),

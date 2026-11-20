@@ -47,7 +47,7 @@ export default function IndustryDistributionChart({
     title: "Job Distribution by Industry (SLSIC)",
     subtitle,
     heightClassName: "h-[480px] md:h-[640px]",
-    bodyClassName: "pb-10",
+    bodyClassName: "pb-6",
     isLoading,
     isError,
     isEmpty: isEmptyChartData(data, (d) => d.value),
