@@ -68,6 +68,11 @@ func TestDrainBudget(t *testing.T) {
 
 				work, cancelWork := budget.withCutoff(request)
 				defer cancelWork()
+				// What the caller sees the instant withCutoff returns, before any
+				// other goroutine has run. The upload handler starts work at once,
+				// so a context returned live and cancelled a moment later is not
+				// good enough for a late start.
+				errAtReturn := work.Err()
 				// Record when the work context ended, to make a failure say how
 				// early it was cancelled.
 				var cancelledAfter atomic.Int64 // nanoseconds since shutdown began; -1 until cancelled
@@ -95,9 +100,15 @@ func TestDrainBudget(t *testing.T) {
 
 				default:
 					expiry := shutdownBegan.Add(tt.budget)
-					if remaining := time.Until(expiry); remaining > 0 {
+					if remaining := time.Until(expiry); remaining <= 0 {
+						// The cutoff had already passed: cancelled before withCutoff
+						// returned, not on a goroutine that runs afterwards.
+						if errAtReturn == nil {
+							t.Fatal("work context was still live when withCutoff returned, although the cutoff had passed")
+						}
+					} else {
 						// The cutoff is still ahead: live until the last instant.
-						if work.Err() != nil {
+						if errAtReturn != nil {
 							t.Fatal("work context was cancelled when it started, before the budget expired")
 						}
 						time.Sleep(remaining - time.Nanosecond)

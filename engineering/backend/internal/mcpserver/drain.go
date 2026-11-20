@@ -39,10 +39,18 @@ func newDrainBudget(shutdown context.Context, budget time.Duration) *drainBudget
 
 // withCutoff returns a context derived from ctx that is also cancelled at the
 // cutoff. An upload that starts after the cutoff has passed gets a context
-// that is already cancelled. The caller must call the returned cancel func
-// when its work ends.
+// that is already cancelled when this returns. The caller must call the
+// returned cancel func when its work ends.
 func (b *drainBudget) withCutoff(ctx context.Context) (context.Context, context.CancelFunc) {
 	workCtx, cancel := context.WithCancel(ctx)
+	// Cancel here, not through AfterFunc, when the cutoff has already passed:
+	// AfterFunc runs its callback on another goroutine even then, so the
+	// context would be returned live and cancelled a moment later, and the
+	// caller, which starts work at once, could begin a job under it.
+	if b.cutoff.Err() != nil {
+		cancel()
+		return workCtx, cancel
+	}
 	stop := context.AfterFunc(b.cutoff, cancel)
 	return workCtx, func() {
 		stop()
