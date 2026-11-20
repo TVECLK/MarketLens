@@ -109,7 +109,7 @@ export default function IndustryDistributionChart({
         <ChartCard {...sharedProps}>{chart}</ChartCard>
       </SignedIn>
       <SignedOut>
-        <ChartCard {...sharedProps} heightClassName="h-[620px] md:h-[740px]" headline={headline}>{chart}</ChartCard>
+        <ChartCard {...sharedProps} heightClassName="h-[620px] md:h-[740px]" headline={headline} headlineSkeleton>{chart}</ChartCard>
       </SignedOut>
     </>
   );

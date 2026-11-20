@@ -157,6 +157,7 @@ export default function VacancyTrendChart({
           {...sharedProps}
           heightClassName="h-[460px] md:h-[520px]"
           headline={publicTitle}
+          headlineSkeleton
         >
           {chartBody(data)}
         </ChartCard>

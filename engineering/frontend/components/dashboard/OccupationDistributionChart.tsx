@@ -108,7 +108,7 @@ export default function OccupationDistributionChart({
         <ChartCard {...sharedProps}>{chart}</ChartCard>
       </SignedIn>
       <SignedOut>
-        <ChartCard {...sharedProps} heightClassName="h-[560px] md:h-[640px]" headline={headline}>{chart}</ChartCard>
+        <ChartCard {...sharedProps} heightClassName="h-[560px] md:h-[640px]" headline={headline} headlineSkeleton>{chart}</ChartCard>
       </SignedOut>
     </>
   );
