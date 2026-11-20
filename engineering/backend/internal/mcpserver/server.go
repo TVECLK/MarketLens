@@ -148,6 +148,17 @@ func requireValidToken(verify verifyFunc, publicBaseURL string, next http.Handle
 			return
 		}
 
+		// The JWT verifier tolerates a token that expired up to 30 seconds ago
+		// (clock-skew leeway), but the SDK checks the expiry again right after
+		// this with no tolerance, and its 401 carries no WWW-Authenticate. That
+		// is the usual way a client meets a 401 mid-session, and it is exactly
+		// when it needs the challenge, so reject an expired token here, with it.
+		if !info.Expiration.After(time.Now()) {
+			w.Header().Set("WWW-Authenticate", bearerChallenge(publicBaseURL, true))
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
 		ctx := context.WithValue(r.Context(), tokenInfoCtxKey{}, info)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -157,7 +168,10 @@ func requireValidToken(verify verifyFunc, publicBaseURL string, next http.Handle
 // every request. The SDK then (a) passes the current request's token info to
 // tool handlers, so scope checks never use a stale session's token, and (b)
 // refuses a session id used by a different user. It does not verify the
-// token again, so requireValidToken keeps owning the 401/503 responses.
+// signature again, so requireValidToken owns the 401/503 responses. The SDK
+// does re-check the expiry, strictly; requireValidToken rejects an expired
+// token first, with the challenge, so that check can only fire for a token
+// that expires in the instant between the two, and that 401 has no challenge.
 func bridgeTokenInfo(next http.Handler) http.Handler {
 	return mcpauth.RequireBearerToken(
 		func(_ context.Context, _ string, r *http.Request) (*mcpauth.TokenInfo, error) {

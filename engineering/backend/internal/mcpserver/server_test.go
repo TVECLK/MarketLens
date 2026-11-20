@@ -32,6 +32,12 @@ func fakeVerify(raw string) (*mcpauth.TokenInfo, error) {
 		return &mcpauth.TokenInfo{UserID: "alice", Scopes: []string{"openid"}, Expiration: exp}, nil
 	case "bob-upload":
 		return &mcpauth.TokenInfo{UserID: "bob", Scopes: []string{submitNewspaperVacanciesScope}, Expiration: exp}, nil
+	case "expired-10s":
+		// Inside the JWT verifier's 30s leeway, so it passes verification, but
+		// already expired as far as the SDK's strict check is concerned.
+		return &mcpauth.TokenInfo{UserID: "alice", Scopes: []string{submitNewspaperVacanciesScope}, Expiration: time.Now().Add(-10 * time.Second)}, nil
+	case "expired-1h":
+		return &mcpauth.TokenInfo{UserID: "alice", Scopes: []string{submitNewspaperVacanciesScope}, Expiration: time.Now().Add(-time.Hour)}, nil
 	case "no-subject":
 		return nil, errMissingSubject
 	case "jwks-down":
@@ -41,9 +47,11 @@ func fakeVerify(raw string) (*mcpauth.TokenInfo, error) {
 }
 
 func TestRequireValidToken_Responses(t *testing.T) {
-	handler := requireValidToken(fakeVerify, testBaseURL, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	// The whole chain, bridge included: the SDK's own expiry check runs there,
+	// and a 401 from it would carry no challenge.
+	handler := requireValidToken(fakeVerify, testBaseURL, bridgeTokenInfo(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	}))
+	})))
 
 	const metadataURL = testBaseURL + protectedResPath
 	noToken := `Bearer resource_metadata="` + metadataURL + `"`
@@ -59,6 +67,8 @@ func TestRequireValidToken_Responses(t *testing.T) {
 		{"not bearer", "Basic abc", http.StatusUnauthorized, noToken},
 		{"invalid token", "Bearer nope", http.StatusUnauthorized, rejected},
 		{"token without subject", "Bearer no-subject", http.StatusUnauthorized, rejected},
+		{"token expired 10s ago, inside the JWT leeway", "Bearer expired-10s", http.StatusUnauthorized, rejected},
+		{"token expired long ago", "Bearer expired-1h", http.StatusUnauthorized, rejected},
 		{"jwks unavailable", "Bearer jwks-down", http.StatusServiceUnavailable, ""},
 		{"valid token", "Bearer alice-upload", http.StatusOK, ""},
 	}
