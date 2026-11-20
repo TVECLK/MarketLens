@@ -425,14 +425,16 @@ func TestShutdown_WaitsForToolWhoseClientDisconnected(t *testing.T) {
 // itself, because it never does while the session lives.
 func TestShutdown_WithOpenSSEStream(t *testing.T) {
 	tests := []struct {
-		name        string
-		closeIdle   bool          // run closeIdleSessions during shutdown, as StartHTTP does
-		toolDelay   time.Duration // run a tool call this long, and begin shutdown while it runs; 0 means no call
-		grace       time.Duration
-		wantErr     bool
-		wantWithin  time.Duration // shutdown must finish within this long
-		wantCallOK  bool          // the in-flight call must get its result
-		minDuration time.Duration // shutdown must take at least this long
+		name      string
+		closeIdle bool // run closeIdleSessions during shutdown, as StartHTTP does
+		// blockTool runs a tool call that stays blocked until the test releases
+		// it, and begins shutdown while it is blocked. Shutdown must not return
+		// until then; the test checks the order, not how long it took.
+		blockTool  bool
+		grace      time.Duration
+		wantErr    bool
+		wantWithin time.Duration // shutdown must finish within this long of beginning
+		wantCallOK bool          // the in-flight call must get its result
 	}{
 		{
 			name:       "idle session: shutdown does not wait for the SSE stream",
@@ -441,13 +443,12 @@ func TestShutdown_WithOpenSSEStream(t *testing.T) {
 			wantWithin: 3 * time.Second,
 		},
 		{
-			name:        "tool call running: shutdown waits for it, then ends the stream",
-			closeIdle:   true,
-			toolDelay:   500 * time.Millisecond,
-			grace:       10 * time.Second,
-			wantWithin:  5 * time.Second,
-			wantCallOK:  true,
-			minDuration: 200 * time.Millisecond,
+			name:       "tool call running: shutdown waits for it, then ends the stream",
+			closeIdle:  true,
+			blockTool:  true,
+			grace:      10 * time.Second,
+			wantWithin: 5 * time.Second,
+			wantCallOK: true,
 		},
 		{
 			// Control: without closing idle sessions the open stream holds
@@ -464,13 +465,21 @@ func TestShutdown_WithOpenSSEStream(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "v0"}, nil)
 			toolStarted := make(chan struct{}, 1)
+			// The tool blocks until the test releases it, so how long shutdown
+			// takes does not depend on how quickly the test goroutine resumes.
+			release := make(chan struct{})
+			var releaseOnce sync.Once
+			releaseTool := func() { releaseOnce.Do(func() { close(release) }) }
+			// A defer runs before the t.Cleanup functions below, so on any
+			// failure the tool is released before cleanup can wait on it.
+			defer releaseTool()
 			mcp.AddTool(server, &mcp.Tool{Name: "slow"},
 				func(_ context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
 					select {
 					case toolStarted <- struct{}{}:
 					default:
 					}
-					time.Sleep(tt.toolDelay)
+					<-release
 					return nil, map[string]any{"done": true}, nil
 				})
 
@@ -570,7 +579,7 @@ func TestShutdown_WithOpenSSEStream(t *testing.T) {
 				err error
 			}
 			callDone := make(chan callOutcome, 1)
-			if tt.toolDelay > 0 {
+			if tt.blockTool {
 				go func() {
 					res, err := session.CallTool(callCtx, &mcp.CallToolParams{Name: "slow"})
 					callDone <- callOutcome{res: res, err: err}
@@ -585,6 +594,18 @@ func TestShutdown_WithOpenSSEStream(t *testing.T) {
 			begun := time.Now()
 			beginShutdown()
 
+			if tt.blockTool {
+				// The tool is blocked, so shutdown must not be able to finish:
+				// it has to wait for the call. Had it returned, it would have
+				// done so within moments.
+				select {
+				case err := <-done:
+					t.Fatalf("shutdown returned (error %v) while the tool call was still running", err)
+				case <-time.After(300 * time.Millisecond):
+				}
+				releaseTool()
+			}
+
 			select {
 			case err := <-done:
 				elapsed := time.Since(begun)
@@ -593,9 +614,6 @@ func TestShutdown_WithOpenSSEStream(t *testing.T) {
 				}
 				if elapsed > tt.wantWithin {
 					t.Errorf("shutdown took %v, want within %v", elapsed, tt.wantWithin)
-				}
-				if elapsed < tt.minDuration {
-					t.Errorf("shutdown took %v, want at least %v (it should wait for the running call)", elapsed, tt.minDuration)
 				}
 			case <-time.After(tt.wantWithin + 5*time.Second):
 				t.Fatal("ServeUntilDone did not return")
