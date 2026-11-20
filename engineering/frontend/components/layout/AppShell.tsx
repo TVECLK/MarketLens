@@ -27,7 +27,7 @@ export default function AppShell({
       {showSidebar && <Sidebar pageAccess={pageAccess} />}
       <main
         id="main-content"
-        className={showSidebar ? "flex-1 min-h-screen ml-56" : "flex-1 min-h-screen"}
+        className={showSidebar ? "flex-1 min-w-0 min-h-screen ml-56" : "flex-1 min-w-0 min-h-screen"}
       >
         {children}
       </main>

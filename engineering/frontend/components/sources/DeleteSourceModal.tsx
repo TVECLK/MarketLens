@@ -16,7 +16,7 @@ interface DeleteSourceModalProps {
 
 /**
  * Confirms deleting a source. A manual source needs one click. A crawler (auto) source affects a
- * running crawler, so the admin must type its exact name, and is pointed to disabling instead.
+ * running crawler, so the admin must type its name (letter case doesn't matter), and is pointed to disabling instead.
  */
 export default function DeleteSourceModal({ source, isPending, error, onCancel, onConfirm }: DeleteSourceModalProps) {
   const [typed, setTyped] = useState("");
