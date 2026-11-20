@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"marketlens-go-backend/internal/auth"
+	"marketlens-go-backend/internal/httpserver"
 	"marketlens-go-backend/internal/ingestion"
 	"marketlens-go-backend/internal/service"
 )
@@ -205,11 +205,11 @@ func New(shutdown context.Context, svcs *service.Services, ingestionSvc *ingesti
 }
 
 const (
-	// readHeaderTimeout bounds how long a client may take to send its request
-	// headers, so slow connections cannot tie up the server (Slowloris). There
-	// is deliberately no read or write timeout: tool calls such as a newspaper
-	// submission run for minutes, and the SDK holds long-lived SSE streams.
-	readHeaderTimeout = 10 * time.Second
+	// The header timeout is the shared one, so slow connections cannot tie up
+	// the server (Slowloris). There is deliberately no read or write timeout:
+	// tool calls such as a newspaper submission run for minutes, and the SDK
+	// holds long-lived SSE streams.
+	readHeaderTimeout = httpserver.ReadHeaderTimeout
 	idleTimeout       = 2 * time.Minute
 
 	// sessionTimeout closes an MCP session that has received no request for
@@ -220,11 +220,10 @@ const (
 	sessionTimeout = 30 * time.Minute
 
 	// shutdownGracePeriod is how long in-flight requests get to finish after
-	// SIGTERM. Keep it below the platform's kill deadline (Kubernetes
-	// terminationGracePeriodSeconds, 30s by default), or the process is killed
-	// before this expires. A newspaper submission is held to drainWorkBudget
-	// of it, so it cannot outlast the period.
-	shutdownGracePeriod = 25 * time.Second
+	// SIGTERM: the shared grace period, kept below the platform's kill
+	// deadline. A newspaper submission is held to drainWorkBudget of it, so it
+	// cannot outlast the period.
+	shutdownGracePeriod = httpserver.ShutdownGracePeriod
 )
 
 // StartHTTP serves the given MCP server over Streamable HTTP at addr
@@ -252,39 +251,9 @@ func StartHTTP(ctx context.Context, server *mcp.Server, verifier *auth.Verifier,
 		ReadHeaderTimeout: readHeaderTimeout,
 		IdleTimeout:       idleTimeout,
 	}
-	return serveUntilDone(ctx, srv, ln, shutdownGracePeriod, func(drainCtx context.Context) {
+	return httpserver.ServeUntilDone(ctx, srv, ln, shutdownGracePeriod, func(drainCtx context.Context) {
 		closeIdleSessions(drainCtx, server, tracker)
 	})
-}
-
-// serveUntilDone runs srv on ln until it fails or ctx is cancelled. On cancel
-// it shuts down gracefully, waiting up to grace for in-flight requests; if they
-// do not finish in time it closes their connections and reports an error.
-//
-// onShutdown, if set, runs concurrently with the drain, until it returns or
-// the grace period ends. It is how the MCP server ends the long-lived SSE
-// streams that Shutdown would otherwise wait on.
-func serveUntilDone(ctx context.Context, srv *http.Server, ln net.Listener, grace time.Duration, onShutdown func(drainCtx context.Context)) error {
-	serveErr := make(chan error, 1)
-	go func() { serveErr <- srv.Serve(ln) }()
-
-	select {
-	case err := <-serveErr:
-		return err
-	case <-ctx.Done():
-	}
-
-	log.Printf("MCP server shutting down, waiting up to %s for in-flight requests", grace)
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), grace)
-	defer cancel()
-	if onShutdown != nil {
-		go onShutdown(shutdownCtx)
-	}
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		srv.Close()
-		return fmt.Errorf("graceful shutdown did not finish, in-flight requests were cut off: %w", err)
-	}
-	return nil
 }
 
 func wrapIfList(v any) any {

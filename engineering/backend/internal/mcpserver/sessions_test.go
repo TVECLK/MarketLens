@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"marketlens-go-backend/internal/httpserver"
 )
 
 func TestSessionTracker_Claim(t *testing.T) {
@@ -317,11 +319,11 @@ func TestShutdown_WithOpenSSEStream(t *testing.T) {
 			serverStopped := make(chan struct{})
 			go func() {
 				defer close(serverStopped)
-				done <- serveUntilDone(shutdownCtx, srv, ln, tt.grace, onShutdown)
+				done <- httpserver.ServeUntilDone(shutdownCtx, srv, ln, tt.grace, onShutdown)
 			}()
 
 			// stopServer signals shutdown and waits for the server goroutine,
-			// with a bound: serveUntilDone gives up after the grace period, and
+			// with a bound: ServeUntilDone gives up after the grace period, and
 			// if it somehow does not, closing the listener ends it. It is safe
 			// to call more than once, and it runs even if the test fails early.
 			var stopOnce sync.Once
@@ -403,7 +405,7 @@ func TestShutdown_WithOpenSSEStream(t *testing.T) {
 			case err := <-done:
 				elapsed := time.Since(begun)
 				if (err != nil) != tt.wantErr {
-					t.Errorf("serveUntilDone error = %v, wantErr %v (after %v)", err, tt.wantErr, elapsed)
+					t.Errorf("ServeUntilDone error = %v, wantErr %v (after %v)", err, tt.wantErr, elapsed)
 				}
 				if elapsed > tt.wantWithin {
 					t.Errorf("shutdown took %v, want within %v", elapsed, tt.wantWithin)
@@ -412,7 +414,7 @@ func TestShutdown_WithOpenSSEStream(t *testing.T) {
 					t.Errorf("shutdown took %v, want at least %v (it should wait for the running call)", elapsed, tt.minDuration)
 				}
 			case <-time.After(tt.wantWithin + 5*time.Second):
-				t.Fatal("serveUntilDone did not return")
+				t.Fatal("ServeUntilDone did not return")
 			}
 
 			if tt.wantCallOK {
