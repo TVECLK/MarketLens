@@ -147,16 +147,27 @@ func TestSessionTracker_ClaimIsAtomicWithAdmission(t *testing.T) {
 func TestCloseIdleSessions_SlowCloseDoesNotBlockOthers(t *testing.T) {
 	const (
 		idleSessions = 4
-		toolDuration = 2 * time.Second
-		closeWithin  = time.Second // well under toolDuration
+		closeWithin  = time.Second
 	)
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "v0"}, nil)
 	toolStarted := make(chan struct{}, 1)
+	// The stuck tool blocks until the test releases it. A timed sleep could run
+	// out during setup, and then a close loop that waits on each session in turn
+	// would pass by luck. It ignores its context, like a tool stuck on a
+	// database call.
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseTool := func() { releaseOnce.Do(func() { close(release) }) }
+	var toolFinished atomic.Bool
+	// A defer runs before the t.Cleanup functions below, so on any failure the
+	// tool is released before a client cleanup can wait on it.
+	defer releaseTool()
 	mcp.AddTool(server, &mcp.Tool{Name: "stuck"},
 		func(_ context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
 			toolStarted <- struct{}{}
-			time.Sleep(toolDuration) // ignores its context, like a tool stuck on a database call
+			<-release
+			toolFinished.Store(true)
 			return nil, map[string]any{"done": true}, nil
 		})
 
@@ -189,13 +200,24 @@ func TestCloseIdleSessions_SlowCloseDoesNotBlockOthers(t *testing.T) {
 		t.Fatal("the tool call never started")
 	}
 	cancelCall()
-	time.Sleep(300 * time.Millisecond)
 
-	tracker.mu.Lock()
-	stillCounted := tracker.inflight[stuckID]
-	tracker.mu.Unlock()
-	if stillCounted != 0 {
-		t.Fatalf("setup: the abandoned POST is still counted as in flight (%d), so the session is not idle", stillCounted)
+	// Wait until the abandoned POST is no longer counted as in flight: from
+	// then the session looks idle although its tool is still running.
+	setupDeadline := time.Now().Add(3 * time.Second)
+	for {
+		tracker.mu.Lock()
+		counted := tracker.inflight[stuckID]
+		tracker.mu.Unlock()
+		if counted == 0 {
+			break
+		}
+		if time.Now().After(setupDeadline) {
+			t.Fatalf("setup: the abandoned POST is still counted as in flight (%d), so the session is not idle", counted)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if toolFinished.Load() {
+		t.Fatal("setup: the tool finished by itself, so there is no stuck close to test")
 	}
 
 	for i := 0; i < idleSessions; i++ {
@@ -204,7 +226,11 @@ func TestCloseIdleSessions_SlowCloseDoesNotBlockOthers(t *testing.T) {
 
 	closeCtx, cancelClose := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelClose()
-	go closeIdleSessions(closeCtx, server, tracker)
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		closeIdleSessions(closeCtx, server, tracker)
+	}()
 
 	// Every idle session must be gone within closeWithin, although closing the
 	// stuck one is still waiting for its tool.
@@ -225,13 +251,34 @@ func TestCloseIdleSessions_SlowCloseDoesNotBlockOthers(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	// The stuck session was claimed too, so the test really did have a close
-	// that was waiting on the tool, not a session that was skipped.
+	// The idle sessions are closed, and the stuck one's close is still waiting:
+	// its tool is blocked, the session was claimed (so the loop did try to close
+	// it, not skip it), and closeIdleSessions has not returned.
+	if toolFinished.Load() {
+		t.Fatal("the stuck tool finished on its own, so its close was not waiting")
+	}
 	tracker.mu.Lock()
 	stuckClaimed := tracker.claimed[stuckID]
 	tracker.mu.Unlock()
 	if !stuckClaimed {
 		t.Error("the stuck session was never claimed for closing, so the scenario was not exercised")
+	}
+	select {
+	case <-returned:
+		t.Fatal("closeIdleSessions returned while the stuck session's close was still waiting for its tool")
+	default:
+	}
+
+	// Release the tool: its close can finish, and only then may the function
+	// return.
+	releaseTool()
+	select {
+	case <-returned:
+		if !toolFinished.Load() {
+			t.Error("closeIdleSessions returned before the stuck tool had finished")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("closeIdleSessions did not return after the tool was released")
 	}
 }
 
