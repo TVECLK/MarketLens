@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { HIERARCHIES, type HierarchyId } from "@/lib/kpi-config";
 import { getErrorMessage } from "@/lib/errors";
 import { CRUD_ACTIONS } from "@/lib/scopes";
@@ -167,7 +168,7 @@ export default function HierarchyTreeView({ hierarchyId, lists, levels }: Hierar
           <div className="px-3 pt-3 empty:hidden">
             <PermissionsHint {...rootPermissionUi.hintProps} />
           </div>
-          {roots.isLoading && <p className="px-2 py-6 text-center text-xs text-gray-400">Loading...</p>}
+          {roots.isLoading && <LoadingSpinner label="Loading..." className="px-2 py-6 text-xs text-gray-400" />}
           {!roots.isLoading && !roots.isError && roots.items.length === 0 && (
             <p className="px-2 py-6 text-center text-xs text-gray-400">{rootPermissionUi.emptyMessage}</p>
           )}

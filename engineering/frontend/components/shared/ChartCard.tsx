@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { clsx } from "clsx";
+import LoadingSpinner from "@/components/shared/LoadingSpinner";
 
 interface ChartCardProps {
   title: ReactNode;
@@ -82,7 +83,7 @@ export default function ChartCard({
       </div>
       <div className={clsx("flex-1 mt-2 min-w-0 min-h-0", bodyClassName)}>
         {isLoading ? (
-          <CardMessage>{loadingLabel}</CardMessage>
+          <LoadingSpinner label={loadingLabel} className="w-full h-full text-xs text-zinc-400" />
         ) : isError ? (
           <CardMessage>Couldn&apos;t load data</CardMessage>
         ) : isEmpty ? (

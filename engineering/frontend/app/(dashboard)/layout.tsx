@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Header from "@/components/layout/Header";
+import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import RotateDeviceHint from "@/components/shared/RotateDeviceHint";
 import DashboardDateRangePicker from "@/components/dashboard/DashboardDateRangePicker";
 import { DateRangeProvider } from "@/providers/date-range-provider";
@@ -15,9 +16,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       />
       <Suspense
         fallback={
-          <div className="py-20 flex items-center justify-center text-xs text-zinc-400">
-            Loading...
-          </div>
+          <LoadingSpinner label="Loading..." className="py-20 text-xs text-zinc-400" />
         }
       >
         <DateRangeProvider>

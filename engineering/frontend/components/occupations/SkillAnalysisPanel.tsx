@@ -1,6 +1,7 @@
 "use client";
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { YAxisTooltipTick, XAxisStraightTooltipTick } from "@/lib/chart-ticks";
 import {
   CHART_COLORS,
@@ -59,7 +60,7 @@ export default function SkillAnalysisPanel({
   return (
     <div className="p-4 md:p-5 space-y-6">
       {isLoading ? (
-        <div className="p-10 text-center text-xs text-zinc-400">Loading skills...</div>
+        <LoadingSpinner label="Loading skills..." className="p-10 text-xs text-zinc-400" />
       ) : isError ? (
         <div className="p-10 text-center text-xs text-red-500 font-bold">
           Failed to load skills data.

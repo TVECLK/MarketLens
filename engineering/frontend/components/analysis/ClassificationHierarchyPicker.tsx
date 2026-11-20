@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import type {
   HierarchyLevelState,
@@ -64,7 +65,7 @@ export default function ClassificationHierarchyPicker<TLevelKey extends string>(
       </div>
 
       {isInitializing ? (
-        <p className="text-xs text-zinc-400">{initializingLabel}</p>
+        <LoadingSpinner label={initializingLabel} size="sm" inline className="text-xs text-zinc-400" />
       ) : initialLoadError ? (
         <p className="text-xs text-red-500 font-bold">
           {initialLoadErrorLabel}
