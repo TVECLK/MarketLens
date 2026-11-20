@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import type {
   HierarchyLevelState,
@@ -25,6 +24,23 @@ interface ClassificationHierarchyPickerProps<TLevelKey extends string> {
   onSelect: (levelIndex: number, idStr: string) => void;
   onAddLevel: () => void;
   onRemoveLevel: () => void;
+}
+
+/**
+ * Placeholder shaped like the loaded picker (level label, dropdown, "+" button), so the card
+ * doesn't change size when the levels arrive. The label is kept for screen readers.
+ */
+function PickerSkeleton({ label }: { label: string }) {
+  return (
+    <div role="status" aria-live="polite" className="flex items-end gap-2">
+      <span className="sr-only">{label}</span>
+      <div aria-hidden>
+        <div className="h-2.5 w-16 mb-1.5 bg-zinc-100 rounded animate-pulse" />
+        <div className="h-[38px] w-40 bg-zinc-100 rounded-xl animate-pulse" />
+      </div>
+      <div aria-hidden className="mb-0.5 w-9 h-9 bg-zinc-100 rounded-full animate-pulse" />
+    </div>
+  );
 }
 
 export default function ClassificationHierarchyPicker<TLevelKey extends string>({
@@ -65,7 +81,7 @@ export default function ClassificationHierarchyPicker<TLevelKey extends string>(
       </div>
 
       {isInitializing ? (
-        <LoadingSpinner label={initializingLabel} size="sm" inline className="text-xs text-zinc-400" />
+        <PickerSkeleton label={initializingLabel} />
       ) : initialLoadError ? (
         <p className="text-xs text-red-500 font-bold">
           {initialLoadErrorLabel}
