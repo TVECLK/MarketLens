@@ -30,7 +30,7 @@ export default function OccupationDistributionChart({
   linkHref,
 }: OccupationDistributionChartProps) {
   const count = data.length > 0 ? data.length : null;
-  const subtitle = count ? `All ${count} standard occupations` : "Standard occupations";
+  const subtitle = count ? `Across ${count} standard occupations` : "Standard occupations";
 
   const topOccupation = data.length > 0
     ? data.reduce((max, d) => d.value > max.value ? d : max, data[0])

@@ -29,7 +29,7 @@ export default function IndustryDistributionChart({
   isError,
   linkHref,
 }: IndustryDistributionChartProps) {
-  const subtitle = data.length > 0 ? `All ${data.length} standard industries` : "Standard industries";
+  const subtitle = data.length > 0 ? `Across ${data.length} standard industries` : "Standard industries";
 
   const topIndustry = data.length > 0
     ? data.reduce((max, d) => d.value > max.value ? d : max, data[0])
@@ -37,8 +37,9 @@ export default function IndustryDistributionChart({
 
   const headline = topIndustry && topIndustry.value > 0 ? (
     <>
+      The{" "}
       <span className="bg-yellow-200 text-yellow-950 font-semibold px-1">{topIndustry.name}</span>
-      {" "}have the highest job count according to the Sri Lanka Standard Industrial Classification (SLSIC).
+      {" "}industry has the highest number of jobs according to the Sri Lanka Standard Industrial Classification (SLSIC).
     </>
   ) : undefined;
 

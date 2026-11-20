@@ -47,7 +47,7 @@ export default function AnalysisBreakdownTables({
         isError={Boolean(sectionErrors.experience)}
       />
       <DataTable
-        title="Province wise Distribution"
+        title="Province-wise Distribution"
         rows={provinceData}
         isError={Boolean(sectionErrors.province)}
       />

@@ -136,7 +136,7 @@ export default function AnalysisBreakdownCharts({
 
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
           <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
-            Experience <InfoTooltip text="Required years of experience for the vacancies" className="text-zinc-900" />
+            Experience <InfoTooltip text="Distribution of vacancies by required years of experience" className="text-zinc-900" />
           </h4>
           <div className="flex-1 mt-4 min-w-0">
             {sectionErrors.experience ? (
@@ -203,7 +203,7 @@ export default function AnalysisBreakdownCharts({
 
         <div className="border border-zinc-100 p-5 rounded-xl h-[380px] flex flex-col">
           <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
-            Education Level <InfoTooltip text="Required education level for the vacancies" className="text-zinc-900" />
+            Education Level <InfoTooltip text="Distribution of vacancies by required education level" className="text-zinc-900" />
           </h4>
           <div className="flex-1 flex items-center justify-center min-w-0">
             {sectionErrors.education ? (

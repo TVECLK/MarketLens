@@ -43,7 +43,7 @@ export default function DashboardStatCards() {
       <div className={STAT_CLASS}>
         <StatValue target={data?.all_time_vacancy_count} isLoading={isLoading} />
         <p className={LABEL_CLASS}>
-          <span>Total Vacancies</span> <InfoTooltip text="Total job vacancies collected across all sources all time" className="text-zinc-400 hover:text-zinc-600" />
+          <span>Total Vacancies</span> <InfoTooltip text="Total number of job vacancies collected" className="text-zinc-400 hover:text-zinc-600" />
         </p>
       </div>
       <Divider />
