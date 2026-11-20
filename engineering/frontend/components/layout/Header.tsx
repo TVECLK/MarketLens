@@ -21,9 +21,12 @@ export default function Header({
   logo,
 }: HeaderProps) {
   return (
-    <header className="bg-white border-b border-gray-100 px-4 py-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+    // One row on every screen: title on the left, sign-in / user menu top-right. On a phone the title
+    // wraps beside the button, so the header doesn't spend a whole line on it.
+    <header className="bg-white border-b border-gray-100 px-4 py-3 flex flex-row justify-between items-start md:items-center gap-3">
       {/* Left: Logo (optional, signed-out only) + Page Title */}
-      <div className="flex items-center gap-3">
+      {/* `min-w-0` on this row and the text block lets long text wrap instead of overflowing the screen. */}
+      <div className="flex flex-1 items-center gap-3 min-w-0">
         {logo && (
           <SignedOut>
             <Image
@@ -33,17 +36,19 @@ export default function Header({
             />
           </SignedOut>
         )}
-        <div>
-          <h1 className="text-base md:text-xl font-black text-gray-900 tracking-tight">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[12px] md:text-xl font-black text-gray-900 tracking-tight leading-tight text-balance break-words">
             {title}
           </h1>
           {subtitle && (
-            <p className="text-xs text-gray-400 mt-1 font-medium">{subtitle}</p>
+            <p className="text-[8px] md:text-xs text-gray-400 mt-0.5 md:mt-1 font-medium leading-snug text-pretty break-words">
+              {subtitle}
+            </p>
           )}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 w-full md:w-auto justify-end">
+      <div className="flex shrink-0 items-center gap-4">
         <SignedIn>
           <UserDropdown />
         </SignedIn>
@@ -51,7 +56,7 @@ export default function Header({
           <SignInButton>
             {({ signIn, isLoading }) => (
               <button
-                className={`${THEME.button} px-4 py-2 rounded-md text-sm font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 transition-colors`}
+                className={`${THEME.button} px-3 py-1.5 md:px-4 md:py-2 rounded-md text-xs md:text-sm font-medium whitespace-nowrap cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 transition-colors`}
                 onClick={() => signIn().catch((err) => console.error("Sign-in failed", err))}
                 disabled={isLoading}
               >
