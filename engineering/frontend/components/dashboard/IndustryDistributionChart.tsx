@@ -65,7 +65,7 @@ export default function IndustryDistributionChart({
 
   const chart = (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} margin={{ bottom: 14 }}>
+      <BarChart data={data} margin={{ left: 30, bottom: 14 }}>
         <XAxis
           dataKey="name"
           tick={(props) => <XAxisTooltipTick {...props} maxLength={16} fontSize={9} fill={TICK_COLOR} />}
@@ -87,6 +87,7 @@ export default function IndustryDistributionChart({
             value: "No. of Vacancies",
             angle: -90,
             position: "center",
+            dx: -30,
             fontSize: 11,
             fill: TICK_COLOR,
           }}

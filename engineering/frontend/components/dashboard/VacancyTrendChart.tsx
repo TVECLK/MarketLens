@@ -40,7 +40,7 @@ function formatDate(dateStr: string): string {
 
 const chartBody = (data: VacancyTrendPoint[]) => (
   <ResponsiveContainer width="100%" height="100%">
-    <AreaChart data={data} margin={{ top: 10, right: 20, left: 4, bottom: 15 }}>
+    <AreaChart data={data} margin={{ top: 10, right: 20, left: 30, bottom: 25 }}>
       <defs>
         <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={CHART_COLORS.indigo} stopOpacity={0.15} />
@@ -51,6 +51,9 @@ const chartBody = (data: VacancyTrendPoint[]) => (
       <XAxis
         dataKey="label"
         tick={{ fontSize: 10, fill: TICK_COLOR }}
+        angle={-45}
+        textAnchor="end"
+        height={60}
         interval="preserveStartEnd"
         minTickGap={40}
         label={{
@@ -68,6 +71,7 @@ const chartBody = (data: VacancyTrendPoint[]) => (
           value: "No. of Vacancies",
           angle: -90,
           position: "center",
+          dx: -30,
           fontSize: 11,
           fill: TICK_COLOR,
         }}
