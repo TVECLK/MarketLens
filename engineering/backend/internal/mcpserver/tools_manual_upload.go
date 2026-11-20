@@ -82,6 +82,53 @@ func confirmationMessage(source string, jobs []newspaperJob) string {
 	return b.String()
 }
 
+// formSchema builds the object schema of an elicitation form. It has no
+// "required" list on purpose. The SDK checks the content a client returns
+// against the schema before it reports the action, so a form that was
+// cancelled or declined, which carries no content, would come back as an error
+// instead of a dismissal. Each caller checks the fields it needs itself when
+// the action is "accept", so a missing field can never approve an upload or
+// choose a source.
+func formSchema(properties map[string]any) map[string]any {
+	return map[string]any{"type": "object", "properties": properties}
+}
+
+// How askForSource ended.
+const (
+	sourceSelected  = "selected"       // the user chose one of the offered sources
+	sourceCancelled = "cancelled"      // the user dismissed the select box
+	sourceInChat    = "choose_in_chat" // no usable answer: ask in the chat instead
+)
+
+// askForSource shows a select box of the source names and reports how it
+// ended. A source is selected only if the user accepted and the value is one of
+// names, so a missing or made-up value never selects anything. A dismissed form
+// (cancel or decline, which carry no content) is sourceCancelled. If the form
+// could not be shown or answered, or it was accepted without a valid choice,
+// the result is sourceInChat.
+func askForSource(ctx context.Context, session *mcp.ServerSession, names []string) (status, source string) {
+	res, err := session.Elicit(ctx, &mcp.ElicitParams{
+		Message: "Select the newspaper this image came from. " + noMatchingSourceMessage,
+		RequestedSchema: formSchema(map[string]any{
+			"source": map[string]any{
+				"type":  "string",
+				"title": "Source",
+				"enum":  names,
+			},
+		}),
+	})
+	if err != nil {
+		return sourceInChat, ""
+	}
+	if res.Action != "accept" {
+		return sourceCancelled, ""
+	}
+	if chosen, _ := res.Content["source"].(string); slices.Contains(names, chosen) {
+		return sourceSelected, chosen
+	}
+	return sourceInChat, ""
+}
+
 // confirmSubmission shows a Yes / No / Edit select form. It returns the
 // chosen option (confirmYes, confirmNo or confirmEdit) and, for Edit, the
 // edits the user typed in a follow-up form. A declined or dismissed form
@@ -89,17 +136,13 @@ func confirmationMessage(source string, jobs []newspaperJob) string {
 func confirmSubmission(ctx context.Context, session *mcp.ServerSession, source string, jobs []newspaperJob) (choice, edits string, err error) {
 	res, err := session.Elicit(ctx, &mcp.ElicitParams{
 		Message: confirmationMessage(source, jobs),
-		RequestedSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"decision": map[string]any{
-					"type":  "string",
-					"title": "Save these vacancies?",
-					"enum":  []string{confirmYes, confirmNo, confirmEdit},
-				},
+		RequestedSchema: formSchema(map[string]any{
+			"decision": map[string]any{
+				"type":  "string",
+				"title": "Save these vacancies?",
+				"enum":  []string{confirmYes, confirmNo, confirmEdit},
 			},
-			"required": []string{"decision"},
-		},
+		}),
 	})
 	if err != nil {
 		return "", "", err
@@ -119,17 +162,13 @@ func confirmSubmission(ctx context.Context, session *mcp.ServerSession, source s
 
 	res, err = session.Elicit(ctx, &mcp.ElicitParams{
 		Message: "What edits do you want to make to the extracted vacancies?",
-		RequestedSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"edits": map[string]any{
-					"type":        "string",
-					"title":       "Edits",
-					"description": "Describe the changes, e.g. 'job 2 location is Kandy; remove job 4'",
-				},
+		RequestedSchema: formSchema(map[string]any{
+			"edits": map[string]any{
+				"type":        "string",
+				"title":       "Edits",
+				"description": "Describe the changes, e.g. 'job 2 location is Kandy; remove job 4'",
 			},
-			"required": []string{"edits"},
-		},
+		}),
 	})
 	if err != nil {
 		return "", "", err
@@ -443,32 +482,17 @@ func registerManualUploadTools(server *mcp.Server, shutdown context.Context, svc
 
 		// Show a real select box when the client supports elicitation.
 		if clientSupportsElicitation(req) {
-			res, err := req.Session.Elicit(ctx, &mcp.ElicitParams{
-				Message: "Select the newspaper this image came from. " + noMatchingSourceMessage,
-				RequestedSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"source": map[string]any{
-							"type":  "string",
-							"title": "Source",
-							"enum":  names,
-						},
-					},
-					"required": []string{"source"},
-				},
-			})
-			if err == nil {
-				if res.Action != "accept" {
-					return nil, selectManualSourceOutput{
-						Status:  "cancelled",
-						Message: "The user did not select a source. " + noMatchingSourceMessage,
-					}, nil
-				}
-				if chosen, _ := res.Content["source"].(string); slices.Contains(names, chosen) {
-					return nil, selectManualSourceOutput{Status: "selected", Source: chosen, Message: "Source selected."}, nil
-				}
+			switch status, chosen := askForSource(ctx, req.Session, names); status {
+			case sourceSelected:
+				return nil, selectManualSourceOutput{Status: "selected", Source: chosen, Message: "Source selected."}, nil
+			case sourceCancelled:
+				return nil, selectManualSourceOutput{
+					Status:  "cancelled",
+					Message: "The user did not select a source. " + noMatchingSourceMessage,
+				}, nil
 			}
-			// Elicitation unsupported or failed: fall through to the chat list.
+			// Elicitation failed, or the user accepted without a valid choice:
+			// fall through to the chat list.
 		}
 
 		return nil, selectManualSourceOutput{

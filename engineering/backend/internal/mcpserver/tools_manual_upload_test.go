@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -156,6 +157,137 @@ func TestRetryDelay(t *testing.T) {
 				if got := retryDelay(tt.attempt); got < low || got > high {
 					t.Fatalf("retryDelay(%d) = %v, want within [%v, %v]", tt.attempt, got, low, high)
 				}
+			}
+		})
+	}
+}
+
+// scriptedForms is a client that answers each elicitation request with the next
+// scripted result, as a real client would after the user acts on the form, and
+// cancels any request beyond the script. A cancelled or declined form carries
+// no content, which is what the SDK used to turn into an error.
+func scriptedForms(results ...*mcp.ElicitResult) *mcp.ClientOptions {
+	var mu sync.Mutex
+	next := 0
+	return &mcp.ClientOptions{
+		ElicitationHandler: func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			i := next
+			next++
+			if i >= len(results) {
+				return &mcp.ElicitResult{Action: "cancel"}, nil
+			}
+			return results[i], nil
+		},
+	}
+}
+
+func accept(content map[string]any) *mcp.ElicitResult {
+	return &mcp.ElicitResult{Action: "accept", Content: content}
+}
+
+// TestConfirmSubmission_Dismissal checks how the confirmation form ends for
+// each way a user can act on it. A dismissed form (cancel or decline, with no
+// content) must read as No, not as an error, and nothing but an explicit Yes
+// may approve an upload.
+func TestConfirmSubmission_Dismissal(t *testing.T) {
+	tests := []struct {
+		name       string
+		forms      []*mcp.ElicitResult
+		wantChoice string
+		wantEdits  string
+	}{
+		{"form cancelled, no content", []*mcp.ElicitResult{{Action: "cancel"}}, confirmNo, ""},
+		{"form declined, no content", []*mcp.ElicitResult{{Action: "decline"}}, confirmNo, ""},
+		{"accepted without choosing: never approves", []*mcp.ElicitResult{accept(map[string]any{})}, confirmNo, ""},
+		{"accepted with Yes", []*mcp.ElicitResult{accept(map[string]any{"decision": confirmYes})}, confirmYes, ""},
+		{"accepted with No", []*mcp.ElicitResult{accept(map[string]any{"decision": confirmNo})}, confirmNo, ""},
+		{
+			name:       "Edit, then the edits form is dismissed",
+			forms:      []*mcp.ElicitResult{accept(map[string]any{"decision": confirmEdit}), {Action: "cancel"}},
+			wantChoice: confirmEdit,
+		},
+		{
+			name:       "Edit, then the edits form accepted without text",
+			forms:      []*mcp.ElicitResult{accept(map[string]any{"decision": confirmEdit}), accept(map[string]any{})},
+			wantChoice: confirmEdit,
+		},
+		{
+			name:       "Edit with text: the text is trimmed",
+			forms:      []*mcp.ElicitResult{accept(map[string]any{"decision": confirmEdit}), accept(map[string]any{"edits": "  job 2 location is Kandy  "})},
+			wantChoice: confirmEdit,
+			wantEdits:  "job 2 location is Kandy",
+		},
+	}
+	jobs := []newspaperJob{{Employer: "Acme", JobRole: "Engineer", Location: "Colombo", Description: "Builds things"}}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "v0"}, nil)
+			mcp.AddTool(server, &mcp.Tool{Name: "confirm_probe"},
+				func(ctx context.Context, req *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
+					choice, edits, err := confirmSubmission(ctx, req.Session, "Daily News", jobs)
+					if err != nil {
+						return nil, nil, err
+					}
+					return nil, map[string]any{"choice": choice, "edits": edits}, nil
+				})
+			session := connectInMemory(t, server, scriptedForms(tt.forms...))
+
+			res, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "confirm_probe"})
+			if err != nil {
+				t.Fatalf("call tool: %v", err)
+			}
+			if res.IsError {
+				t.Fatalf("a dismissed form came back as an error result: %v", res.Content)
+			}
+			if got := stringField(t, res, "choice"); got != tt.wantChoice {
+				t.Errorf("choice = %q, want %q", got, tt.wantChoice)
+			}
+			if got := stringField(t, res, "edits"); got != tt.wantEdits {
+				t.Errorf("edits = %q, want %q", got, tt.wantEdits)
+			}
+		})
+	}
+}
+
+// TestAskForSource does the same for the source picker. A dismissed form must
+// stop the workflow as "cancelled" and not fall back to asking in the chat,
+// and only an accepted, offered name may select a source.
+func TestAskForSource(t *testing.T) {
+	names := []string{"Daily News", "Sunday Times"}
+	tests := []struct {
+		name       string
+		forms      []*mcp.ElicitResult
+		wantStatus string
+		wantSource string
+	}{
+		{"form cancelled, no content", []*mcp.ElicitResult{{Action: "cancel"}}, sourceCancelled, ""},
+		{"form declined, no content", []*mcp.ElicitResult{{Action: "decline"}}, sourceCancelled, ""},
+		{"accepted without choosing: nothing is selected", []*mcp.ElicitResult{accept(map[string]any{})}, sourceInChat, ""},
+		{"accepted with an offered source", []*mcp.ElicitResult{accept(map[string]any{"source": "Sunday Times"})}, sourceSelected, "Sunday Times"},
+		{"accepted with a name that was not offered: nothing is selected", []*mcp.ElicitResult{accept(map[string]any{"source": "Made Up News"})}, sourceInChat, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "v0"}, nil)
+			mcp.AddTool(server, &mcp.Tool{Name: "source_probe"},
+				func(ctx context.Context, req *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
+					status, source := askForSource(ctx, req.Session, names)
+					return nil, map[string]any{"status": status, "source": source}, nil
+				})
+			session := connectInMemory(t, server, scriptedForms(tt.forms...))
+
+			res, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "source_probe"})
+			if err != nil {
+				t.Fatalf("call tool: %v", err)
+			}
+			if got := stringField(t, res, "status"); got != tt.wantStatus {
+				t.Errorf("status = %q, want %q", got, tt.wantStatus)
+			}
+			if got := stringField(t, res, "source"); got != tt.wantSource {
+				t.Errorf("source = %q, want %q", got, tt.wantSource)
 			}
 		})
 	}

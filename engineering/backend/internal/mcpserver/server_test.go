@@ -230,6 +230,25 @@ func boolField(t *testing.T, res *mcp.CallToolResult, key string) bool {
 	return b
 }
 
+// stringField is boolField for a string field of a tool result's structured
+// content: it fails the test unless the field is present and a string.
+func stringField(t *testing.T, res *mcp.CallToolResult, key string) string {
+	t.Helper()
+	out, ok := res.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("structured content is %T, want an object", res.StructuredContent)
+	}
+	value, present := out[key]
+	if !present {
+		t.Fatalf("result has no %q field: %v", key, out)
+	}
+	s, ok := value.(string)
+	if !ok {
+		t.Fatalf("%q is %T (%v), want a string", key, value, value)
+	}
+	return s
+}
+
 // TestNew_RegistersTools builds the real server and lists its tools. Building
 // it also runs every AddTool call, which panics on a bad input or output
 // schema, so a broken jsonschema tag fails here and not at startup. Registering
