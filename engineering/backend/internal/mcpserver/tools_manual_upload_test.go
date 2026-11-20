@@ -1,15 +1,19 @@
 package mcpserver
 
 import (
+	"bytes"
 	"context"
-	"marketlens-go-backend/internal/ingestion"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"marketlens-go-backend/internal/ingestion"
 )
 
 func TestHasScope(t *testing.T) {
@@ -557,13 +561,71 @@ func TestFinalRunStatus(t *testing.T) {
 	}
 }
 
+func TestPublicFailureMessage(t *testing.T) {
+	const raw = `ERROR: relation "meta_data" does not exist (SQLSTATE 42P01)`
+	tests := []struct {
+		name       string
+		statusCode int
+		rawError   string
+		wantPrefix string
+		wantExact  string // when set, the message must be exactly this: the raw text is kept
+	}{
+		{"400 is written by ingestion and kept", http.StatusBadRequest, "job has no usable text content", "", "job has no usable text content"},
+		{"422 is a rejection", http.StatusUnprocessableEntity, raw, "rejected:", ""},
+		{"503 is a temporary failure", http.StatusServiceUnavailable, raw, "not saved:", ""},
+		{"any other status is generic", http.StatusInternalServerError, raw, "not saved:", ""},
+		{"no status at all is generic", 0, raw, "not saved:", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := publicFailureMessage(ingestion.FailedJob{JobID: "j", StatusCode: tt.statusCode, Error: tt.rawError})
+			if tt.wantExact != "" {
+				if got != tt.wantExact {
+					t.Errorf("message = %q, want %q", got, tt.wantExact)
+				}
+				return
+			}
+			if !strings.HasPrefix(got, tt.wantPrefix) {
+				t.Errorf("message = %q, want it to start with %q", got, tt.wantPrefix)
+			}
+			if strings.Contains(got, "SQLSTATE") || strings.Contains(got, "meta_data") {
+				t.Errorf("message %q leaks the raw error", got)
+			}
+		})
+	}
+}
+
+// TestLogFailedJobs checks the real ingestion error reaches the server log,
+// since the client no longer sees it and this is the only place the cause of a
+// failed vacancy can be found.
+func TestLogFailedJobs(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	logFailedJobs(42, []ingestion.FailedJob{
+		{JobID: "manual-42-0", StatusCode: http.StatusServiceUnavailable, Error: `checking duplicate: relation "lsh_index" does not exist`},
+		{JobID: "manual-42-1", StatusCode: http.StatusUnprocessableEntity, Error: "unextractable"},
+	})
+
+	logged := buf.String()
+	for _, want := range []string{
+		"run 42", "manual-42-0", "status 503", `relation "lsh_index" does not exist`,
+		"manual-42-1", "status 422", "unextractable",
+	} {
+		if !strings.Contains(logged, want) {
+			t.Errorf("log does not contain %q:\n%s", want, logged)
+		}
+	}
+}
+
 func TestNewSubmitOutput(t *testing.T) {
 	jobsByID := map[string]newspaperJob{
 		"a": {Employer: "Acme", JobRole: "Engineer"},
 		"b": {Employer: "Beta", JobRole: "Clerk"},
 		"c": {Employer: "Gamma", JobRole: "Driver"},
 	}
-	oneFailure := []ingestion.FailedJob{{JobID: "b", Error: "unextractable"}}
+	oneFailure := []ingestion.FailedJob{{JobID: "b", StatusCode: http.StatusUnprocessableEntity, Error: "unextractable"}}
 
 	tests := []struct {
 		name            string
@@ -574,7 +636,8 @@ func TestNewSubmitOutput(t *testing.T) {
 		wantMessage     []string
 		wantNotInMsg    []string // text the message must not contain
 		wantFailedRoles []string
-		wantFailedErrs  []string // each failed entry keeps its own error
+		wantErrPrefixes []string // how each failed entry's error starts: it tells a rejection from a temporary failure
+		wantNoLeak      []string // text that must appear nowhere in the result
 	}{
 		{
 			name:        "everything saved",
@@ -588,7 +651,7 @@ func TestNewSubmitOutput(t *testing.T) {
 			wantFailedCount: 1,
 			wantMessage:     []string{"Vacancies processed", "were not saved"},
 			wantFailedRoles: []string{"Clerk"},
-			wantFailedErrs:  []string{"unextractable"},
+			wantErrPrefixes: []string{"rejected:"},
 		},
 		{
 			name:            "interrupted upload tells the client to resubmit everything",
@@ -599,16 +662,16 @@ func TestNewSubmitOutput(t *testing.T) {
 			wantMessage:     []string{"stopped before it finished", "Submit the full list", "Do not submit only the failed jobs"},
 			wantNotInMsg:    []string{"were not processed"},
 			wantFailedRoles: []string{"Clerk"},
-			wantFailedErrs:  []string{"unextractable"},
+			wantErrPrefixes: []string{"rejected:"},
 		},
 		{
 			// A rejected job and one cut short both appear under failed. The
-			// message must not call the rejected one unprocessed, and each entry
-			// keeps its own error so the two can be told apart.
+			// message must not call the rejected one unprocessed, and the entries
+			// still read differently so the two can be told apart.
 			name: "interrupted upload with one rejected job and one that did not finish",
 			failures: []ingestion.FailedJob{
-				{JobID: "b", Error: "unextractable"},
-				{JobID: "c", Error: "context canceled"},
+				{JobID: "b", StatusCode: http.StatusUnprocessableEntity, Error: "unextractable"},
+				{JobID: "c", StatusCode: http.StatusServiceUnavailable, Error: "context canceled"},
 			},
 			interrupted:     true,
 			wantSaved:       1,
@@ -616,7 +679,33 @@ func TestNewSubmitOutput(t *testing.T) {
 			wantMessage:     []string{"were not saved", "some were rejected", "others did not finish", "'error' says which", "rejected job will fail again"},
 			wantNotInMsg:    []string{"were not processed"},
 			wantFailedRoles: []string{"Clerk", "Driver"},
-			wantFailedErrs:  []string{"unextractable", "context canceled"},
+			wantErrPrefixes: []string{"rejected:", "not saved:"},
+		},
+		{
+			// The reviewer's case: ingestion errors that wrap database text must
+			// not reach the client, whatever their status.
+			name: "database errors in failures are not shown",
+			failures: []ingestion.FailedJob{
+				{JobID: "a", StatusCode: http.StatusServiceUnavailable, Error: `checking duplicate: ERROR: relation "lsh_index" does not exist (SQLSTATE 42P01)`},
+				{JobID: "b", StatusCode: http.StatusServiceUnavailable, Error: `looking up source "Daily News": dial tcp 10.0.0.5:5432: connection refused`},
+				{JobID: "c", StatusCode: http.StatusUnprocessableEntity, Error: `job insert failed: ERROR: duplicate key value violates unique constraint "job_post_pkey" (SQLSTATE 23505)`},
+			},
+			wantSaved:       0,
+			wantFailedCount: 3,
+			wantMessage:     []string{"were not saved"},
+			wantFailedRoles: []string{"Engineer", "Clerk", "Driver"},
+			wantErrPrefixes: []string{"not saved:", "not saved:", "rejected:"},
+			wantNoLeak:      []string{"lsh_index", "SQLSTATE", "10.0.0.5", "5432", "job_post_pkey", "relation", "constraint"},
+		},
+		{
+			// The one message ingestion writes itself is safe, and useful to show.
+			name:            "an ingestion-authored 400 message is kept",
+			failures:        []ingestion.FailedJob{{JobID: "a", StatusCode: http.StatusBadRequest, Error: "job has no usable text content"}},
+			wantSaved:       2,
+			wantFailedCount: 1,
+			wantMessage:     []string{"were not saved"},
+			wantFailedRoles: []string{"Engineer"},
+			wantErrPrefixes: []string{"job has no usable text content"},
 		},
 	}
 	for _, tt := range tests {
@@ -650,8 +739,21 @@ func TestNewSubmitOutput(t *testing.T) {
 			if strings.Join(roles, ",") != strings.Join(tt.wantFailedRoles, ",") {
 				t.Errorf("failed roles = %v, want %v", roles, tt.wantFailedRoles)
 			}
-			if strings.Join(errs, ",") != strings.Join(tt.wantFailedErrs, ",") {
-				t.Errorf("failed errors = %v, want %v", errs, tt.wantFailedErrs)
+			if len(errs) != len(tt.wantErrPrefixes) {
+				t.Fatalf("failed errors = %q, want %d entries", errs, len(tt.wantErrPrefixes))
+			}
+			for i, e := range errs {
+				if !strings.HasPrefix(e, tt.wantErrPrefixes[i]) {
+					t.Errorf("failed[%d].error = %q, want it to start with %q", i, e, tt.wantErrPrefixes[i])
+				}
+			}
+			// Nothing from the raw ingestion errors may appear anywhere in what
+			// the client receives: not in the message, not in any entry.
+			everything := out.Message + " " + strings.Join(errs, " ")
+			for _, secret := range tt.wantNoLeak {
+				if strings.Contains(everything, secret) {
+					t.Errorf("result leaks %q: %s", secret, everything)
+				}
 			}
 		})
 	}

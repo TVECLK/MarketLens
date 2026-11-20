@@ -296,6 +296,36 @@ func processWithRetry(ctx, shutdown context.Context, svc batchProcessor, jobs []
 	return failures, false
 }
 
+// publicFailureMessage is what the client sees for a vacancy that was not
+// saved. The ingestion error is not passed on: apart from the 400 messages
+// ingestion writes itself ("job has no usable text content"), it wraps
+// database, LLM and classification errors, which carry table and column names
+// and other internals. The text starts with "rejected:" or "not saved:" so the
+// two causes can still be told apart: a rejected vacancy will fail again until
+// it is corrected, one that was not saved because of a temporary error can
+// simply be submitted again. The real error is logged by logFailedJobs.
+func publicFailureMessage(f ingestion.FailedJob) string {
+	switch f.StatusCode {
+	case http.StatusBadRequest:
+		return f.Error
+	case http.StatusUnprocessableEntity:
+		return "rejected: this vacancy could not be processed, so it was not saved; correct it before submitting it again"
+	case http.StatusServiceUnavailable:
+		return "not saved: a temporary error stopped this vacancy being processed; it can be submitted again"
+	default:
+		return "not saved: this vacancy could not be processed"
+	}
+}
+
+// logFailedJobs records the real ingestion error of every vacancy that was not
+// saved. The client only sees publicFailureMessage, so this is the one place
+// the cause of a failed vacancy can be found.
+func logFailedJobs(runID uint, failures []ingestion.FailedJob) {
+	for _, f := range failures {
+		log.Printf("manual upload run %d: job %s not saved (status %d): %s", runID, f.JobID, f.StatusCode, f.Error)
+	}
+}
+
 // newSubmitOutput builds the result of a submission from what processing
 // returned. interrupted means the upload was stopped before it finished, so
 // the jobs under 'failed' were not all rejected: some were never processed.
@@ -317,7 +347,7 @@ func newSubmitOutput(source string, submitted int, failures []ingestion.FailedJo
 	}
 	for _, f := range failures {
 		j := jobsByID[f.JobID]
-		out.Failed = append(out.Failed, failedVacancyOutput{JobRole: j.JobRole, Employer: j.Employer, Error: f.Error})
+		out.Failed = append(out.Failed, failedVacancyOutput{JobRole: j.JobRole, Employer: j.Employer, Error: publicFailureMessage(f)})
 	}
 	return out
 }
@@ -581,6 +611,7 @@ func registerManualUploadTools(server *mcp.Server, shutdown context.Context, svc
 		defer cancelWork()
 
 		failures, retryGaveUp := processWithRetry(workCtx, shutdown, ingestionSvc, rawJobs, retryDelay)
+		logFailedJobs(run.ID, failures)
 		interrupted, canReconcile := uploadEnded(retryGaveUp, workCtx.Err() != nil, len(failures))
 
 		out := newSubmitOutput(source.Name, len(rawJobs), failures, jobsByID, interrupted)
