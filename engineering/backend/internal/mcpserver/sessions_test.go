@@ -235,6 +235,143 @@ func TestCloseIdleSessions_SlowCloseDoesNotBlockOthers(t *testing.T) {
 	}
 }
 
+func TestWaitForCloses(t *testing.T) {
+	tests := []struct {
+		name       string
+		closeAfter time.Duration // the pending close finishes this long after the wait starts; 0 means never
+		ctxTimeout time.Duration // the drain deadline
+		minElapsed time.Duration
+		maxElapsed time.Duration
+	}{
+		{"no pending close: returns at once", 0, 2 * time.Second, 0, 300 * time.Millisecond}, // wg left empty below
+		{"waits until the pending close has finished", 300 * time.Millisecond, 5 * time.Second, 250 * time.Millisecond, 2 * time.Second},
+		{"gives up at the deadline when a close never finishes", 0, 300 * time.Millisecond, 250 * time.Millisecond, 2 * time.Second},
+	}
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var wg sync.WaitGroup
+			release := make(chan struct{})
+			defer close(release) // lets a close that "never finishes" end with the test
+			switch {
+			case i == 1: // a close that finishes after closeAfter
+				wg.Add(1)
+				time.AfterFunc(tt.closeAfter, wg.Done)
+			case i == 2: // a close that never finishes on its own
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					<-release
+				}()
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), tt.ctxTimeout)
+			defer cancel()
+			start := time.Now()
+			waitForCloses(ctx, &wg)
+			elapsed := time.Since(start)
+
+			if elapsed < tt.minElapsed || elapsed > tt.maxElapsed {
+				t.Errorf("waited %v, want between %v and %v", elapsed, tt.minElapsed, tt.maxElapsed)
+			}
+		})
+	}
+}
+
+// TestShutdown_WaitsForToolWhoseClientDisconnected is the case where shutdown
+// has no HTTP connection left to wait on. The client has no standalone SSE
+// stream, calls a tool and disconnects; the tool keeps running on the server.
+// Server.Shutdown alone would return at once, and the process could exit under
+// the tool before it finalised its crawler run, so shutdown must wait for it.
+func TestShutdown_WaitsForToolWhoseClientDisconnected(t *testing.T) {
+	const toolDuration = 1200 * time.Millisecond
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "v0"}, nil)
+	toolStarted := make(chan struct{}, 1)
+	var toolFinished atomic.Bool
+	mcp.AddTool(server, &mcp.Tool{Name: "finalise"},
+		func(_ context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
+			toolStarted <- struct{}{}
+			time.Sleep(toolDuration) // ignores its context, like a tool still closing its run
+			toolFinished.Store(true)
+			return nil, map[string]any{"done": true}, nil
+		})
+
+	tracker := newSessionTracker()
+	sdkHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+	srv := &http.Server{ReadHeaderTimeout: time.Second, Handler: tracker.track(sdkHandler)}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	shutdownCtx, beginShutdown := context.WithCancel(context.Background())
+	defer beginShutdown()
+	done := make(chan error, 1)
+	go func() {
+		done <- httpserver.ServeUntilDone(shutdownCtx, srv, ln, 10*time.Second, func(drainCtx context.Context) {
+			closeIdleSessions(drainCtx, server, tracker)
+		})
+	}()
+
+	// No standalone SSE stream: once the call is abandoned, nothing keeps an
+	// HTTP connection open for Shutdown to wait on.
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0"}, nil)
+	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{
+		Endpoint:             "http://" + ln.Addr().String(),
+		DisableStandaloneSSE: true,
+	}, nil)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() {
+		closed := make(chan struct{})
+		go func() {
+			session.Close()
+			close(closed)
+		}()
+		select {
+		case <-closed:
+		case <-time.After(3 * time.Second):
+		}
+	})
+
+	callCtx, cancelCall := context.WithCancel(context.Background())
+	defer cancelCall()
+	go session.CallTool(callCtx, &mcp.CallToolParams{Name: "finalise"})
+	select {
+	case <-toolStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the tool call never started")
+	}
+	cancelCall() // the client disconnects; the tool carries on
+	time.Sleep(300 * time.Millisecond)
+
+	tracker.mu.Lock()
+	counted := len(tracker.inflight)
+	tracker.mu.Unlock()
+	if counted != 0 || toolFinished.Load() {
+		t.Fatalf("setup: want the POST gone and the tool still running (counted=%d, finished=%v)", counted, toolFinished.Load())
+	}
+
+	begun := time.Now()
+	beginShutdown()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("ServeUntilDone error = %v, want nil", err)
+		}
+		if !toolFinished.Load() {
+			t.Error("ServeUntilDone returned before the tool had finished: the process would exit under it")
+		}
+		if elapsed := time.Since(begun); elapsed < 500*time.Millisecond {
+			t.Errorf("returned after %v, want it to wait out the tool's remaining time", elapsed)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("ServeUntilDone did not return")
+	}
+}
+
 // TestShutdown_WithOpenSSEStream runs the real SDK handler behind the session
 // tracker, connects a client whose standalone SSE stream stays open, and
 // shuts the server down. Shutdown must not wait for the stream to end by

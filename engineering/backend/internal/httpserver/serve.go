@@ -51,9 +51,13 @@ func NewServer(handler http.Handler) *http.Server {
 // do not finish in time it closes their connections and reports an error. A
 // clean, completed shutdown returns nil.
 //
-// onShutdown, if set, runs concurrently with the drain, until it returns or
-// the grace period ends. It is how the MCP server ends the long-lived SSE
-// streams that Shutdown would otherwise wait on.
+// onShutdown, if set, runs concurrently with the HTTP drain, and ServeUntilDone
+// does not return until it has finished, under the same grace deadline. It is
+// how the MCP server ends the long-lived SSE streams that Shutdown would
+// otherwise wait on, and waits for work that outlives its HTTP request: a tool
+// whose client disconnected keeps running with no connection left for Shutdown
+// to wait on, so without this wait the process could exit under it. The
+// callback gets the grace deadline as drainCtx and must return once it ends.
 func ServeUntilDone(ctx context.Context, srv *http.Server, ln net.Listener, grace time.Duration, onShutdown func(drainCtx context.Context)) error {
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()
@@ -67,12 +71,29 @@ func ServeUntilDone(ctx context.Context, srv *http.Server, ln net.Listener, grac
 	log.Printf("HTTP server shutting down, waiting up to %s for in-flight requests", grace)
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), grace)
 	defer cancel()
+	var drained chan struct{}
 	if onShutdown != nil {
-		go onShutdown(shutdownCtx)
+		drained = make(chan struct{})
+		go func() {
+			defer close(drained)
+			onShutdown(shutdownCtx)
+		}()
 	}
-	if err := srv.Shutdown(shutdownCtx); err != nil {
+
+	err := srv.Shutdown(shutdownCtx)
+	if err == nil && drained != nil {
+		// Shutdown returns as soon as no HTTP connection is left, which can be
+		// before the callback's work is done. Wait for it, under the same
+		// deadline: when the deadline passes, report the work as cut off.
+		select {
+		case <-drained:
+		case <-shutdownCtx.Done():
+			err = shutdownCtx.Err()
+		}
+	}
+	if err != nil {
 		srv.Close()
-		return fmt.Errorf("graceful shutdown did not finish, in-flight requests were cut off: %w", err)
+		return fmt.Errorf("graceful shutdown did not finish, in-flight work was cut off: %w", err)
 	}
 	return nil
 }

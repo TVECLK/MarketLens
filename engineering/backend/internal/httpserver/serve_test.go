@@ -88,6 +88,85 @@ func TestServeUntilDone(t *testing.T) {
 	}
 }
 
+// TestServeUntilDone_WaitsForOnShutdown has no HTTP request in flight, so
+// Server.Shutdown returns at once. The onShutdown callback still has work to
+// do, such as a tool whose client disconnected, and ServeUntilDone must not
+// return before it finishes, or the process could exit under that work.
+func TestServeUntilDone_WaitsForOnShutdown(t *testing.T) {
+	tests := []struct {
+		name       string
+		onShutdown func(drainCtx context.Context)
+		grace      time.Duration
+		wantErr    bool
+		minElapsed time.Duration // ServeUntilDone must take at least this long
+		maxElapsed time.Duration // and no longer than this
+	}{
+		{
+			name:       "no callback: returns at once",
+			grace:      2 * time.Second,
+			maxElapsed: 500 * time.Millisecond,
+		},
+		{
+			name: "returns once the callback has finished",
+			onShutdown: func(drainCtx context.Context) {
+				select {
+				case <-time.After(400 * time.Millisecond):
+				case <-drainCtx.Done():
+				}
+			},
+			grace:      5 * time.Second,
+			minElapsed: 350 * time.Millisecond,
+			maxElapsed: 2 * time.Second,
+		},
+		{
+			// A callback that never finishes must not hold shutdown past the
+			// grace period: it is reported as cut off.
+			name: "a callback that outlasts the grace period is cut off at the deadline",
+			onShutdown: func(drainCtx context.Context) {
+				<-drainCtx.Done()
+			},
+			grace:      300 * time.Millisecond,
+			wantErr:    true,
+			minElapsed: 250 * time.Millisecond,
+			maxElapsed: 3 * time.Second,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := &http.Server{ReadHeaderTimeout: time.Second, Handler: http.NotFoundHandler()}
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			done := make(chan error, 1)
+			go func() { done <- ServeUntilDone(ctx, srv, ln, tt.grace, tt.onShutdown) }()
+
+			// Let the server start before it is asked to stop.
+			time.Sleep(50 * time.Millisecond)
+			begun := time.Now()
+			cancel() // what SIGTERM does
+
+			select {
+			case err := <-done:
+				elapsed := time.Since(begun)
+				if (err != nil) != tt.wantErr {
+					t.Errorf("ServeUntilDone error = %v, wantErr %v", err, tt.wantErr)
+				}
+				if elapsed < tt.minElapsed {
+					t.Errorf("returned after %v, want at least %v: it did not wait for the callback", elapsed, tt.minElapsed)
+				}
+				if elapsed > tt.maxElapsed {
+					t.Errorf("returned after %v, want within %v", elapsed, tt.maxElapsed)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("ServeUntilDone did not return")
+			}
+		})
+	}
+}
+
 // TestNewServer_Timeouts checks every stage of a request has a timeout. A zero
 // value means no limit, so a regression back to a bare server, which is what
 // gosec flags and what lets a slow client hold a connection open, fails here.

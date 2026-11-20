@@ -107,7 +107,14 @@ func (t *sessionTracker) release(id string) {
 // stream, which stays open for the whole session, so every shutdown would run
 // into the grace period even with no tool call running. A session with a call
 // in progress is left alone until that call's response has been written.
+//
+// It returns only when every session is gone and every close it started has
+// finished, or when ctx ends. A close does not finish while a tool is still
+// running on its session, so waiting for it keeps the process alive until that
+// work has finalised, which matters for a tool whose client disconnected: no
+// HTTP connection is left for shutdown to wait on.
 func closeIdleSessions(ctx context.Context, server *mcp.Server, tracker *sessionTracker) {
+	var closes sync.WaitGroup
 	ticker := time.NewTicker(sessionDrainPollInterval)
 	defer ticker.Stop()
 	for {
@@ -116,6 +123,7 @@ func closeIdleSessions(ctx context.Context, server *mcp.Server, tracker *session
 			sessions = append(sessions, ss)
 		}
 		if len(sessions) == 0 {
+			waitForCloses(ctx, &closes)
 			return
 		}
 		for _, ss := range sessions {
@@ -129,7 +137,9 @@ func closeIdleSessions(ctx context.Context, server *mcp.Server, tracker *session
 			// this loop would let one stuck session hold up every other idle
 			// stream. The claim taken above stops later polls starting the same
 			// close again; a failed close releases it so the next poll retries.
+			closes.Add(1)
 			go func() {
+				defer closes.Done()
 				if err := ss.Close(); err != nil {
 					log.Printf("closing idle MCP session %s: %v", id, err)
 					tracker.release(id)
@@ -142,5 +152,18 @@ func closeIdleSessions(ctx context.Context, server *mcp.Server, tracker *session
 			return
 		case <-ticker.C:
 		}
+	}
+}
+
+// waitForCloses waits for the session closes in wg, or for ctx to end.
+func waitForCloses(ctx context.Context, wg *sync.WaitGroup) {
+	finished := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-ctx.Done():
 	}
 }
