@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"marketlens-go-backend/internal/auth"
 	"marketlens-go-backend/internal/config"
+	"marketlens-go-backend/internal/ingestion"
 	"marketlens-go-backend/internal/mcpserver"
 	"marketlens-go-backend/internal/repositories"
 	"marketlens-go-backend/internal/service"
@@ -23,6 +28,10 @@ func main() {
 	store := repositories.NewStore(db)
 	services := service.NewServices(store)
 
+	if err := cfg.MCP.Validate(); err != nil {
+		log.Fatalf("mcp misconfigured: %v", err)
+	}
+
 	mcpAuthCfg := auth.Config{
 		BaseURL:     cfg.Auth.BaseURL,
 		Issuer:      cfg.Auth.Issuer,
@@ -34,7 +43,24 @@ func main() {
 	}
 	mcpVerifier := auth.NewVerifier(mcpAuthCfg)
 
-	mcpServer := mcpserver.New(services)
+	// Only newspaper vacancy submission needs the LLM. If it isn't configured,
+	// start anyway so the read-only tools keep working; the submit tool then
+	// reports that it is unavailable.
+	var ingestionSvc *ingestion.IngestionService
+	if err := cfg.LLM.Validate(); err != nil {
+		log.Printf("llm not configured, newspaper vacancy submission is disabled: %v", err)
+	} else {
+		ingestionSvc = ingestion.NewServiceFromConfig(services, cfg.LLM, cfg.Ingestion)
+	}
+
+	// SIGTERM (a Kubernetes pod stop) or Ctrl-C starts a graceful shutdown. The
+	// same context goes to the server, so it stops accepting connections, and
+	// to the tools, so an in-flight newspaper submission stops retrying and
+	// closes its crawler run within the grace period.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	mcpServer := mcpserver.New(ctx, services, ingestionSvc)
 
 	meta := mcpserver.Metadata{
 		ResourceID:    cfg.MCP.ResourceID,
@@ -43,7 +69,8 @@ func main() {
 	}
 
 	log.Println("MCP server listening on :9090/mcp")
-	if err := mcpserver.StartHTTP(mcpServer, mcpVerifier, meta, ":9090"); err != nil {
+	if err := mcpserver.StartHTTP(ctx, mcpServer, mcpVerifier, meta, ":9090"); err != nil {
 		log.Fatalf("MCP server failed: %v", err)
 	}
+	log.Println("MCP server stopped")
 }

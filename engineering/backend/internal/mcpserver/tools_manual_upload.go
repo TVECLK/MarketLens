@@ -1,99 +1,671 @@
 package mcpserver
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
+	"log"
+	"math/rand/v2"
 	"net/http"
-	"os"
+	"slices"
+	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"gorm.io/gorm"
+
+	"marketlens-go-backend/internal/ingestion"
+	"marketlens-go-backend/internal/models"
+	"marketlens-go-backend/internal/service"
 )
+
+const submitNewspaperVacanciesScope = "submit-newspaper-vacancies"
+
+// errMissingUploadScope is returned by both upload tools when the caller's
+// token lacks the scope. The text tells the model to end the workflow.
+var errMissingUploadScope = fmt.Errorf(
+	"missing required scope: %s - this user is not allowed to upload newspaper vacancies. "+
+		"Stop and tell the user they do not have permission", submitNewspaperVacanciesScope)
 
 type newspaperJob struct {
 	Employer    string `json:"employer" jsonschema:"employer/company name as printed in the ad"`
 	JobRole     string `json:"job_role" jsonschema:"job title / role as printed in the ad"`
 	Location    string `json:"location" jsonschema:"work location, city or region"`
 	Description string `json:"description" jsonschema:"job description: responsibilities, requirements, benefits"`
-	Source      string `json:"source" jsonschema:"name of the newspaper this ad was found in, e.g. 'Daily News'"`
 }
 
 type submitNewspaperVacanciesInput struct {
+	Source        string         `json:"source" jsonschema:"name of the manual source the user picked via select_manual_source, exactly as returned (e.g. 'Daily News')"`
 	Jobs          []newspaperJob `json:"jobs" jsonschema:"list of job vacancies extracted from the uploaded newspaper image"`
-	UserConfirmed bool           `json:"user_confirmed" jsonschema:"set to true ONLY after you have shown the extracted jobs to the user and they explicitly approved them. Never set this on your own."`
+	UserConfirmed bool           `json:"user_confirmed,omitempty" jsonschema:"only needed when the client cannot show the confirmation form (the tool then tells you so): set to true ONLY after you have shown the jobs and source to the user and they explicitly approved them. Never set this on your own."`
 }
 
-func registerManualUploadTools(server *mcp.Server) {
+// submitDecisionOutput is returned instead of a save result when the user
+// answers the confirmation form with No or Edit.
+type submitDecisionOutput struct {
+	Status  string `json:"status" jsonschema:"cancelled, edits_requested or server_restarting"`
+	Edits   string `json:"edits,omitempty" jsonschema:"the changes the user asked for, in their own words"`
+	Message string `json:"message"`
+}
+
+const (
+	confirmYes  = "Yes"
+	confirmNo   = "No"
+	confirmEdit = "Edit"
+)
+
+// clientSupportsElicitation reports whether the connected client can show a
+// form to the user. It follows the SDK's own rule in ServerSession.Elicit:
+// a client declaring only URL elicitation cannot do forms, while an empty
+// elicitation declaration ({}) is legacy and means form support.
+func clientSupportsElicitation(req *mcp.CallToolRequest) bool {
+	if req == nil || req.Session == nil {
+		return false
+	}
+	ip := req.Session.InitializeParams()
+	if ip == nil || ip.Capabilities == nil || ip.Capabilities.Elicitation == nil {
+		return false
+	}
+	caps := ip.Capabilities.Elicitation
+	return caps.Form != nil || caps.URL == nil
+}
+
+// confirmationMessage renders the jobs and source for the confirmation form.
+// Descriptions are shown in full: the user is approving exactly what will be
+// saved, so nothing may be cut off.
+func confirmationMessage(source string, jobs []newspaperJob) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Save these %d vacancies from %q?\n\n", len(jobs), source)
+	for i, j := range jobs {
+		fmt.Fprintf(&b, "%d. %s - %s (%s)\n   %s\n", i+1, j.JobRole, j.Employer, j.Location, strings.TrimSpace(j.Description))
+	}
+	return b.String()
+}
+
+// formSchema builds the object schema of an elicitation form. It has no
+// "required" list on purpose. The SDK checks the content a client returns
+// against the schema before it reports the action, so a form that was
+// cancelled or declined, which carries no content, would come back as an error
+// instead of a dismissal. Each caller checks the fields it needs itself when
+// the action is "accept", so a missing field can never approve an upload or
+// choose a source.
+func formSchema(properties map[string]any) map[string]any {
+	return map[string]any{"type": "object", "properties": properties}
+}
+
+// How askForSource ended.
+const (
+	sourceSelected  = "selected"       // the user chose one of the offered sources
+	sourceCancelled = "cancelled"      // the user dismissed the select box
+	sourceInChat    = "choose_in_chat" // no usable answer: ask in the chat instead
+)
+
+// askForSource shows a select box of the source names and reports how it
+// ended. A source is selected only if the user accepted and the value is one of
+// names, so a missing or made-up value never selects anything. A dismissed form
+// (cancel or decline, which carry no content) is sourceCancelled. If the form
+// could not be shown or answered, or it was accepted without a valid choice,
+// the result is sourceInChat.
+func askForSource(ctx context.Context, session *mcp.ServerSession, names []string) (status, source string) {
+	res, err := session.Elicit(ctx, &mcp.ElicitParams{
+		Message: "Select the newspaper this image came from. " + noMatchingSourceMessage,
+		RequestedSchema: formSchema(map[string]any{
+			"source": map[string]any{
+				"type":  "string",
+				"title": "Source",
+				"enum":  names,
+			},
+		}),
+	})
+	if err != nil {
+		return sourceInChat, ""
+	}
+	if res.Action != "accept" {
+		return sourceCancelled, ""
+	}
+	if chosen, _ := res.Content["source"].(string); slices.Contains(names, chosen) {
+		return sourceSelected, chosen
+	}
+	return sourceInChat, ""
+}
+
+// confirmSubmission shows a Yes / No / Edit select form. It returns the
+// chosen option (confirmYes, confirmNo or confirmEdit) and, for Edit, the
+// edits the user typed in a follow-up form. A declined or dismissed form
+// counts as No, so nothing is ever saved without an explicit Yes.
+func confirmSubmission(ctx context.Context, session *mcp.ServerSession, source string, jobs []newspaperJob) (choice, edits string, err error) {
+	res, err := session.Elicit(ctx, &mcp.ElicitParams{
+		Message: confirmationMessage(source, jobs),
+		RequestedSchema: formSchema(map[string]any{
+			"decision": map[string]any{
+				"type":  "string",
+				"title": "Save these vacancies?",
+				"enum":  []string{confirmYes, confirmNo, confirmEdit},
+			},
+		}),
+	})
+	if err != nil {
+		return "", "", err
+	}
+	if res.Action != "accept" {
+		return confirmNo, "", nil
+	}
+	picked, _ := res.Content["decision"].(string)
+	switch {
+	case strings.EqualFold(picked, confirmYes):
+		return confirmYes, "", nil
+	case strings.EqualFold(picked, confirmEdit):
+		// fall through to ask what to change
+	default:
+		return confirmNo, "", nil
+	}
+
+	res, err = session.Elicit(ctx, &mcp.ElicitParams{
+		Message: "What edits do you want to make to the extracted vacancies?",
+		RequestedSchema: formSchema(map[string]any{
+			"edits": map[string]any{
+				"type":        "string",
+				"title":       "Edits",
+				"description": "Describe the changes, e.g. 'job 2 location is Kandy; remove job 4'",
+			},
+		}),
+	})
+	if err != nil {
+		return "", "", err
+	}
+	if res.Action == "accept" {
+		edits, _ = res.Content["edits"].(string)
+	}
+	return confirmEdit, strings.TrimSpace(edits), nil
+}
+
+// statusServerRestarting is returned when shutdown begins while the tool is
+// still waiting for the user's confirmation.
+const statusServerRestarting = "server_restarting"
+
+// confirmUnlessShuttingDown asks the user to confirm, like confirmSubmission,
+// but stops waiting as soon as shutdown begins and reports shuttingDown. The
+// user's answer comes back to the server as a separate request, and shutdown
+// closes the listener before it can arrive, so waiting on would only use up
+// the grace period. Nothing has been saved at this point, so the caller can
+// tell the client to retry. If the user answered first, the answer is
+// returned as usual.
+func confirmUnlessShuttingDown(ctx, shutdown context.Context, session *mcp.ServerSession, source string, jobs []newspaperJob) (choice, edits string, shuttingDown bool, err error) {
+	confirmCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stop := context.AfterFunc(shutdown, cancel)
+	defer stop()
+
+	choice, edits, err = confirmSubmission(confirmCtx, session, source, jobs)
+	if err != nil && shutdown.Err() != nil && ctx.Err() == nil {
+		return "", "", true, nil
+	}
+	return choice, edits, false, err
+}
+
+type manualSourceOutput struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
+}
+
+const noMatchingSourceMessage = "If there is no matching source, you should add a source from the dashboard and then try again."
+
+type selectManualSourceOutput struct {
+	Status  string               `json:"status" jsonschema:"selected, choose_in_chat, cancelled or no_sources"`
+	Source  string               `json:"source,omitempty"`
+	Sources []manualSourceOutput `json:"sources,omitempty"`
+	Message string               `json:"message"`
+}
+
+type failedVacancyOutput struct {
+	JobRole  string `json:"job_role"`
+	Employer string `json:"employer"`
+	Error    string `json:"error"`
+}
+
+type submitNewspaperVacanciesOutput struct {
+	Message     string                `json:"message"`
+	Source      string                `json:"source"`
+	Submitted   int                   `json:"submitted" jsonschema:"number of jobs sent, including any that failed"`
+	SavedCount  int                   `json:"saved_count" jsonschema:"number of jobs that did not fail: saved, or matched an existing duplicate"`
+	FailedCount int                   `json:"failed_count"`
+	Failed      []failedVacancyOutput `json:"failed,omitempty"`
+
+	ReconciledStaleJobs int64  `json:"reconciled_stale_jobs" jsonschema:"number of earlier open vacancies from this source that were closed because they were not in this upload; an upload is treated as the source's full current list"`
+	ReconcileNote       string `json:"reconcile_note,omitempty" jsonschema:"set if closing the earlier vacancies failed or was skipped: because the upload was interrupted, or because every job was saved but time ran out before they could be closed. The jobs that were saved stay saved"`
+	Interrupted         bool   `json:"interrupted,omitempty" jsonschema:"true if the upload was stopped before it finished; the jobs under 'failed' were not all rejected, some were never processed. Submit the full list again, never only the failed jobs"`
+}
+
+// hasScope reports whether the token on the current request carries scope.
+// It reads the request's own token info, not the context: the context of a
+// tool call comes from the session's first request, so its scopes can be stale.
+func hasScope(req *mcp.CallToolRequest, scope string) bool {
+	if req == nil {
+		return false
+	}
+	extra := req.GetExtra()
+	if extra == nil || extra.TokenInfo == nil {
+		return false
+	}
+	return slices.Contains(extra.TokenInfo.Scopes, scope)
+}
+
+const (
+	// manualUploadMaxRetries is how many times jobs that failed transiently
+	// are re-submitted after the first attempt before they are given up on.
+	manualUploadMaxRetries = 3
+	// manualUploadRetryBaseDelay is the wait before the first retry; each
+	// later retry doubles it (5s, 10s, 20s), long enough for typical LLM
+	// rate-limit windows to clear.
+	manualUploadRetryBaseDelay = 5 * time.Second
+	// manualUploadRetryJitter spreads each wait by +/-20% so retries do not
+	// land in lockstep.
+	manualUploadRetryJitter = 0.2
+)
+
+// retryDelay is the exponential backoff wait before the given retry attempt
+// (1-based), with jitter.
+func retryDelay(attempt int) time.Duration {
+	d := manualUploadRetryBaseDelay << (attempt - 1)
+	jitter := 1 + manualUploadRetryJitter*(2*rand.Float64()-1)
+	return time.Duration(float64(d) * jitter)
+}
+
+// batchProcessor is the part of the ingestion service processWithRetry uses.
+type batchProcessor interface {
+	ProcessBatch(ctx context.Context, jobs []ingestion.RawJobInput) []ingestion.FailedJob
+}
+
+// processWithRetry runs the batch, then re-runs only the jobs that failed
+// with a transient (503) error, up to manualUploadMaxRetries times, waiting
+// delay(attempt) before each. Permanent failures (4xx: bad input,
+// unextractable job) are never retried. Whatever still fails afterwards is
+// returned for reporting.
+//
+// interrupted is true when it gave up on retries early: because shutdown has
+// begun, before or during a backoff wait (a retry could not finish in the
+// grace period, so none is started), or because ctx ended. The failures it
+// returns were not retried.
+func processWithRetry(ctx, shutdown context.Context, svc batchProcessor, jobs []ingestion.RawJobInput, delay func(attempt int) time.Duration) (failures []ingestion.FailedJob, interrupted bool) {
+	failures = svc.ProcessBatch(ctx, jobs)
+	byID := make(map[string]ingestion.RawJobInput, len(jobs))
+	for _, j := range jobs {
+		byID[j.JobID] = j
+	}
+
+	for attempt := 1; attempt <= manualUploadMaxRetries; attempt++ {
+		var retry []ingestion.RawJobInput
+		var permanent []ingestion.FailedJob
+		for _, f := range failures {
+			if f.StatusCode == http.StatusServiceUnavailable {
+				retry = append(retry, byID[f.JobID])
+			} else {
+				permanent = append(permanent, f)
+			}
+		}
+		if len(retry) == 0 {
+			return failures, false
+		}
+		if shutdown.Err() != nil {
+			return failures, true
+		}
+
+		// Wait out the backoff, but give up the moment shutdown begins or the
+		// work context ends: a wait that outlives either would only start a
+		// retry that cannot finish in the grace period.
+		timer := time.NewTimer(delay(attempt))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return failures, true
+		case <-shutdown.Done():
+			timer.Stop()
+			return failures, true
+		case <-timer.C:
+		}
+		// select picks at random when several cases are ready, so a timer that
+		// fired together with a shutdown or cancellation can be the one chosen.
+		if shutdown.Err() != nil || ctx.Err() != nil {
+			return failures, true
+		}
+
+		log.Printf("retrying %d transiently failed manual job(s), attempt %d/%d", len(retry), attempt, manualUploadMaxRetries)
+		failures = append(permanent, svc.ProcessBatch(ctx, retry)...)
+	}
+	return failures, false
+}
+
+// publicFailureMessage is what the client sees for a vacancy that was not
+// saved. The ingestion error is not passed on: apart from the 400 messages
+// ingestion writes itself ("job has no usable text content"), it wraps
+// database, LLM and classification errors, which carry table and column names
+// and other internals. The text starts with "rejected:" or "not saved:" so the
+// two causes can still be told apart: a rejected vacancy will fail again until
+// it is corrected, one that was not saved because of a temporary error can
+// simply be submitted again. The real error is logged by logFailedJobs.
+func publicFailureMessage(f ingestion.FailedJob) string {
+	switch f.StatusCode {
+	case http.StatusBadRequest:
+		return f.Error
+	case http.StatusUnprocessableEntity:
+		return "rejected: this vacancy could not be processed, so it was not saved; correct it before submitting it again"
+	case http.StatusServiceUnavailable:
+		return "not saved: a temporary error stopped this vacancy being processed; it can be submitted again"
+	default:
+		return "not saved: this vacancy could not be processed"
+	}
+}
+
+// logFailedJobs records the real ingestion error of every vacancy that was not
+// saved. The client only sees publicFailureMessage, so this is the one place
+// the cause of a failed vacancy can be found.
+func logFailedJobs(runID uint, failures []ingestion.FailedJob) {
+	for _, f := range failures {
+		log.Printf("manual upload run %d: job %s not saved (status %d): %s", runID, f.JobID, f.StatusCode, f.Error)
+	}
+}
+
+// newSubmitOutput builds the result of a submission from what processing
+// returned. interrupted means the upload was stopped before it finished, so
+// the jobs under 'failed' were not all rejected: some were never processed.
+func newSubmitOutput(source string, submitted int, failures []ingestion.FailedJob, jobsByID map[string]newspaperJob, interrupted bool) submitNewspaperVacanciesOutput {
+	out := submitNewspaperVacanciesOutput{
+		Message:     "Vacancies processed. 'saved_count' jobs were saved or matched an existing duplicate; the jobs listed under 'failed' were not saved.",
+		Source:      source,
+		Submitted:   submitted,
+		SavedCount:  submitted - len(failures),
+		FailedCount: len(failures),
+		Interrupted: interrupted,
+	}
+	if interrupted {
+		out.Message = "The upload was stopped before it finished (the server is shutting down or the connection was lost). " +
+			"'saved_count' jobs were saved or matched an existing duplicate. The jobs listed under 'failed' were not saved: " +
+			"some were rejected, and others did not finish because the upload was stopped; each entry's 'error' says which. " +
+			"Submit the full list of jobs again: jobs already saved are recognised as duplicates, so nothing is saved twice, " +
+			"and a rejected job will fail again unless it is corrected first. Do not submit only the failed jobs."
+	}
+	for _, f := range failures {
+		j := jobsByID[f.JobID]
+		out.Failed = append(out.Failed, failedVacancyOutput{JobRole: j.JobRole, Employer: j.Employer, Error: publicFailureMessage(f)})
+	}
+	return out
+}
+
+// uploadEnded decides how a submission ended, keeping two questions apart:
+// whether every job was processed, and whether there is still time to
+// reconcile.
+//
+// interrupted means some jobs were not processed. It is true when retries were
+// given up (retryGaveUp), or when the work context ended and at least one job
+// failed. A work context that ended after every job had already succeeded is
+// not an interruption: the vacancies are saved, and calling that a failed run
+// would make the client replay a list that was fully ingested.
+//
+// reconcile is true only if the upload finished and the work context is still
+// live. When every job succeeded but time (or the connection) ran out,
+// interrupted is false and reconcile is false: report the saved vacancies and
+// leave closing the earlier ones to a repeat of the same submission.
+func uploadEnded(retryGaveUp, workCtxEnded bool, failures int) (interrupted, reconcile bool) {
+	interrupted = retryGaveUp || (workCtxEnded && failures > 0)
+	reconcile = !interrupted && !workCtxEnded
+	return interrupted, reconcile
+}
+
+// reconcileFailedNote is the reconcile_note when closing the earlier
+// vacancies failed after every job was saved. workCtxEnded says the cause was
+// the budget running out (or the connection being lost) and not a database
+// error, in which case repeating the submission is the way to finish.
+func reconcileFailedNote(workCtxEnded bool) string {
+	note := "vacancies were saved, but closing stale vacancies failed"
+	if workCtxEnded {
+		note += " because the server ran out of time or the connection was lost; " +
+			"submit the same list again to finish closing them"
+	}
+	return note
+}
+
+// finalRunStatus is the status a manual submission's crawler run is closed
+// with. A run is COMPLETED only if the upload finished and at least one job
+// succeeded, saved or matched an existing duplicate. An interrupted upload,
+// or one where every job was rejected, is FAILED, so the run does not read as
+// a success when nothing was processed. A run where only some jobs failed is
+// still COMPLETED: the failures are reported to the client.
+func finalRunStatus(interrupted bool, savedCount int) string {
+	if interrupted || savedCount == 0 {
+		return "FAILED"
+	}
+	return "COMPLETED"
+}
+
+// registerManualUploadTools registers the newspaper upload tools. shutdown is
+// cancelled when the process starts shutting down; a submission in progress
+// then stops retrying, and all ingestion is cut off drainWorkBudget after
+// shutdown began, however late each submission started.
+func registerManualUploadTools(server *mcp.Server, shutdown context.Context, svcs *service.Services, ingestionSvc *ingestion.IngestionService) {
+	budget := newDrainBudget(shutdown, drainWorkBudget)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "select_manual_source",
+		Description: "Let the user choose which manual source (newspaper) an uploaded newspaper image came from. " +
+			"Call this after extracting the jobs from the image. It shows the user a select box of the active " +
+			"manual sources; pass the returned 'source' to submit_newspaper_vacancies. If the client cannot show " +
+			"a select box, the result has status 'choose_in_chat' and a list of sources: ask the user to pick one " +
+			"of exactly those names. The user may only choose a listed source - never invent or guess one. " +
+			"Status 'cancelled' means the user closed the select box without choosing: stop and relay the " +
+			"'message'. If no source matches, relay the 'message' to the user. If it fails with a " +
+			"missing-scope error, the user may not upload newspaper vacancies: stop and tell them.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
+		// Checked first so a user who may not upload is stopped here, before
+		// the source picker, not at the submit step after all the work.
+		if !hasScope(req, submitNewspaperVacanciesScope) {
+			return nil, nil, errMissingUploadScope
+		}
+
+		active := true
+		sources, err := svcs.Sources.ListSources(ctx, string(models.SourceTypeManual), &active)
+		if err != nil {
+			return nil, nil, toolError("select_manual_source", err)
+		}
+		if len(sources) == 0 {
+			return nil, selectManualSourceOutput{
+				Status:  "no_sources",
+				Message: "There are no active manual sources. Add a source from the dashboard and then try again.",
+			}, nil
+		}
+
+		names := make([]string, len(sources))
+		list := make([]manualSourceOutput, len(sources))
+		for i, s := range sources {
+			names[i] = s.Name
+			list[i] = manualSourceOutput{ID: s.ID, Name: s.Name}
+		}
+
+		// Show a real select box when the client supports elicitation.
+		if clientSupportsElicitation(req) {
+			switch status, chosen := askForSource(ctx, req.Session, names); status {
+			case sourceSelected:
+				return nil, selectManualSourceOutput{Status: "selected", Source: chosen, Message: "Source selected."}, nil
+			case sourceCancelled:
+				return nil, selectManualSourceOutput{
+					Status:  "cancelled",
+					Message: "The user did not select a source. " + noMatchingSourceMessage,
+				}, nil
+			}
+			// Elicitation failed, or the user accepted without a valid choice:
+			// fall through to the chat list.
+		}
+
+		return nil, selectManualSourceOutput{
+			Status:  "choose_in_chat",
+			Sources: list,
+			Message: "Ask the user to pick one of these sources. " + noMatchingSourceMessage,
+		}, nil
+	})
+
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "submit_newspaper_vacancies",
 		Description: "Submit job vacancies extracted from a newspaper image for deduplication, " +
 			"classification, and storage in the labour market database. This tool does not read " +
 			"images itself - before calling it, read the uploaded newspaper image yourself and " +
-			"extract each job's employer, role, location, description, and the newspaper's name " +
-			"as the source.\n\n" +
-			"IMPORTANT: Do not call this tool immediately after extraction. First present the " +
-			"extracted jobs to the user as a readable list or table, ask them to confirm or " +
-			"correct the data, and only call this tool once the user has explicitly approved.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, in submitNewspaperVacanciesInput) (*mcp.CallToolResult, any, error) {
+			"extract each job's employer, role, location, and description.\n\n" +
+			"Workflow: (1) extract the jobs from the image, (2) call select_manual_source so the " +
+			"user chooses the newspaper as the source, (3) show the extracted jobs and the chosen " +
+			"source in the chat as a readable list or table, (4) call this tool. It shows the user a " +
+			"Yes / No / Edit form and saves only on Yes.\n\n" +
+			"Results: status 'cancelled' means the user chose No - stop, nothing was saved. Status " +
+			"'edits_requested' means the user chose Edit - apply their 'edits' to the jobs (if 'edits' " +
+			"is empty, unclear or doesn't match any job, ask the user in chat what they meant instead of " +
+			"guessing), show the updated jobs in the chat, then " +
+			"call this tool again with the updated jobs so they confirm again. Status 'server_restarting' " +
+			"means the server began shutting down before the user answered: nothing was saved, so tell " +
+			"the user and call this tool again with the same jobs after a short wait. On success (the user " +
+			"chose Yes) the result has no status; it has 'submitted' (jobs sent), 'saved_count', 'failed_count' and 'failed' - " +
+			"tell the user how many were saved and list any that failed. Each upload is treated as the " +
+			"source's full current list: earlier open vacancies from the same source that are not in this " +
+			"upload are closed, and 'reconciled_stale_jobs' is how many were closed. If it is above 0, tell " +
+			"the user that many earlier vacancies from the source were closed. If 'reconcile_note' is set, " +
+			"tell the user what it says; the jobs that were saved stay saved. If 'interrupted' is true, the " +
+			"upload was stopped before it finished and no earlier vacancies were closed: tell the user, and " +
+			"call this tool again with the FULL list of jobs (jobs already saved are recognised as " +
+			"duplicates, so nothing is saved twice) - never with only the failed jobs, because closing " +
+			"earlier vacancies would then close the ones already saved.\n\n" +
+			"If the client cannot show the form, this tool says so: then ask the user in chat and call " +
+			"it again with user_confirmed=true only after their explicit yes.\n\n" +
+			"IMPORTANT: never invent a source name - it must be one returned by select_manual_source.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, in submitNewspaperVacanciesInput) (*mcp.CallToolResult, any, error) {
+		// Checked first so the user is never asked to confirm a submission
+		// that cannot be processed.
+		if ingestionSvc == nil {
+			return nil, nil, fmt.Errorf("newspaper vacancy submission is unavailable: the LLM is not configured on the MCP server.")
+		}
+
 		if len(in.Jobs) == 0 {
 			return nil, nil, fmt.Errorf("jobs list must not be empty - extract at least one job from the image first")
 		}
 
-		if !in.UserConfirmed {
-			return nil, nil, fmt.Errorf(
-				"user_confirmed is false: show the extracted jobs to the user for review, " +
-					"get explicit approval, then call this tool again with user_confirmed=true")
+		if !hasScope(req, submitNewspaperVacanciesScope) {
+			return nil, nil, errMissingUploadScope
 		}
 
-		scopes, _ := ctx.Value(scopesKey).([]string)
-		hasScope := false
-		for _, s := range scopes {
-			if s == "submit-newspaper-vacancies" {
-				hasScope = true
-				break
+		sourceName := strings.TrimSpace(in.Source)
+		if sourceName == "" {
+			return nil, nil, fmt.Errorf("source is required - call select_manual_source and use the source it returns")
+		}
+		source, err := svcs.Sources.GetSourceByName(ctx, sourceName)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil, fmt.Errorf("source %q is not registered - call select_manual_source and use the source it returns. %s", sourceName, noMatchingSourceMessage)
+		}
+		if err != nil {
+			return nil, nil, toolError("submit_newspaper_vacancies", err)
+		}
+		if source.Type != models.SourceTypeManual {
+			return nil, nil, fmt.Errorf("source %q is not a manual source - call select_manual_source and use the source it returns. %s", sourceName, noMatchingSourceMessage)
+		}
+		if !source.IsActive {
+			return nil, nil, fmt.Errorf("source %q is disabled", sourceName)
+		}
+
+		// Confirm only after the cheap checks above, so the user is never asked
+		// to approve a submission that would be rejected anyway.
+		if clientSupportsElicitation(req) {
+			choice, edits, shuttingDown, err := confirmUnlessShuttingDown(ctx, shutdown, req.Session, source.Name, in.Jobs)
+			if err != nil {
+				return nil, nil, fmt.Errorf("could not get the user's confirmation, nothing was saved: %w", err)
 			}
-		}
-		if !hasScope {
-			return nil, nil, fmt.Errorf("missing required scope: submit-newspaper-vacancies")
+			if shuttingDown {
+				return nil, submitDecisionOutput{
+					Status: statusServerRestarting,
+					Message: "The server is restarting, so the confirmation could not be completed and nothing was saved. " +
+						"Tell the user, then call this tool again with the same jobs after a short wait.",
+				}, nil
+			}
+			switch choice {
+			case confirmNo:
+				return nil, submitDecisionOutput{
+					Status:  "cancelled",
+					Message: "The user chose No. The submission was cancelled and nothing was saved.",
+				}, nil
+			case confirmEdit:
+				msg := "The user chose Edit. Apply their edits to the jobs, show the updated jobs in the chat, then call this tool again with the updated jobs. If the edits are unclear or don't match any job, ask the user in the chat what they meant before changing anything - don't guess."
+				if edits == "" {
+					msg = "The user chose Edit but gave no details. Ask them in the chat what to change, update the jobs, show them in the chat, then call this tool again."
+				}
+				return nil, submitDecisionOutput{Status: "edits_requested", Edits: edits, Message: msg}, nil
+			}
+		} else if !in.UserConfirmed {
+			return nil, nil, fmt.Errorf(
+				"this client cannot show a confirmation form: show the extracted jobs to the user in the chat, " +
+					"get their explicit yes, then call this tool again with user_confirmed=true")
 		}
 
-		body, err := json.Marshal(in.Jobs)
+		// The ingestion pipeline links every job to a crawler run, so each
+		// manual submission gets its own run, closed once the batch is done.
+		run, err := svcs.CrawlerRuns.CreateCrawlerRun(ctx)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to encode jobs: %w", err)
+			return nil, nil, toolError("submit_newspaper_vacancies", err)
+		}
+		runStatus := "FAILED"
+		defer func() {
+			// Detached from ctx so a cancelled request still closes the run.
+			if err := svcs.CrawlerRuns.CompleteCrawlerRun(context.WithoutCancel(ctx), run.ID, runStatus); err != nil {
+				log.Printf("failed to close crawler run %d as %s: %v", run.ID, runStatus, err)
+			}
+		}()
+
+		rawJobs := make([]ingestion.RawJobInput, len(in.Jobs))
+		jobsByID := make(map[string]newspaperJob, len(in.Jobs))
+		for i, j := range in.Jobs {
+			id := fmt.Sprintf("manual-%d-%d", run.ID, i)
+			rawJobs[i] = ingestion.RawJobInput{
+				JobID:        id,
+				Employer:     j.Employer,
+				JobRole:      j.JobRole,
+				Location:     j.Location,
+				Description:  j.Description,
+				CrawlerRunID: run.ID,
+				Source:       source.Name,
+			}
+			jobsByID[id] = j
 		}
 
-		crawlerURL := os.Getenv("CRAWLER_API_URL")
-		if crawlerURL == "" {
-			crawlerURL = "http://crawler:8000"
+		// Ingestion is cut off at one fixed point after shutdown begins, so the
+		// rest of the grace period is left to close the run and answer. A
+		// submission that got here late has only the time that remains, or none.
+		workCtx, cancelWork := budget.withCutoff(ctx)
+		defer cancelWork()
+
+		failures, retryGaveUp := processWithRetry(workCtx, shutdown, ingestionSvc, rawJobs, retryDelay)
+		logFailedJobs(run.ID, failures)
+		interrupted, canReconcile := uploadEnded(retryGaveUp, workCtx.Err() != nil, len(failures))
+
+		out := newSubmitOutput(source.Name, len(rawJobs), failures, jobsByID, interrupted)
+		runStatus = finalRunStatus(interrupted, out.SavedCount)
+
+		// An interrupted upload must not reconcile: it closes every earlier open
+		// vacancy of the source that is not in this run, and the jobs that were
+		// never processed would be among them.
+		if interrupted {
+			out.ReconcileNote = "earlier vacancies were not closed because the upload did not finish"
+			return nil, out, nil
+		}
+		// Every job was processed, but the time ran out (or the connection was
+		// lost) before reconciling. The upload itself succeeded.
+		if !canReconcile {
+			out.ReconcileNote = "all vacancies were saved, but earlier vacancies were not closed because the server ran out of time " +
+				"or the connection was lost; submit the same list again to finish closing them"
+			return nil, out, nil
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, crawlerURL+"/manual-upload-jobs", bytes.NewReader(body))
+		// Reconcile runs under the work context too, so a database lock cannot
+		// keep it going past the cutoff and use up the time reserved to close the
+		// run and answer. It is one transaction: if the budget cancels it, nothing
+		// is closed, and the jobs saved above are already committed.
+		closed, err := svcs.JobPosts.ReconcileStaleVacancies(workCtx, run.ID, []string{source.Name})
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to build request: %w", err)
+			log.Printf("reconcile after manual run %d failed: %v", run.ID, err)
+			out.ReconcileNote = reconcileFailedNote(workCtx.Err() != nil)
 		}
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to reach crawler service: %w", err)
-		}
-		defer resp.Body.Close()
-
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to read crawler response: %w", err)
-		}
-
-		var result map[string]any
-		if err := json.Unmarshal(respBody, &result); err != nil {
-			return nil, nil, fmt.Errorf("invalid response from crawler: %s", string(respBody))
-		}
-
-		if resp.StatusCode >= 400 {
-			return nil, result, fmt.Errorf("crawler service returned status %d", resp.StatusCode)
-		}
-		return nil, result, nil
+		out.ReconciledStaleJobs = closed
+		return nil, out, nil
 	})
 }

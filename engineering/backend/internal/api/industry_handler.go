@@ -531,14 +531,11 @@ func (h *Handler) CreateIndustrySubclassHandler(c *gin.Context) {
 }
 
 func (h *Handler) GetAllIndustrySubclassesHandler(c *gin.Context) {
-	limit := 20
-	offset := 0
-
+	// Parsing only: 0 means "not given". The default and maximum page size
+	// are applied by the service.
+	limit, offset := 0, 0
 	if l := c.Query("limit"); l != "" {
 		if v, err := strconv.Atoi(l); err == nil && v > 0 {
-			if v > 100 {
-				v = 100
-			}
 			limit = v
 		}
 	}
@@ -554,7 +551,7 @@ func (h *Handler) GetAllIndustrySubclassesHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, industrySubclassPaginatedResponse{Count: len(items), Total: total, Limit: limit, Offset: offset, IndustrySubclasses: items})
+	c.JSON(http.StatusOK, industrySubclassPaginatedResponse{Count: len(items), Total: total, Limit: h.IndustrySubclasses.PageLimit(limit), Offset: offset, IndustrySubclasses: items})
 }
 
 func (h *Handler) GetIndustrySubclassByIDHandler(c *gin.Context) {

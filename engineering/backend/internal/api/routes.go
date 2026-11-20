@@ -63,7 +63,9 @@ func RegisterRoutes(r *gin.Engine, h *Handler, verifier *auth.Verifier) {
 		{
 			ingestionRoutes.POST("/runs", auth.RequireScope("crawler:runs"), h.StartCrawlerRunHandler)
 			ingestionRoutes.POST("/runs/:id/complete", auth.RequireScope("crawler:complete"), h.CompleteCrawlerRunHandler)
-			ingestionRoutes.POST("/jobs/batch-save", auth.RequireScope("crawler:batch-save"), h.BatchSaveJobsHandler)
+			// batch-save answers only after ingestion has finished, which can take
+			// longer than the server's write timeout, so that route is exempt.
+			ingestionRoutes.POST("/jobs/batch-save", auth.RequireScope("crawler:batch-save"), liftWriteDeadline(), h.BatchSaveJobsHandler)
 			ingestionRoutes.POST("/jobs/reconcile", auth.RequireScope("crawler:reconcile"), h.ReconcileStaleVacanciesHandler)
 			ingestionRoutes.GET("/sources", auth.RequireScope("crawler:sources"), h.CrawlerListSourcesHandler)
 		}

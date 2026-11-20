@@ -1,8 +1,12 @@
 package config
 
 import (
+	"errors"
+	"fmt"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"marketlens-go-backend/internal/auth"
@@ -23,6 +27,58 @@ type DBConfig struct {
 type MCPConfig struct {
 	ResourceID    string
 	PublicBaseURL string
+}
+
+// Validate reports missing or malformed MCP settings. PublicBaseURL is put
+// into the WWW-Authenticate header that tells clients where to find the
+// resource metadata, so a wrong value sends every client to a URL that does
+// not exist and login fails with no clear cause. A path prefix is allowed
+// (a proxy may serve the MCP server under one); a trailing slash is not,
+// because the metadata path is appended to the value as it is.
+func (c MCPConfig) Validate() error {
+	var missing []string
+	if c.ResourceID == "" {
+		missing = append(missing, "MCP_RESOURCE_ID")
+	}
+	if c.PublicBaseURL == "" {
+		missing = append(missing, "MCP_PUBLIC_BASE_URL")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required environment variable(s): %s", strings.Join(missing, ", "))
+	}
+
+	// None of the errors below repeat the value. It is published to every
+	// client in the WWW-Authenticate header, so it may carry credentials
+	// (user:password@host) that must not also end up in a startup log.
+	u, err := url.Parse(c.PublicBaseURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+		return errors.New("MCP_PUBLIC_BASE_URL must be an absolute http(s) URL such as https://mcp.example.com")
+	}
+	if u.User != nil {
+		return errors.New("MCP_PUBLIC_BASE_URL must not contain a username or password: the value is published to every client")
+	}
+	// Look for the literal delimiters, not u.RawQuery / u.Fragment: url.Parse
+	// keeps a lone "?" as an empty query and drops a lone "#" altogether, so
+	// "https://host?" and "https://host#" would pass those checks. The metadata
+	// path is appended to the original string, so either would send clients to
+	// the wrong path. Percent-encoded characters in a path prefix (%3F) are
+	// still fine, because they contain no literal "?" or "#".
+	if strings.ContainsAny(c.PublicBaseURL, "?#") {
+		return errors.New("MCP_PUBLIC_BASE_URL must not contain a query or fragment")
+	}
+	if strings.HasSuffix(c.PublicBaseURL, "/") {
+		return errors.New("MCP_PUBLIC_BASE_URL must not end with a slash")
+	}
+	// The value is written inside a quoted parameter of the WWW-Authenticate
+	// header, so a literal quote, backslash or space in the path would break
+	// the header. url.Parse accepts all of them. Requiring the value to survive
+	// a parse and re-serialise unchanged rejects them, and also non-ASCII
+	// characters and an uppercase scheme, while keeping valid prefixes such as
+	// /team%22west (the encoded form of a quote).
+	if u.String() != c.PublicBaseURL {
+		return errors.New("MCP_PUBLIC_BASE_URL must be in canonical form: a lowercase http or https scheme, and special characters such as quotes, spaces and non-ASCII letters percent-encoded (for example %22 for a quote)")
+	}
+	return nil
 }
 
 // ServerConfig holds the HTTP server's own settings. GinModeEnv is the raw
