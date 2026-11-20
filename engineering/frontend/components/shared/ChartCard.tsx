@@ -48,7 +48,7 @@ export default function ChartCard({
       <div className="flex flex-col gap-2">
         {headline && !isLoading && !isError && (
           <>
-            <p className="w-full md:w-2/3 text-xl md:text-2xl font-normal text-zinc-900 whitespace-pre-line leading-snug mb-2">{headline}</p>
+            <p className="w-full md:w-2/3 text-md md:text-xl md:text-2xl font-normal text-zinc-900 whitespace-pre-line leading-snug mb-2">{headline}</p>
             <div className="border-b border-zinc-100" />
           </>
         )}
