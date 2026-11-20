@@ -49,6 +49,7 @@ func NewServiceFromConfig(svcs *service.Services, llmCfg llm.Config, pipeline Pi
 	return NewIngestionService(
 		svcs.JobPosts,
 		svcs.Sources,
+		svcs.CrawlerRuns,
 		llmClient,
 		llmCfg.Model,
 		industryClassifier,
