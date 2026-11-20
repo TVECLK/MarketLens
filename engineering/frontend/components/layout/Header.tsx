@@ -41,7 +41,7 @@ export default function Header({
             {title}
           </h1>
           {subtitle && (
-            <p className="text-[8px] md:text-xs text-gray-400 mt-0.5 md:mt-1 font-medium leading-snug text-pretty break-words">
+            <p className="text-[10px] md:text-xs text-gray-400 mt-0.5 md:mt-1 font-medium leading-snug text-pretty break-words">
               {subtitle}
             </p>
           )}
