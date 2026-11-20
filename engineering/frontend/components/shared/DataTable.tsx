@@ -1,17 +1,21 @@
+import InfoTooltip from "@/components/shared/InfoTooltip";
 import type { ChartDatum } from "@/types/chart";
 
 interface DataTableProps {
   title: string;
+  /** Shown in an info icon next to the title. */
+  tooltip?: string;
   rows: ChartDatum[];
   isError?: boolean;
 }
 
-export default function DataTable({ title, rows, isError = false }: DataTableProps) {
+export default function DataTable({ title, tooltip, rows, isError = false }: DataTableProps) {
   const sorted = [...rows].sort((a, b) => b.value - a.value);
   return (
     <div className="border border-zinc-100 p-5 rounded-xl flex flex-col">
-      <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
+      <h4 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2 flex items-center gap-1.5">
         {title}
+        {tooltip && <InfoTooltip text={tooltip} className="text-zinc-900" />}
       </h4>
       <div className="mt-3 overflow-x-auto rounded-lg border border-zinc-100">
         <table className="w-full text-left">
