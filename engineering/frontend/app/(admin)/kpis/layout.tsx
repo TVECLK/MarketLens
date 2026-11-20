@@ -8,7 +8,7 @@ export default function KpisLayout({ children }: { children: React.ReactNode }) 
       <div className="min-h-screen bg-gray-50 text-gray-800 font-sans">
         <Header
           title="KPI Reference Data Manager"
-          subtitle="Create, edit, and remove the reference values that power the labour market dashboard charts"
+          subtitle="Create, edit, and remove the reference values used in the labour market dashboard"
         />
 
         <div className="flex">

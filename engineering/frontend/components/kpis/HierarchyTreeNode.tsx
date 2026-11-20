@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronRightIcon } from "@heroicons/react/16/solid";
+import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { useAdminHierarchyChildren } from "@/hooks/use-admin-hierarchy-children";
 import { HIERARCHIES, type HierarchyId } from "@/lib/kpi-config";
 import { CRUD_ACTIONS } from "@/lib/scopes";
@@ -99,7 +100,11 @@ function TreeChildren({ parent, ...ctx }: TreeContext & { parent: HierarchySelec
 
   return (
     <ul className="ml-3 pl-2 border-l border-gray-100">
-      {childrenQ.isLoading && <li className="px-2 py-1.5 text-[11px] text-gray-400">Loading...</li>}
+      {childrenQ.isLoading && (
+        <li className="px-2 py-1.5 text-[11px] text-gray-400">
+          <LoadingSpinner label="Loading..." size="sm" inline />
+        </li>
+      )}
       {childrenQ.isError && <li className="px-2 py-1.5 text-[11px] font-bold text-red-500">Failed to load.</li>}
       {childrenQ.data?.length === 0 && <li className="px-2 py-1.5 text-[11px] text-gray-400">No items.</li>}
       {childrenQ.data?.map((child) => (

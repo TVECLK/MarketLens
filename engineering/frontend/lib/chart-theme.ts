@@ -2,7 +2,7 @@ export const CHART_COLORS = {
   indigo: "#6366f1",
   teal: "#0d9488",
   sky: "#0284c7",
-  violet: "#8b5cf6",
+  violet: "#6236caff",
   amber: "#d97706",
   rose: "#f472b6",
   slate: "#94a3b8",

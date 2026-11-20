@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { LockClosedIcon } from "@heroicons/react/16/solid";
+import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import {
   useCreateSource,
@@ -266,7 +267,7 @@ export default function SourcesPanel() {
             {sourceList.isLoading && (
               <tr>
                 <td colSpan={4} className="px-5 py-10 text-center text-gray-400 font-medium">
-                  Loading...
+                  <LoadingSpinner label="Loading..." />
                 </td>
               </tr>
             )}

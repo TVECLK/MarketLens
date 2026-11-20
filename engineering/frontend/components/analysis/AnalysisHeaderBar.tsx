@@ -19,7 +19,7 @@ export default function AnalysisHeaderBar({
         </p>
         <p className="text-base font-black text-zinc-900 truncate">{nodeName}</p>
       </div>
-      <div className="text-right shrink-0">
+      <div className="text-left md:text-right shrink-0">
         <p className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
           Vacancies for selection
         </p>

@@ -30,7 +30,7 @@ export default function OccupationDistributionChart({
   linkHref,
 }: OccupationDistributionChartProps) {
   const count = data.length > 0 ? data.length : null;
-  const subtitle = count ? `All ${count} standard occupations` : "Standard occupations";
+  const subtitle = count ? `Across ${count} standard occupations` : "Standard occupations";
 
   const topOccupation = data.length > 0
     ? data.reduce((max, d) => d.value > max.value ? d : max, data[0])
@@ -53,6 +53,7 @@ export default function OccupationDistributionChart({
     title: "Job Distribution by Occupation (SLSCO)",
     subtitle,
     heightClassName: "h-[420px] md:h-[540px]",
+    bodyClassName: "pb-6",
     isLoading,
     isError,
     isEmpty: isEmptyChartData(data, (d) => d.value),
@@ -108,7 +109,7 @@ export default function OccupationDistributionChart({
         <ChartCard {...sharedProps}>{chart}</ChartCard>
       </SignedIn>
       <SignedOut>
-        <ChartCard {...sharedProps} heightClassName="h-[560px] md:h-[640px]" headline={headline}>{chart}</ChartCard>
+        <ChartCard {...sharedProps} heightClassName="h-[560px] md:h-[640px]" headline={headline} headlineSkeleton>{chart}</ChartCard>
       </SignedOut>
     </>
   );

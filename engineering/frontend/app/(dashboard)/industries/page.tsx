@@ -118,7 +118,7 @@ export default function IndustryAnalysisPage() {
           Industry Analysis (SLSIC)
         </h2>
         <p className="text-xs text-zinc-400 mt-1 font-medium">
-          Analyze through the industry classification hierarchy
+          Drill down through the industry hierarchy to explore job statistics at every level
         </p>
       </div>
 

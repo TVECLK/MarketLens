@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
+import { ChevronDownIcon } from "@heroicons/react/16/solid";
 import type {
   HierarchyLevelState,
   PathNode,
@@ -20,10 +21,26 @@ interface ClassificationHierarchyPickerProps<TLevelKey extends string> {
   prunedNotice: string | null;
   referenceUrl?: string;
   referenceLinkTooltip?: string;
-  referenceLinkHoverColor?: string;
   onSelect: (levelIndex: number, idStr: string) => void;
   onAddLevel: () => void;
   onRemoveLevel: () => void;
+}
+
+/**
+ * Placeholder shaped like the loaded picker (level label, dropdown, "+" button), so the card
+ * doesn't change size when the levels arrive. The label is kept for screen readers.
+ */
+function PickerSkeleton({ label }: { label: string }) {
+  return (
+    <div role="status" aria-live="polite" className="flex items-end gap-2">
+      <span className="sr-only">{label}</span>
+      <div aria-hidden>
+        <div className="h-2.5 w-16 mb-1.5 bg-zinc-100 rounded animate-pulse" />
+        <div className="h-[38px] w-40 bg-zinc-100 rounded-xl animate-pulse" />
+      </div>
+      <div aria-hidden className="mb-0.5 w-9 h-9 bg-zinc-100 rounded-full animate-pulse" />
+    </div>
+  );
 }
 
 export default function ClassificationHierarchyPicker<TLevelKey extends string>({
@@ -38,7 +55,6 @@ export default function ClassificationHierarchyPicker<TLevelKey extends string>(
   prunedNotice,
   referenceUrl,
   referenceLinkTooltip,
-  referenceLinkHoverColor = "hover:text-teal-600",
   onSelect,
   onAddLevel,
   onRemoveLevel,
@@ -55,7 +71,7 @@ export default function ClassificationHierarchyPicker<TLevelKey extends string>(
             target="_blank"
             rel="noopener noreferrer"
             title={referenceLinkTooltip}
-            className={`text-zinc-400 ${referenceLinkHoverColor} transition-colors`}
+            className="text-blue-600 hover:text-blue-800 transition-colors"
             aria-label={referenceLinkTooltip}
           >
             <ArrowTopRightOnSquareIcon className="w-[13px] h-[13px]" />
@@ -64,7 +80,7 @@ export default function ClassificationHierarchyPicker<TLevelKey extends string>(
       </div>
 
       {isInitializing ? (
-        <p className="text-xs text-zinc-400">{initializingLabel}</p>
+        <PickerSkeleton label={initializingLabel} />
       ) : initialLoadError ? (
         <p className="text-xs text-red-500 font-bold">
           {initialLoadErrorLabel}
@@ -87,19 +103,25 @@ export default function ClassificationHierarchyPicker<TLevelKey extends string>(
                   <p className="text-[10px] font-black uppercase tracking-wider text-zinc-400 mb-1">
                     {level.label}
                   </p>
-                  <select
-                    value={node.id}
-                    title={node.name}
-                    disabled={level.isLoading}
-                    onChange={(e) => onSelect(levelIndex, e.target.value)}
-                    className="cursor-pointer bg-zinc-100 rounded-xl px-3 py-2.5 text-xs font-bold text-zinc-700 outline-none border border-transparent focus:border-zinc-300 max-w-[200px] truncate disabled:opacity-50"
-                  >
-                    {level.options.map((opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        {opt.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={node.id}
+                      title={node.name}
+                      disabled={level.isLoading}
+                      onChange={(e) => onSelect(levelIndex, e.target.value)}
+                      className="peer appearance-none cursor-pointer bg-zinc-100 rounded-xl pl-3 pr-9 py-2.5 text-xs font-bold text-zinc-700 outline-none border border-transparent focus:border-zinc-300 max-w-[200px] truncate disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {level.options.map((opt) => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDownIcon
+                      aria-hidden
+                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 peer-disabled:opacity-50"
+                    />
+                  </div>
                 </div>
               </div>
             );

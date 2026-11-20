@@ -29,7 +29,7 @@ export default function IndustryDistributionChart({
   isError,
   linkHref,
 }: IndustryDistributionChartProps) {
-  const subtitle = data.length > 0 ? `All ${data.length} standard industries` : "Standard industries";
+  const subtitle = data.length > 0 ? `Across ${data.length} standard industries` : "Standard industries";
 
   const topIndustry = data.length > 0
     ? data.reduce((max, d) => d.value > max.value ? d : max, data[0])
@@ -37,8 +37,9 @@ export default function IndustryDistributionChart({
 
   const headline = topIndustry && topIndustry.value > 0 ? (
     <>
+      The{" "}
       <span className="bg-yellow-200 text-yellow-950 font-semibold px-1">{topIndustry.name}</span>
-      {" "}have the highest job count according to the Sri Lanka Standard Industrial Classification (SLSIC).
+      {" "}industry has the highest number of jobs according to the Sri Lanka Standard Industrial Classification (SLSIC).
     </>
   ) : undefined;
 
@@ -46,7 +47,7 @@ export default function IndustryDistributionChart({
     title: "Job Distribution by Industry (SLSIC)",
     subtitle,
     heightClassName: "h-[480px] md:h-[640px]",
-    bodyClassName: "pb-10",
+    bodyClassName: "pb-6",
     isLoading,
     isError,
     isEmpty: isEmptyChartData(data, (d) => d.value),
@@ -109,7 +110,7 @@ export default function IndustryDistributionChart({
         <ChartCard {...sharedProps}>{chart}</ChartCard>
       </SignedIn>
       <SignedOut>
-        <ChartCard {...sharedProps} heightClassName="h-[620px] md:h-[740px]" headline={headline}>{chart}</ChartCard>
+        <ChartCard {...sharedProps} heightClassName="h-[620px] md:h-[740px]" headline={headline} headlineSkeleton>{chart}</ChartCard>
       </SignedOut>
     </>
   );

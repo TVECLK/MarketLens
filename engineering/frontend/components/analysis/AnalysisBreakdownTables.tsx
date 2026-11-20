@@ -1,4 +1,5 @@
 import DataTable from "@/components/shared/DataTable";
+import { BREAKDOWN_SECTIONS, CHILDREN_BREAKDOWN_TOOLTIP } from "@/components/analysis/breakdown-sections";
 import type { AnalysisSectionErrors } from "@/types/analysis";
 import type { ChartDatum } from "@/types/chart";
 
@@ -34,50 +35,50 @@ export default function AnalysisBreakdownTables({
   return (
     <div className="p-4 md:p-5 grid grid-cols-1 xl:grid-cols-2 gap-6">
       {childrenBreakdown.length > 0 && (
-        <DataTable title={childrenBreakdownTitle} rows={childrenBreakdown} />
+        <DataTable title={childrenBreakdownTitle} tooltip={CHILDREN_BREAKDOWN_TOOLTIP} rows={childrenBreakdown} />
       )}
       <DataTable
-        title="Employment Sector"
+        {...BREAKDOWN_SECTIONS.employment_sector}
         rows={sectorData}
         isError={Boolean(sectionErrors.employment_sector)}
       />
       <DataTable
-        title="Experience"
+        {...BREAKDOWN_SECTIONS.experience}
         rows={expData}
         isError={Boolean(sectionErrors.experience)}
       />
       <DataTable
-        title="Province wise Distribution"
+        {...BREAKDOWN_SECTIONS.province}
         rows={provinceData}
         isError={Boolean(sectionErrors.province)}
       />
       <DataTable
-        title="Education Level"
+        {...BREAKDOWN_SECTIONS.education}
         rows={eduData}
         isError={Boolean(sectionErrors.education)}
       />
       <DataTable
-        title="Formal / Informal Sector"
+        {...BREAKDOWN_SECTIONS.formality}
         rows={formalData}
         isError={Boolean(sectionErrors.formality)}
       />
       <DataTable
-        title="Gender"
+        {...BREAKDOWN_SECTIONS.gender}
         rows={genderData}
         isError={Boolean(sectionErrors.gender)}
       />
       <DataTable
-        title="Vocational Education (NVQ Level)"
+        {...BREAKDOWN_SECTIONS.vocational_education}
         rows={nvqData}
         isError={Boolean(sectionErrors.vocational_education)}
       />
       <DataTable
-        title="Remote / On-Site"
+        {...BREAKDOWN_SECTIONS.work_modes}
         rows={remoteData}
         isError={Boolean(sectionErrors.work_modes)}
       />
       <DataTable
-        title="Contract Type"
+        {...BREAKDOWN_SECTIONS.job_type}
         rows={contractData}
         isError={Boolean(sectionErrors.job_type)}
       />

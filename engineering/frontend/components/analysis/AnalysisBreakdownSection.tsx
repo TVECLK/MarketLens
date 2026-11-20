@@ -1,6 +1,7 @@
 "use client";
 
-import ViewModeToggle, { type AnalysisViewMode } from "@/components/analysis/ViewModeToggle";
+import LoadingSpinner from "@/components/shared/LoadingSpinner";
+import ViewModeToggle,{ type AnalysisViewMode } from "@/components/analysis/ViewModeToggle";
 import AnalysisBreakdownCharts from "@/components/analysis/AnalysisBreakdownCharts";
 import AnalysisBreakdownTables from "@/components/analysis/AnalysisBreakdownTables";
 import type { HierarchyAccent } from "@/lib/chart-theme";
@@ -63,7 +64,7 @@ export default function AnalysisBreakdownSection({
       <ViewModeToggle viewMode={viewMode} onChange={onViewModeChange} />
 
       {isLoading ? (
-        <div className="p-10 text-center text-xs text-zinc-400">Loading analytics...</div>
+        <LoadingSpinner label="Loading analytics..." className="p-10 text-xs text-zinc-400" />
       ) : isError ? (
         <div className="p-10 text-center text-xs text-red-500 font-bold">
           Failed to load analytics

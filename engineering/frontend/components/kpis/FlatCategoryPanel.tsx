@@ -1,4 +1,5 @@
 import type { KPICategoryConfig } from "@/lib/kpi-config";
+import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import { CRUD_ACTIONS } from "@/lib/scopes";
 import { THEME } from "@/lib/theme";
 import RowAction from "@/components/kpis/RowAction";
@@ -76,7 +77,7 @@ export default function FlatCategoryPanel({
             {bundle.isLoading && (
               <tr>
                 <td colSpan={2} className="px-5 py-10 text-center text-gray-400 font-medium">
-                  Loading...
+                  <LoadingSpinner label="Loading..." />
                 </td>
               </tr>
             )}

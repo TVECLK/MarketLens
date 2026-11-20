@@ -164,7 +164,7 @@ export default function OccupationAnalysisPage() {
           Occupation Analysis (SLSCO)
         </h2>
         <p className="text-xs text-zinc-400 mt-1 font-medium">
-          Analyze through the occupation classification hierarchy
+          Drill down through the occupation hierarchy to explore job statistics at every level
         </p>
       </div>
 
@@ -182,7 +182,6 @@ export default function OccupationAnalysisPage() {
         prunedNotice={prunedNotice}
         referenceUrl={SLSCO_REFERENCE_URL}
         referenceLinkTooltip="Click here to view Sri Lanka Standard Classification of Occupations (SLSCO)"
-        referenceLinkHoverColor="hover:text-indigo-600"
         onSelect={handleSelect}
         onAddLevel={handleAddLevel}
         onRemoveLevel={handleRemoveLevel}
