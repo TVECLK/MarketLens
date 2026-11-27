@@ -9,6 +9,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/bin/api ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/bin/mcp ./cmd/mcp
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/bin/retention ./cmd/retention
 
 FROM alpine:3.19 AS base
 
@@ -18,10 +19,11 @@ RUN apk add --no-cache ca-certificates \
 
 WORKDIR /app
 
-# Two separate final images from here — api and mcp are independently
-# deployable processes (see cmd/api, cmd/mcp), each with only its own
-# binary. Build with `docker build --target api` / `--target mcp`;
-# docker-compose.yml's two backend services select these via `target:`.
+# Separate final images from here — api, mcp and retention are independently
+# deployable processes (see cmd/api, cmd/mcp, cmd/retention), each with only
+# its own binary. Build with `docker build --target api` / `--target mcp` /
+# `--target retention`; docker-compose.yml's backend services select these
+# via `target:`.
 
 FROM base AS api
 COPY --from=builder --chown=appuser:appgroup /app/bin/api .
@@ -34,3 +36,9 @@ COPY --from=builder --chown=appuser:appgroup /app/bin/mcp .
 USER 1000
 EXPOSE 9090
 CMD ["./mcp"]
+
+# retention is a run-to-completion job (a CronJob), not a server.
+FROM base AS retention
+COPY --from=builder --chown=appuser:appgroup /app/bin/retention .
+USER 1000
+CMD ["./retention"]

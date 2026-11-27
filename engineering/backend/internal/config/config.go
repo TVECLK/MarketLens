@@ -81,6 +81,46 @@ func (c MCPConfig) Validate() error {
 	return nil
 }
 
+// RetentionConfig holds the settings of cmd/retention, the job that rolls old
+// years up into the yearly summary tables and deletes their raw rows.
+type RetentionConfig struct {
+	// RawYears is how many calendar years before the current one keep their raw rows.
+	RawYears int
+	// TimeZone is the IANA name of the zone in which a year starts and ends.
+	TimeZone string
+	// BatchSize is how many jobs one purge transaction deletes.
+	BatchSize int
+	// PurgeEnabled turns the delete step on. Off, the job only rolls up and verifies.
+	PurgeEnabled bool
+}
+
+// Location resolves TimeZone.
+func (c RetentionConfig) Location() (*time.Location, error) {
+	loc, err := time.LoadLocation(c.TimeZone)
+	if err != nil {
+		return nil, fmt.Errorf("RETENTION_TZ %q is not a time zone: %w", c.TimeZone, err)
+	}
+	return loc, nil
+}
+
+// Validate reports settings the retention job cannot run with.
+func (c RetentionConfig) Validate() error {
+	var problems []string
+	if c.RawYears < 1 {
+		problems = append(problems, "RETENTION_RAW_YEARS must be at least 1")
+	}
+	if c.BatchSize < 1 {
+		problems = append(problems, "RETENTION_BATCH_SIZE must be at least 1")
+	}
+	if _, err := c.Location(); err != nil {
+		problems = append(problems, err.Error())
+	}
+	if len(problems) > 0 {
+		return errors.New(strings.Join(problems, "; "))
+	}
+	return nil
+}
+
 // ServerConfig holds the HTTP server's own settings. GinModeEnv is the raw
 // GIN_MODE value (possibly empty) — resolving it to an actual gin mode is
 // left to main.go, which already imports gin.
@@ -98,6 +138,7 @@ type Config struct {
 	Ingestion ingestion.PipelineConfig
 	MCP       MCPConfig
 	Server    ServerConfig
+	Retention RetentionConfig
 }
 
 // LoadConfig reads every environment variable the app uses into one
@@ -142,6 +183,12 @@ func LoadConfig() *Config {
 		Server: ServerConfig{
 			Port:       envOrDefault("PORT", "8080"),
 			GinModeEnv: os.Getenv("GIN_MODE"),
+		},
+		Retention: RetentionConfig{
+			RawYears:     envIntOrDefault("RETENTION_RAW_YEARS", 3),
+			TimeZone:     envOrDefault("RETENTION_TZ", "Asia/Colombo"),
+			BatchSize:    envIntOrDefault("RETENTION_BATCH_SIZE", 5000),
+			PurgeEnabled: os.Getenv("PURGE_ENABLED") == "true",
 		},
 	}
 }

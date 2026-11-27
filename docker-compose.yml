@@ -57,6 +57,21 @@ services:
     networks:
       - app-network
 
+  retention:
+    build:
+      context: ./engineering/backend
+      dockerfile: Dockerfile.backend
+      target: retention
+    container_name: go_retention
+    profiles: ["retention"]
+    env_file:
+      - ./engineering/backend/.env
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - app-network
+
   # FRONTEND SERVICE 
   frontend:
     build:
