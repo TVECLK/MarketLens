@@ -78,7 +78,7 @@ func (s *RetentionService) Run(ctx context.Context) error {
 	}
 	for _, year := range years {
 		if err := s.processYear(ctx, year); err != nil {
-			return fmt.Errorf("retention: year %d: %w", year, err)
+			return fmt.Errorf("year %d: %w", year, err)
 		}
 	}
 	return nil

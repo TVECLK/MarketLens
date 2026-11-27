@@ -3,6 +3,8 @@ package repositories_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -383,6 +385,57 @@ func TestStore_VerifyYearSummary_CatchesAMissingDimension(t *testing.T) {
 	}
 	if err := f.store.VerifyYearSummary(ctx, 2022); err == nil {
 		t.Error("VerifyYearSummary accepted a summary with a whole dimension missing")
+	}
+}
+
+func TestStore_VerifyYearSummary_CatchesMistakesThatCancelOutAcrossRoots(t *testing.T) {
+	f := newRetentionFixture(t)
+	from, to := year(2022)
+	ctx := context.Background()
+	if err := f.store.RollUpYear(ctx, 2022, from, to); err != nil {
+		t.Fatalf("RollUpYear: %v", err)
+	}
+
+	// M1 totals 5 and M2 totals 4. Make M1's gender figures add up to 6 and
+	// M2's to 3: each root is wrong, but the two gender sums together are 9, the
+	// same as the two totals together, so a check across roots would pass it.
+	err := f.db.Model(&models.StatsYearOccupation{}).
+		Where("root_id = ? AND dimension = ? AND value_id = ?", f.m1, models.DimensionGender, f.male).
+		Update("vacancy_count", 4).Error
+	if err != nil {
+		t.Fatalf("failed to tamper with M1: %v", err)
+	}
+	err = f.db.Model(&models.StatsYearOccupation{}).
+		Where("root_id = ? AND dimension = ? AND value_id = ?", f.m2, models.DimensionGender, models.UnknownValueID).
+		Update("vacancy_count", 3).Error
+	if err != nil {
+		t.Fatalf("failed to tamper with M2: %v", err)
+	}
+
+	err = f.store.VerifyYearSummary(ctx, 2022)
+	if err == nil {
+		t.Fatal("VerifyYearSummary accepted two roots whose mistakes cancel each other out")
+	}
+	if want := fmt.Sprintf("root %d", f.m1); !strings.Contains(err.Error(), want) {
+		t.Errorf("error = %q, want it to name %s, the first wrong root", err, want)
+	}
+}
+
+func TestStore_VerifyYearSummary_CatchesARootThatHasNoTotal(t *testing.T) {
+	f := newRetentionFixture(t)
+	from, to := year(2022)
+	ctx := context.Background()
+	if err := f.store.RollUpYear(ctx, 2022, from, to); err != nil {
+		t.Fatalf("RollUpYear: %v", err)
+	}
+	// M2 loses its 'total' row but keeps its other dimensions.
+	err := f.db.Where("root_id = ? AND dimension = ?", f.m2, models.DimensionTotal).
+		Delete(&models.StatsYearOccupation{}).Error
+	if err != nil {
+		t.Fatalf("failed to delete the total row: %v", err)
+	}
+	if err := f.store.VerifyYearSummary(ctx, 2022); err == nil {
+		t.Error("VerifyYearSummary accepted a root whose dimensions have no total")
 	}
 }
 

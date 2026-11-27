@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -211,35 +212,54 @@ func (r *Store) RollUpYear(ctx context.Context, year int, from, to time.Time) er
 	})
 }
 
-// VerifyYearSummary checks that every dimension of every root adds up to the
-// same figure as the 'total' dimension, in both summary tables. It catches a
-// dimension the roll-up missed or double counted, before any raw row is
-// deleted.
+// VerifyYearSummary checks, root by root, that every dimension adds up to the
+// same figure as that root's 'total' dimension, in both summary tables. It
+// catches a dimension the roll-up missed or double counted, before any raw row
+// is deleted. Each root is checked on its own: summing across roots would let
+// a root that is too low and a root that is too high cancel each other out.
 func (r *Store) VerifyYearSummary(ctx context.Context, year int) error {
 	for _, std := range rollUpStandards {
 		var rows []struct {
+			RootID    uint
 			Dimension string
 			Total     int64
 		}
 		err := r.db.WithContext(ctx).Raw(
-			"SELECT dimension, SUM(vacancy_count) AS total FROM "+std.table+" WHERE year = ? GROUP BY dimension",
+			"SELECT root_id, dimension, SUM(vacancy_count) AS total FROM "+std.table+
+				" WHERE year = ? GROUP BY root_id, dimension",
 			year,
 		).Scan(&rows).Error
 		if err != nil {
 			return fmt.Errorf("failed to read %s for year %d: %w", std.table, year, err)
 		}
 
-		sums := make(map[string]int64, len(rows))
+		sums := make(map[uint]map[string]int64)
 		for _, row := range rows {
-			sums[row.Dimension] = row.Total
-		}
-		want := sums[models.DimensionTotal]
-		for _, dim := range rollUpDimensions {
-			if want == 0 && sums[dim.name] == 0 {
-				continue // an empty year has no rows at all
+			if sums[row.RootID] == nil {
+				sums[row.RootID] = make(map[string]int64)
 			}
-			if got, ok := sums[dim.name]; !ok || got != want {
-				return fmt.Errorf("year %d: %s/%s adds up to %d, want %d (the total)", year, std.table, dim.name, got, want)
+			sums[row.RootID][row.Dimension] = row.Total
+		}
+		// A root that has rows in some dimension but none in 'total' is checked
+		// too, against a total of 0. Sorted so the error names the same root
+		// every time.
+		roots := make([]uint, 0, len(sums))
+		for root := range sums {
+			roots = append(roots, root)
+		}
+		sort.Slice(roots, func(i, j int) bool { return roots[i] < roots[j] })
+
+		for _, root := range roots {
+			want := sums[root][models.DimensionTotal]
+			for _, dim := range rollUpDimensions {
+				got, ok := sums[root][dim.name]
+				if want == 0 && got == 0 {
+					continue
+				}
+				if !ok || got != want {
+					return fmt.Errorf("%s root %d, %s adds up to %d, want %d (the total of that root)",
+						std.table, root, dim.name, got, want)
+				}
 			}
 		}
 	}
