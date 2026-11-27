@@ -278,27 +278,45 @@ func TestStore_RollUpYear_IsRepeatableAndPicksUpLateJobs(t *testing.T) {
 	}
 }
 
-func TestStore_RollUpYear_RefusesAPurgedYear(t *testing.T) {
+func TestStore_RollUpYear_RefusesAYearWhosePurgeHasStarted(t *testing.T) {
 	f := newRetentionFixture(t)
 	from, to := year(2022)
 	ctx := context.Background()
 	if err := f.store.RollUpYear(ctx, 2022, from, to); err != nil {
 		t.Fatalf("RollUpYear: %v", err)
 	}
-	if err := f.store.MarkYearPurged(ctx, 2022); err != nil {
-		t.Fatalf("MarkYearPurged: %v", err)
+	if err := f.store.MarkYearPurging(ctx, 2022); err != nil {
+		t.Fatalf("MarkYearPurging: %v", err)
 	}
 
-	// The raw rows would now be gone; simulate that and try to roll up again.
-	if _, err := f.store.PurgeBatch(ctx, from, to, 100); err != nil {
-		t.Fatalf("PurgeBatch: %v", err)
+	// A cut-off purge: 2 of the 4 jobs of 2022 are gone.
+	if n, err := f.store.PurgeBatch(ctx, from, to, 2); err != nil || n != 2 {
+		t.Fatalf("PurgeBatch = %d, %v, want 2", n, err)
 	}
 	err := f.store.RollUpYear(ctx, 2022, from, to)
-	if !errors.Is(err, repositories.ErrYearAlreadyPurged) {
-		t.Fatalf("RollUpYear on a purged year = %v, want ErrYearAlreadyPurged", err)
+	if !errors.Is(err, repositories.ErrYearPurgeStarted) {
+		t.Fatalf("RollUpYear on a purging year = %v, want ErrYearPurgeStarted", err)
+	}
+	total, _ := f.store.GetYearTotal(ctx, 2022)
+	if total.VacancyCount != 14 {
+		t.Errorf("year total after the refused roll-up = %d, want 14: it must not be recounted from the rows that remain", total.VacancyCount)
 	}
 	if got := statValue(t, f.db, "stats_year_occupation", f.m1, models.DimensionTotal, 2022, 0); got != 5 {
 		t.Errorf("M1 total after the refused roll-up = %d, want 5 (summary untouched)", got)
+	}
+
+	// Finish the purge: a purged year is refused as well.
+	if _, err := f.store.PurgeBatch(ctx, from, to, 100); err != nil {
+		t.Fatalf("PurgeBatch: %v", err)
+	}
+	if err := f.store.MarkYearPurged(ctx, 2022); err != nil {
+		t.Fatalf("MarkYearPurged: %v", err)
+	}
+	if err := f.store.RollUpYear(ctx, 2022, from, to); !errors.Is(err, repositories.ErrYearPurgeStarted) {
+		t.Fatalf("RollUpYear on a purged year = %v, want ErrYearPurgeStarted", err)
+	}
+	if got := statValue(t, f.db, "stats_year_occupation", f.m1, models.DimensionTotal, 2022, 0); got != 5 {
+		t.Errorf("M1 total after the purge = %d, want 5", got)
 	}
 }
 
@@ -368,7 +386,7 @@ func TestStore_VerifyYearSummary_CatchesAMissingDimension(t *testing.T) {
 	}
 }
 
-// ---------- PurgeBatch / MarkYearPurged / EarliestPostedAt ----------
+// ---------- PurgeBatch / year statuses / EarliestPostedAt ----------
 
 func TestStore_PurgeBatch_DeletesInBatchesAndCascades(t *testing.T) {
 	db := testutil.SetupTestDB(t)
@@ -416,23 +434,40 @@ func TestStore_PurgeBatch_DeletesInBatchesAndCascades(t *testing.T) {
 	}
 }
 
-func TestStore_MarkYearPurged(t *testing.T) {
+func TestStore_YearStatusesGoInOrder(t *testing.T) {
 	f := newRetentionFixture(t)
 	ctx := context.Background()
 	from, to := year(2022)
 
-	if err := f.store.MarkYearPurged(ctx, 2022); err == nil {
-		t.Error("MarkYearPurged accepted a year that was never rolled up")
+	if err := f.store.MarkYearPurging(ctx, 2022); err == nil {
+		t.Error("MarkYearPurging accepted a year that was never rolled up")
 	}
 	if err := f.store.RollUpYear(ctx, 2022, from, to); err != nil {
 		t.Fatalf("RollUpYear: %v", err)
 	}
+	if err := f.store.MarkYearPurged(ctx, 2022); err == nil {
+		t.Error("MarkYearPurged accepted a year whose purge never started")
+	}
+
+	if err := f.store.MarkYearPurging(ctx, 2022); err != nil {
+		t.Fatalf("MarkYearPurging: %v", err)
+	}
+	if total, _ := f.store.GetYearTotal(ctx, 2022); total.Status != models.YearStatusPurging {
+		t.Errorf("status = %q, want purging", total.Status)
+	}
+	if err := f.store.MarkYearPurging(ctx, 2022); err == nil {
+		t.Error("MarkYearPurging accepted a year that is already purging")
+	}
+
 	if err := f.store.MarkYearPurged(ctx, 2022); err != nil {
 		t.Fatalf("MarkYearPurged: %v", err)
 	}
 	total, _ := f.store.GetYearTotal(ctx, 2022)
 	if total.Status != models.YearStatusPurged || total.PurgedAt == nil {
 		t.Errorf("after MarkYearPurged: %+v, want status purged with purged_at set", total)
+	}
+	if err := f.store.MarkYearPurged(ctx, 2022); err == nil {
+		t.Error("MarkYearPurged accepted a year that is already purged")
 	}
 }
 
@@ -470,7 +505,7 @@ func TestStore_RawVacancyTotal_CountsUnclassifiedJobsAndRespectsTheRange(t *test
 
 // ---------- GetDashboardCardData ----------
 
-func TestStore_GetDashboardCardData_AddsPurgedYearsButNotRolledUpOnes(t *testing.T) {
+func TestStore_GetDashboardCardData_AddsPurgedYearsButNotRolledUpOrPurgingOnes(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	store := repositories.NewStore(db)
 	ctx := context.Background()
@@ -492,6 +527,8 @@ func TestStore_GetDashboardCardData_AddsPurgedYearsButNotRolledUpOnes(t *testing
 		{Year: 2022, VacancyCount: 2000, Status: models.YearStatusPurged, RolledUpAt: now, PurgedAt: &now},
 		// Rolled up, raw rows still there: already counted in the raw sum.
 		{Year: 2023, VacancyCount: 500, Status: models.YearStatusRolledUp, RolledUpAt: now},
+		// Purging: some raw rows are still there and counted, so not added either.
+		{Year: 2020, VacancyCount: 700, Status: models.YearStatusPurging, RolledUpAt: now},
 	}
 	if err := db.Create(&rows).Error; err != nil {
 		t.Fatalf("failed to seed summaries: %v", err)
@@ -502,6 +539,6 @@ func TestStore_GetDashboardCardData_AddsPurgedYearsButNotRolledUpOnes(t *testing
 		t.Fatalf("GetDashboardCardData: %v", err)
 	}
 	if card.AllTimeVacancyCount != 3010 {
-		t.Errorf("all-time count = %d, want 3010 (10 raw + 3000 from purged years, the rolled-up year not added)", card.AllTimeVacancyCount)
+		t.Errorf("all-time count = %d, want 3010 (10 raw + 3000 from purged years; the rolled-up and purging years not added)", card.AllTimeVacancyCount)
 	}
 }

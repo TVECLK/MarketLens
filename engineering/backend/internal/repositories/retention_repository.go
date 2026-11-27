@@ -19,10 +19,11 @@ import (
 // runs from overlapping ("MLRE" in ASCII).
 const retentionLockKey int64 = 0x4d4c5245
 
-// ErrYearAlreadyPurged is returned when a roll-up is asked for a year whose
-// raw rows are already deleted. Rolling it up again would overwrite the
-// summary with zeros.
-var ErrYearAlreadyPurged = errors.New("year already purged")
+// ErrYearPurgeStarted is returned when a roll-up is asked for a year whose
+// purge has started (status purging or purged). Some or all of its raw rows
+// are gone, so rolling it up again would replace the correct summary with a
+// total counted from what is left.
+var ErrYearPurgeStarted = errors.New("year purge already started")
 
 // rollUpDimension is one breakdown of the yearly summary: its name and the
 // SQL expression, over meta_data (m) and job_post (jp), that gives a job's
@@ -163,15 +164,17 @@ func rawVacancyTotal(db *gorm.DB, from, to time.Time) (int64, error) {
 // RollUpYear writes the yearly summary of the raw jobs posted in [from, to).
 // It runs in one transaction and replaces whatever was stored for the year,
 // so running it again is safe and also picks up jobs that arrived late. It
-// refuses a purged year, whose raw rows are gone.
+// refuses a year whose purge has started (purging or purged): its raw rows
+// are partly or fully deleted and the stored summary is the only complete
+// record.
 func (r *Store) RollUpYear(ctx context.Context, year int, from, to time.Time) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var existing []models.StatsYearTotal
 		if err := tx.Where("year = ?", year).Limit(1).Find(&existing).Error; err != nil {
 			return fmt.Errorf("failed to load the summary of year %d: %w", year, err)
 		}
-		if len(existing) > 0 && existing[0].Status == models.YearStatusPurged {
-			return fmt.Errorf("roll up year %d: %w", year, ErrYearAlreadyPurged)
+		if len(existing) > 0 && existing[0].Status != models.YearStatusRolledUp {
+			return fmt.Errorf("roll up year %d (status %s): %w", year, existing[0].Status, ErrYearPurgeStarted)
 		}
 
 		total, err := rawVacancyTotal(tx, from, to)
@@ -260,17 +263,34 @@ func (r *Store) PurgeBatch(ctx context.Context, from, to time.Time, limit int) (
 	return res.RowsAffected, nil
 }
 
-// MarkYearPurged records that the raw rows of a rolled-up year are gone.
+// MarkYearPurging records that the deletes of a rolled-up year are about to
+// start. Call it before the first PurgeBatch: from then on RollUpYear refuses
+// the year, so a run that is cut off half way can never replace the summary
+// with a total counted from the rows that remain.
+func (r *Store) MarkYearPurging(ctx context.Context, year int) error {
+	res := r.db.WithContext(ctx).Model(&models.StatsYearTotal{}).
+		Where("year = ? AND status = ?", year, models.YearStatusRolledUp).
+		Update("status", models.YearStatusPurging)
+	if res.Error != nil {
+		return fmt.Errorf("failed to mark year %d purging: %w", year, res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("year %d has no rolled-up summary to mark purging", year)
+	}
+	return nil
+}
+
+// MarkYearPurged records that every raw row of a purging year is gone.
 func (r *Store) MarkYearPurged(ctx context.Context, year int) error {
 	now := time.Now()
 	res := r.db.WithContext(ctx).Model(&models.StatsYearTotal{}).
-		Where("year = ? AND status = ?", year, models.YearStatusRolledUp).
+		Where("year = ? AND status = ?", year, models.YearStatusPurging).
 		Updates(map[string]any{"status": models.YearStatusPurged, "purged_at": &now})
 	if res.Error != nil {
 		return fmt.Errorf("failed to mark year %d purged: %w", year, res.Error)
 	}
 	if res.RowsAffected == 0 {
-		return fmt.Errorf("year %d has no rolled-up summary to mark purged", year)
+		return fmt.Errorf("year %d is not purging, so it cannot be marked purged", year)
 	}
 	return nil
 }

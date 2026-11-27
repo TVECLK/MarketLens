@@ -704,8 +704,11 @@ func (r *Store) GetTotalVacancyCount(ctx context.Context, fromDate, toDate time.
 // This function returns all-time dashboard card numbers: the number of sources,
 // the total vacancy count across every job post (no date range), and the
 // number of industry sectors. Years the retention job has purged no longer
-// have raw rows, so their vacancies come from stats_year_total. Rolled-up
-// years that still have their raw rows are not added, or they would count twice.
+// have raw rows, so their vacancies come from stats_year_total. Years that
+// are rolled up still have all their raw rows, and years that are purging
+// still have some, so neither is added or those rows would count twice. While
+// a year is purging the deleted part is in neither place, so the number dips
+// for the minutes the purge runs and is correct again once the year is purged.
 func (r *Store) GetDashboardCardData(ctx context.Context) (models.DashboardCardData, error) {
 	var data models.DashboardCardData
 

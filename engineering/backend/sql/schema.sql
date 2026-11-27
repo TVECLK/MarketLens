@@ -326,12 +326,26 @@ CREATE INDEX IF NOT EXISTS idx_metadata_indsubclass_posted_at ON meta_data (indu
 --                         3 hybrid): work_mode_enum is an enum, not a table
 -- A job with no value for a dimension is stored with value_id 0, so every
 -- dimension of a root adds up to its 'total'.
+--
+-- year_status_enum is the status of a year in stats_year_total:
+--   rolled_up  summary written and checked against the raw rows; none deleted yet
+--   purging    deletes have started, so raw rows may be partly gone; the summary is
+--              final and must never be recalculated from the remaining rows
+--   purged     all raw rows of the year are deleted
 -- -----------------------------------------------------------------------------
+
+DO $$
+BEGIN
+    CREATE TYPE year_status_enum AS ENUM ('rolled_up', 'purging', 'purged');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS stats_year_total (
     year          INT PRIMARY KEY,
     vacancy_count BIGINT NOT NULL,       -- every vacancy posted that year, classified or not
-    status        VARCHAR(20) NOT NULL CHECK (status IN ('rolled_up', 'purged')),
+    status        year_status_enum NOT NULL,
     rolled_up_at  TIMESTAMPTZ NOT NULL,
     purged_at     TIMESTAMPTZ
 );

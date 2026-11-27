@@ -7,7 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"gorm.io/gorm"
+
 	"marketlens-go-backend/internal/models"
+	"marketlens-go-backend/internal/repositories"
+	"marketlens-go-backend/internal/testutil"
 )
 
 // fakeRetentionStore records every call so the tests can check the order of
@@ -40,6 +44,10 @@ func (f *fakeRetentionStore) RawVacancyTotal(context.Context, time.Time, time.Ti
 }
 func (f *fakeRetentionStore) RollUpYear(_ context.Context, year int, _, _ time.Time) error {
 	f.calls = append(f.calls, "rollup")
+	// Like the real store: a year whose purge has started is never rolled up.
+	if t := f.totals[year]; t != nil && t.Status != models.YearStatusRolledUp {
+		return errors.New("fake: roll-up of a year whose purge has started")
+	}
 	f.totals[year] = &models.StatsYearTotal{Year: year, VacancyCount: f.rollUpSum, Status: models.YearStatusRolledUp}
 	return nil
 }
@@ -58,6 +66,11 @@ func (f *fakeRetentionStore) PurgeBatch(_ context.Context, _, _ time.Time, limit
 	}
 	f.purgeLeft -= n
 	return n, nil
+}
+func (f *fakeRetentionStore) MarkYearPurging(_ context.Context, year int) error {
+	f.calls = append(f.calls, "purging")
+	f.totals[year].Status = models.YearStatusPurging
+	return nil
 }
 func (f *fakeRetentionStore) MarkYearPurged(_ context.Context, year int) error {
 	f.calls = append(f.calls, "mark")
@@ -129,7 +142,7 @@ func TestRetention_RollsUpVerifiesThenPurgesInBatches(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	// 5 jobs in batches of 2: three batches, then a batch that finds none.
-	want := []string{"rollup", "verify", "purge", "purge", "purge", "purge", "mark"}
+	want := []string{"rollup", "verify", "purging", "purge", "purge", "purge", "purge", "mark"}
 	if !reflect.DeepEqual(store.calls, want) {
 		t.Errorf("calls = %v, want %v", store.calls, want)
 	}
@@ -160,7 +173,7 @@ func TestRetention_ATotalMismatchStopsBeforeAnyDelete(t *testing.T) {
 		t.Fatal("Run accepted a summary that does not match the raw data")
 	}
 	for _, c := range store.calls {
-		if c == "purge" || c == "mark" {
+		if c == "purging" || c == "purge" || c == "mark" {
 			t.Fatalf("calls = %v: a delete happened after a failed check", store.calls)
 		}
 	}
@@ -174,7 +187,7 @@ func TestRetention_AFailedVerifyStopsBeforeAnyDelete(t *testing.T) {
 		t.Fatal("Run ignored a failed verification")
 	}
 	for _, c := range store.calls {
-		if c == "purge" || c == "mark" {
+		if c == "purging" || c == "purge" || c == "mark" {
 			t.Fatalf("calls = %v: a delete happened after a failed verification", store.calls)
 		}
 	}
@@ -187,26 +200,72 @@ func TestRetention_APurgeErrorLeavesTheYearUnmarked(t *testing.T) {
 	if err := newTestRetention(t, store, true).Run(context.Background()); err == nil {
 		t.Fatal("Run swallowed a purge error")
 	}
-	if store.totals[2022].Status == models.YearStatusPurged {
-		t.Error("the year was marked purged although the purge did not finish")
+	if got := store.totals[2022].Status; got != models.YearStatusPurging {
+		t.Errorf("status = %q, want purging: the deletes started but did not finish", got)
 	}
 }
 
-func TestRetention_APurgedYearIsSkippedAndARestartContinues(t *testing.T) {
+func TestRetention_APurgedYearIsSkippedAndACutOffPurgeResumesWithoutARollUp(t *testing.T) {
 	store := newFakeStore(2021)
 	store.totals[2021] = &models.StatsYearTotal{Year: 2021, Status: models.YearStatusPurged}
-	// 2022 was rolled up by an earlier run that was killed during the purge.
-	store.totals[2022] = &models.StatsYearTotal{Year: 2022, VacancyCount: 10, Status: models.YearStatusRolledUp}
+	// 2022 was cut off during its purge: some raw rows are already gone, so the
+	// raw total no longer matches the summary and must not be looked at.
+	store.totals[2022] = &models.StatsYearTotal{Year: 2022, VacancyCount: 100, Status: models.YearStatusPurging}
+	store.rawTotal = 60
 	store.purgeLeft = 3
 
 	if err := newTestRetention(t, store, true).Run(context.Background()); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	// Only 2022 is processed: rolled up again (to catch late jobs), then the
-	// 3 jobs left are deleted in two batches and a final empty one.
-	want := []string{"rollup", "verify", "purge", "purge", "purge", "mark"}
+	// No roll-up and no "purging" mark: the summary is final. The 3 jobs left
+	// go in two batches and a final empty one.
+	want := []string{"verify", "purge", "purge", "purge", "mark"}
 	if !reflect.DeepEqual(store.calls, want) {
 		t.Errorf("calls = %v, want %v", store.calls, want)
+	}
+	if store.totals[2022].VacancyCount != 100 {
+		t.Errorf("summary total = %d, want 100: it must not be recounted from the rows that remain", store.totals[2022].VacancyCount)
+	}
+}
+
+func TestRetention_ARolledUpYearIsRolledUpAgainBeforeItsPurgeStarts(t *testing.T) {
+	// A run that was cut off after the roll-up but before the first delete left
+	// the year rolled_up with all its raw rows: rolling up again is safe.
+	store := newFakeStore(2022)
+	store.totals[2022] = &models.StatsYearTotal{Year: 2022, VacancyCount: 10, Status: models.YearStatusRolledUp}
+
+	if err := newTestRetention(t, store, true).Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(store.calls) == 0 || store.calls[0] != "rollup" {
+		t.Errorf("calls = %v, want the roll-up first", store.calls)
+	}
+}
+
+func TestRetention_ACutOffPurgeStaysUntouchedWhilePurgeIsDisabled(t *testing.T) {
+	store := newFakeStore(2022)
+	store.totals[2022] = &models.StatsYearTotal{Year: 2022, VacancyCount: 100, Status: models.YearStatusPurging}
+
+	if err := newTestRetention(t, store, false).Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(store.calls) != 0 {
+		t.Errorf("calls = %v, want none: no roll-up and no delete while purge is off", store.calls)
+	}
+}
+
+func TestRetention_AResumedPurgeStopsIfTheSummaryDoesNotVerify(t *testing.T) {
+	store := newFakeStore(2022)
+	store.totals[2022] = &models.StatsYearTotal{Year: 2022, VacancyCount: 100, Status: models.YearStatusPurging}
+	store.verifyErr = errors.New("gender does not add up")
+
+	if err := newTestRetention(t, store, true).Run(context.Background()); err == nil {
+		t.Fatal("Run resumed a purge although the stored summary does not verify")
+	}
+	for _, c := range store.calls {
+		if c == "purge" || c == "mark" {
+			t.Fatalf("calls = %v: a delete happened after a failed verification", store.calls)
+		}
 	}
 }
 
@@ -247,5 +306,103 @@ func TestNewRetentionService_RejectsBadConfig(t *testing.T) {
 		if _, err := NewRetentionService(newFakeStore(2020), cfg); err == nil {
 			t.Errorf("%s: NewRetentionService accepted the config", name)
 		}
+	}
+}
+
+// cutOffStore is the real store whose PurgeBatch fails after a number of
+// batches, like a pod that is killed in the middle of a purge.
+type cutOffStore struct {
+	*repositories.Store
+	allowed int // batches that succeed before the "kill"
+	done    int
+}
+
+func (c *cutOffStore) PurgeBatch(ctx context.Context, from, to time.Time, limit int) (int64, error) {
+	if c.done >= c.allowed {
+		return 0, errors.New("pod killed")
+	}
+	c.done++
+	return c.Store.PurgeBatch(ctx, from, to, limit)
+}
+
+func seedJobs(t *testing.T, db *gorm.DB, postedAt time.Time, vacancies ...int) {
+	t.Helper()
+	for _, v := range vacancies {
+		job := models.JobPost{
+			JobRole:       "role",
+			WorkMode:      models.WorkModeOnsite,
+			NoOfVacancies: v,
+			MetaData:      models.JobMetaData{PostedAt: postedAt},
+		}
+		if err := db.Create(&job).Error; err != nil {
+			t.Fatalf("failed to create job: %v", err)
+		}
+	}
+}
+
+func newRealRetention(t *testing.T, store retentionStore) *RetentionService {
+	t.Helper()
+	s, err := NewRetentionService(store, RetentionConfig{
+		RawYears: 3, Location: time.UTC, BatchSize: 3, PurgeEnabled: true,
+		Now: func() time.Time { return time.Date(2026, 11, 26, 9, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("NewRetentionService: %v", err)
+	}
+	return s
+}
+
+// A purge that is cut off half way and then run again must keep the year total
+// of the complete data. Recounting the rows that are left would store a total
+// that is too low and lose the deleted jobs from the record.
+func TestRetention_ACutOffPurgeKeepsTheCompleteYearTotal(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	real := repositories.NewStore(db)
+	ctx := context.Background()
+
+	// 10 jobs of 2022 worth 1+2+...+10 = 55 vacancies, and 2 jobs inside the window.
+	seedJobs(t, db, time.Date(2022, 6, 1, 9, 0, 0, 0, time.UTC), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+	seedJobs(t, db, time.Date(2024, 3, 1, 9, 0, 0, 0, time.UTC), 100, 200)
+
+	// First run: batches of 3, killed after 2 of them, so 6 jobs are deleted and 4 remain.
+	if err := newRealRetention(t, &cutOffStore{Store: real, allowed: 2}).Run(ctx); err == nil {
+		t.Fatal("the cut-off run reported success")
+	}
+	total, err := real.GetYearTotal(ctx, 2022)
+	if err != nil || total == nil {
+		t.Fatalf("GetYearTotal: %v, %v", total, err)
+	}
+	if total.Status != models.YearStatusPurging || total.VacancyCount != 55 {
+		t.Fatalf("after the cut-off run: %+v, want status purging with total 55", total)
+	}
+	var left int64
+	db.Model(&models.JobMetaData{}).Where("posted_at < ?", "2023-01-01").Count(&left)
+	if left != 4 {
+		t.Fatalf("%d jobs of 2022 left after the cut-off run, want 4", left)
+	}
+
+	// Second run on the same data: it must finish the deletes and keep 55.
+	if err := newRealRetention(t, real).Run(ctx); err != nil {
+		t.Fatalf("the second run: %v", err)
+	}
+	total, _ = real.GetYearTotal(ctx, 2022)
+	if total.VacancyCount != 55 {
+		t.Errorf("year total = %d, want 55: it was recounted from the rows left after the cut-off", total.VacancyCount)
+	}
+	if total.Status != models.YearStatusPurged || total.PurgedAt == nil {
+		t.Errorf("after the second run: %+v, want status purged", total)
+	}
+	db.Model(&models.JobMetaData{}).Where("posted_at < ?", "2023-01-01").Count(&left)
+	if left != 0 {
+		t.Errorf("%d jobs of 2022 left after the second run, want 0", left)
+	}
+	db.Model(&models.JobMetaData{}).Where("posted_at >= ?", "2024-01-01").Count(&left)
+	if left != 2 {
+		t.Errorf("%d jobs inside the window left, want 2 (untouched)", left)
+	}
+
+	// A third run has nothing to do.
+	if err := newRealRetention(t, real).Run(ctx); err != nil {
+		t.Fatalf("the third run: %v", err)
 	}
 }

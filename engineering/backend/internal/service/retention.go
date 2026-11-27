@@ -18,6 +18,7 @@ type retentionStore interface {
 	RollUpYear(ctx context.Context, year int, from, to time.Time) error
 	VerifyYearSummary(ctx context.Context, year int) error
 	PurgeBatch(ctx context.Context, from, to time.Time, limit int) (int64, error)
+	MarkYearPurging(ctx context.Context, year int) error
 	MarkYearPurged(ctx context.Context, year int) error
 }
 
@@ -63,8 +64,9 @@ func NewRetentionService(store retentionStore, cfg RetentionConfig) (*RetentionS
 }
 
 // Run processes every year that has left the raw-data window, oldest first,
-// and stops at the first error. Years already purged are skipped, so running
-// it again after a failure or a pod kill continues where it stopped.
+// and stops at the first error. Years already purged are skipped, and a year
+// whose purge was cut off is not rolled up again but has its deletes finished,
+// so running it again after a failure or a pod kill continues where it stopped.
 func (s *RetentionService) Run(ctx context.Context) error {
 	years, err := s.eligibleYears(ctx)
 	if err != nil {
@@ -112,13 +114,20 @@ func (s *RetentionService) processYear(ctx context.Context, year int) error {
 	if err != nil {
 		return err
 	}
-	if total != nil && total.Status == models.YearStatusPurged {
-		return nil
-	}
 	from, to := s.yearRange(year)
 
-	// Roll up every time, even when the year is already rolled up: the
-	// summary is replaced, so jobs that arrived late are included.
+	if total != nil {
+		switch total.Status {
+		case models.YearStatusPurged:
+			return nil
+		case models.YearStatusPurging:
+			return s.resumePurge(ctx, year, from, to)
+		}
+	}
+
+	// Roll up every time while no delete has started, even when the year is
+	// already rolled up: the summary is replaced, so jobs that arrived late are
+	// included. Once the purge starts the summary is final and this is skipped.
 	if err := s.store.RollUpYear(ctx, year, from, to); err != nil {
 		return err
 	}
@@ -131,6 +140,32 @@ func (s *RetentionService) processYear(ctx context.Context, year int) error {
 		log.Printf("retention: purge is disabled, raw jobs of year %d kept", year)
 		return nil
 	}
+	// From this call on the year is never rolled up again: a run cut off in the
+	// middle of the deletes must not recount the rows that are left.
+	if err := s.store.MarkYearPurging(ctx, year); err != nil {
+		return err
+	}
+	return s.finishPurge(ctx, year, from, to)
+}
+
+// resumePurge finishes the deletes of a year whose purge was cut off. Some of
+// its raw rows are already gone, so the stored summary is the only complete
+// record: it is not rebuilt and not compared with the raw rows. It is only
+// checked for adding up within itself.
+func (s *RetentionService) resumePurge(ctx context.Context, year int, from, to time.Time) error {
+	if !s.cfg.PurgeEnabled {
+		log.Printf("retention: purge is disabled, the purge of year %d stays half done", year)
+		return nil
+	}
+	if err := s.store.VerifyYearSummary(ctx, year); err != nil {
+		return fmt.Errorf("%w; nothing was deleted", err)
+	}
+	log.Printf("retention: resuming the purge of year %d", year)
+	return s.finishPurge(ctx, year, from, to)
+}
+
+// finishPurge deletes the raw jobs of the year and marks it purged.
+func (s *RetentionService) finishPurge(ctx context.Context, year int, from, to time.Time) error {
 	deleted, err := s.purge(ctx, from, to)
 	if err != nil {
 		return err
@@ -138,7 +173,7 @@ func (s *RetentionService) processYear(ctx context.Context, year int) error {
 	if err := s.store.MarkYearPurged(ctx, year); err != nil {
 		return err
 	}
-	log.Printf("retention: year %d purged (%d jobs deleted)", year, deleted)
+	log.Printf("retention: year %d purged (%d jobs deleted in this run)", year, deleted)
 	return nil
 }
 

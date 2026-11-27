@@ -6,10 +6,16 @@ import "time"
 // leaves the raw-data window. See the comment above stats_year_total in
 // sql/schema.sql for what each dimension's value_id means.
 
-// Year statuses. A rolled_up year still has its raw rows; a purged year does
-// not, and must never be rolled up again.
+// Year statuses, in the order a year goes through them:
+//   - rolled_up: the summary is written and checked; no raw row is deleted yet,
+//     so the roll-up may be repeated.
+//   - purging: the deletes have started and some raw rows may already be gone.
+//     The summary is final: rolling up again would replace it with a total
+//     counted from the rows that remain.
+//   - purged: every raw row of the year is deleted.
 const (
 	YearStatusRolledUp = "rolled_up"
+	YearStatusPurging  = "purging"
 	YearStatusPurged   = "purged"
 )
 
@@ -60,7 +66,7 @@ func (m WorkMode) Code() (int, bool) {
 type StatsYearTotal struct {
 	Year         int       `gorm:"primaryKey;autoIncrement:false;not null"`
 	VacancyCount int64     `gorm:"not null"`
-	Status       string    `gorm:"size:20;not null"`
+	Status       string    `gorm:"type:year_status_enum;not null"`
 	RolledUpAt   time.Time `gorm:"not null"`
 	PurgedAt     *time.Time
 }
