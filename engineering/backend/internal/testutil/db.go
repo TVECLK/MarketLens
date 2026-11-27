@@ -89,5 +89,10 @@ func migrateAll(db *gorm.DB) error {
 		&models.JobPost{},
 		&models.JobMetaData{},
 		&models.LshIndex{},
+
+		// --- Yearly summaries (written by the retention job) ---
+		&models.StatsYearTotal{},
+		&models.StatsYearOccupation{},
+		&models.StatsYearIndustry{},
 	)
 }

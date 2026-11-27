@@ -303,3 +303,53 @@ CREATE INDEX IF NOT EXISTS idx_metadata_snapshot_reconcile
 CREATE INDEX IF NOT EXISTS idx_metadata_posted_at ON meta_data (posted_at);
 CREATE INDEX IF NOT EXISTS idx_metadata_occgroup_posted_at ON meta_data (occupation_group_id, posted_at);
 CREATE INDEX IF NOT EXISTS idx_metadata_indsubclass_posted_at ON meta_data (industry_subclass_id, posted_at);
+-- -----------------------------------------------------------------------------
+-- Yearly summaries
+--
+-- When a calendar year falls out of the raw-data window (the last 3 years),
+-- the retention job copies its totals here and then deletes its raw job
+-- rows. See cmd/retention and internal/service/retention.go.
+--
+-- stats_year_occupation / stats_year_industry hold one row per
+-- (root, dimension, year, value). root_id is a major_group / industry_sector.
+-- value_id means a different thing per dimension, so it is not a foreign key:
+--   total                 0
+--   gender                gender.id
+--   education_level       education_level.id
+--   experience            experience.id
+--   formality             formality.id
+--   vocational_education  vocational_education.id
+--   employment_sector     employment_sector.id
+--   province              geo_data.id
+--   job_type              job_type.id
+--   work_mode             code from models.WorkModeCodes (1 remote, 2 onsite,
+--                         3 hybrid): work_mode_enum is an enum, not a table
+-- A job with no value for a dimension is stored with value_id 0, so every
+-- dimension of a root adds up to its 'total'.
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS stats_year_total (
+    year          INT PRIMARY KEY,
+    vacancy_count BIGINT NOT NULL,       -- every vacancy posted that year, classified or not
+    status        VARCHAR(20) NOT NULL CHECK (status IN ('rolled_up', 'purged')),
+    rolled_up_at  TIMESTAMPTZ NOT NULL,
+    purged_at     TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS stats_year_occupation (
+    root_id       INT NOT NULL REFERENCES major_group(id),
+    dimension     VARCHAR(30) NOT NULL,
+    year          INT NOT NULL REFERENCES stats_year_total(year),
+    value_id      INT NOT NULL,
+    vacancy_count BIGINT NOT NULL,
+    PRIMARY KEY (root_id, dimension, year, value_id)
+);
+
+CREATE TABLE IF NOT EXISTS stats_year_industry (
+    root_id       INT NOT NULL REFERENCES industry_sector(id),
+    dimension     VARCHAR(30) NOT NULL,
+    year          INT NOT NULL REFERENCES stats_year_total(year),
+    value_id      INT NOT NULL,
+    vacancy_count BIGINT NOT NULL,
+    PRIMARY KEY (root_id, dimension, year, value_id)
+);
