@@ -510,8 +510,8 @@ func (m *markPurgedFailsStore) MarkYearPurged(ctx context.Context, year int) err
 
 // If every batch is deleted but marking the year purged fails, no raw job of
 // that year is left to point at it. The next run must still find the year and
-// finish it, or it stays purging and its vacancies drop out of the dashboard's
-// all-time count.
+// finish it, or it stays purging and its vacancies stay out of the dashboard's
+// all-time count for good.
 func TestRetention_AYearWhoseLastStepFailedIsFinalizedOnTheNextRun(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	real := repositories.NewStore(db)
@@ -538,8 +538,14 @@ func TestRetention_AYearWhoseLastStepFailedIsFinalizedOnTheNextRun(t *testing.T)
 	if err != nil {
 		t.Fatalf("GetDashboardCardData: %v", err)
 	}
+	// KNOWN LIMITATION, recorded here on purpose and not the target: while a year
+	// is purging, the dashboard's all-time count adds only the raw rows that are
+	// left (300). The year's 55 vacancies, in its frozen summary, are not counted
+	// until the year is marked purged, so the true figure of 355 shows only after
+	// the retry below. If the dashboard is changed to count a purging year from
+	// its summary, this expectation becomes 355.
 	if card.AllTimeVacancyCount != 300 {
-		t.Fatalf("all-time count while stuck = %d, want 300 (the 55 are in neither place yet)", card.AllTimeVacancyCount)
+		t.Fatalf("all-time count while the year is stuck purging = %d, want 300 (known limitation: the 55 in the summary are not counted yet)", card.AllTimeVacancyCount)
 	}
 
 	// The oldest raw job is now from 2024, inside the window, so only the
