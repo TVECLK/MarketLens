@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -35,6 +36,16 @@ func newFakeStore(earliestYear int) *fakeRetentionStore {
 
 func (f *fakeRetentionStore) EarliestPostedAt(context.Context) (*time.Time, error) {
 	return f.earliest, nil
+}
+func (f *fakeRetentionStore) PurgingYears(context.Context) ([]int, error) {
+	var years []int
+	for y, t := range f.totals {
+		if t.Status == models.YearStatusPurging {
+			years = append(years, y)
+		}
+	}
+	sort.Ints(years)
+	return years, nil
 }
 func (f *fakeRetentionStore) GetYearTotal(_ context.Context, year int) (*models.StatsYearTotal, error) {
 	return f.totals[year], nil
@@ -269,6 +280,81 @@ func TestRetention_AResumedPurgeStopsIfTheSummaryDoesNotVerify(t *testing.T) {
 	}
 }
 
+func TestRetention_AYearWithNoRawJobsLeftIsStillFinalizedWhenItIsPurging(t *testing.T) {
+	// All batches of 2021 were deleted but the year was never marked purged, so
+	// no raw job is left to point at it: there are no raw jobs at all.
+	store := newFakeStore(2021)
+	store.earliest = nil
+	store.totals[2021] = &models.StatsYearTotal{Year: 2021, VacancyCount: 100, Status: models.YearStatusPurging}
+	store.purgeLeft = 0
+
+	if err := newTestRetention(t, store, true).Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if want := []string{"verify", "purge", "mark"}; !reflect.DeepEqual(store.calls, want) {
+		t.Errorf("calls = %v, want %v: no roll-up, the summary is final", store.calls, want)
+	}
+	if got := store.totals[2021]; got.Status != models.YearStatusPurged || got.VacancyCount != 100 {
+		t.Errorf("year 2021 = %+v, want purged with the total still 100", got)
+	}
+}
+
+func TestRetention_AnUnfinishedYearIsProcessedBeforeTheYearsFoundInTheRawData(t *testing.T) {
+	store := newFakeStore(2022) // raw data starts in 2022
+	store.totals[2021] = &models.StatsYearTotal{Year: 2021, VacancyCount: 100, Status: models.YearStatusPurging}
+	store.purgeLeft = 0
+
+	s := newTestRetention(t, store, true)
+	years, err := s.eligibleYears(context.Background())
+	if err != nil {
+		t.Fatalf("eligibleYears: %v", err)
+	}
+	if want := []int{2021, 2022}; !reflect.DeepEqual(years, want) {
+		t.Errorf("years = %v, want %v: oldest first, no duplicates", years, want)
+	}
+	if err := s.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, y := range []int{2021, 2022} {
+		if store.totals[y].Status != models.YearStatusPurged {
+			t.Errorf("year %d status = %q, want purged", y, store.totals[y].Status)
+		}
+	}
+}
+
+func TestRetention_AnUnfinishedYearInsideTheWindowIsStillFinalized(t *testing.T) {
+	// RawYears was raised after a purge started: 2024 is inside the window now,
+	// but half a purge is not left as it is.
+	store := newFakeStore(2024)
+	store.totals[2024] = &models.StatsYearTotal{Year: 2024, VacancyCount: 100, Status: models.YearStatusPurging}
+	store.purgeLeft = 0
+
+	if err := newTestRetention(t, store, true).Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if store.totals[2024].Status != models.YearStatusPurged {
+		t.Errorf("status = %q, want purged", store.totals[2024].Status)
+	}
+}
+
+func TestRetention_ARolledUpYearWithoutRawJobsIsNotPulledIn(t *testing.T) {
+	// Only purging years are added from the summary table. A rolled_up year has
+	// all its raw rows, and rebuilding one from an empty range would write 0.
+	store := newFakeStore(2022)
+	store.earliest = nil
+	store.totals[2021] = &models.StatsYearTotal{Year: 2021, VacancyCount: 100, Status: models.YearStatusRolledUp}
+
+	if err := newTestRetention(t, store, true).Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(store.calls) != 0 {
+		t.Errorf("calls = %v, want none", store.calls)
+	}
+	if store.totals[2021].VacancyCount != 100 {
+		t.Errorf("total = %d, want 100: it must not be rebuilt from an empty range", store.totals[2021].VacancyCount)
+	}
+}
+
 func TestRetention_StopsWhenTheContextIsCancelled(t *testing.T) {
 	store := newFakeStore(2022)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -402,6 +488,77 @@ func TestRetention_ACutOffPurgeKeepsTheCompleteYearTotal(t *testing.T) {
 	}
 
 	// A third run has nothing to do.
+	if err := newRealRetention(t, real).Run(ctx); err != nil {
+		t.Fatalf("the third run: %v", err)
+	}
+}
+
+// markPurgedFailsStore is the real store whose MarkYearPurged fails once, like a
+// write that fails or a pod that is killed after the last batch was deleted.
+type markPurgedFailsStore struct {
+	*repositories.Store
+	failures int
+}
+
+func (m *markPurgedFailsStore) MarkYearPurged(ctx context.Context, year int) error {
+	if m.failures > 0 {
+		m.failures--
+		return errors.New("write failed")
+	}
+	return m.Store.MarkYearPurged(ctx, year)
+}
+
+// If every batch is deleted but marking the year purged fails, no raw job of
+// that year is left to point at it. The next run must still find the year and
+// finish it, or it stays purging and its vacancies drop out of the dashboard's
+// all-time count.
+func TestRetention_AYearWhoseLastStepFailedIsFinalizedOnTheNextRun(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	real := repositories.NewStore(db)
+	ctx := context.Background()
+
+	// 2022: 1+2+...+10 = 55 vacancies. Inside the window: 100+200 = 300.
+	seedJobs(t, db, time.Date(2022, 6, 1, 9, 0, 0, 0, time.UTC), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+	seedJobs(t, db, time.Date(2024, 3, 1, 9, 0, 0, 0, time.UTC), 100, 200)
+
+	// First run: all batches commit, then the final write fails.
+	if err := newRealRetention(t, &markPurgedFailsStore{Store: real, failures: 1}).Run(ctx); err == nil {
+		t.Fatal("the first run reported success although marking the year purged failed")
+	}
+	var left int64
+	db.Model(&models.JobMetaData{}).Where("posted_at < ?", "2023-01-01").Count(&left)
+	if left != 0 {
+		t.Fatalf("%d jobs of 2022 left after the first run, want 0 (every batch committed)", left)
+	}
+	total, _ := real.GetYearTotal(ctx, 2022)
+	if total.Status != models.YearStatusPurging || total.VacancyCount != 55 {
+		t.Fatalf("after the first run: %+v, want status purging with total 55", total)
+	}
+	card, err := real.GetDashboardCardData(ctx)
+	if err != nil {
+		t.Fatalf("GetDashboardCardData: %v", err)
+	}
+	if card.AllTimeVacancyCount != 300 {
+		t.Fatalf("all-time count while stuck = %d, want 300 (the 55 are in neither place yet)", card.AllTimeVacancyCount)
+	}
+
+	// The oldest raw job is now from 2024, inside the window, so only the
+	// summary table can point at 2022.
+	if earliest, _ := real.EarliestPostedAt(ctx); earliest == nil || earliest.Year() != 2024 {
+		t.Fatalf("earliest raw job = %v, want one from 2024", earliest)
+	}
+
+	if err := newRealRetention(t, real).Run(ctx); err != nil {
+		t.Fatalf("the second run: %v", err)
+	}
+	total, _ = real.GetYearTotal(ctx, 2022)
+	if total.Status != models.YearStatusPurged || total.PurgedAt == nil || total.VacancyCount != 55 {
+		t.Errorf("after the second run: %+v, want purged with the total still 55", total)
+	}
+	card, _ = real.GetDashboardCardData(ctx)
+	if card.AllTimeVacancyCount != 355 {
+		t.Errorf("all-time count after the second run = %d, want 355 (300 raw + 55 purged)", card.AllTimeVacancyCount)
+	}
 	if err := newRealRetention(t, real).Run(ctx); err != nil {
 		t.Fatalf("the third run: %v", err)
 	}

@@ -127,6 +127,22 @@ func (r *Store) GetYearTotal(ctx context.Context, year int) (*models.StatsYearTo
 	return &rows[0], nil
 }
 
+// PurgingYears returns, oldest first, the years whose purge has started but not
+// finished. All their raw jobs may already be deleted, so they cannot be found
+// from the raw data: the retention job asks for them here so that a year whose
+// last step failed is finished instead of staying purging for ever.
+func (r *Store) PurgingYears(ctx context.Context) ([]int, error) {
+	var years []int
+	err := r.db.WithContext(ctx).Model(&models.StatsYearTotal{}).
+		Where("status = ?", models.YearStatusPurging).
+		Order("year ASC").
+		Pluck("year", &years).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to list the years being purged: %w", err)
+	}
+	return years, nil
+}
+
 // EarliestPostedAt returns the oldest posted_at among the raw jobs, or nil if
 // there are none.
 func (r *Store) EarliestPostedAt(ctx context.Context) (*time.Time, error) {

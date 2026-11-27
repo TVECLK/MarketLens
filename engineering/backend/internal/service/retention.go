@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"marketlens-go-backend/internal/models"
@@ -13,6 +14,7 @@ import (
 // retentionStore is the part of repositories.Store the retention job uses.
 type retentionStore interface {
 	EarliestPostedAt(ctx context.Context) (*time.Time, error)
+	PurgingYears(ctx context.Context) ([]int, error)
 	GetYearTotal(ctx context.Context, year int) (*models.StatsYearTotal, error)
 	RawVacancyTotal(ctx context.Context, from, to time.Time) (int64, error)
 	RollUpYear(ctx context.Context, year int, from, to time.Time) error
@@ -63,8 +65,8 @@ func NewRetentionService(store retentionStore, cfg RetentionConfig) (*RetentionS
 	return &RetentionService{store: store, cfg: cfg}, nil
 }
 
-// Run processes every year that has left the raw-data window, oldest first,
-// and stops at the first error. Years already purged are skipped, and a year
+// Run processes every year that has left the raw-data window, and every year
+// whose purge was left unfinished, oldest first, and stops at the first error. Years already purged are skipped, and a year
 // whose purge was cut off is not rolled up again but has its deletes finished,
 // so running it again after a failure or a pod kill continues where it stopped.
 func (s *RetentionService) Run(ctx context.Context) error {
@@ -91,22 +93,44 @@ func (s *RetentionService) yearRange(year int) (time.Time, time.Time) {
 	return time.Date(year, 1, 1, 0, 0, 0, 0, loc), time.Date(year+1, 1, 1, 0, 0, 0, 0, loc)
 }
 
-// eligibleYears lists the years from the one holding the oldest raw job up
-// to the newest one that has left the raw-data window.
+// eligibleYears lists, oldest first, the years to process: the years from the
+// one holding the oldest raw job up to the newest one that has left the
+// raw-data window, plus every year whose purge was started but not finished.
+//
+// The second group cannot be found from the raw data: if the last batch was
+// deleted but the year was never marked purged, no raw job is left to point at
+// it. Without it such a year would stay purging for ever, and the dashboard's
+// all-time count, which adds up only purged years, would miss its vacancies.
+// Those years are included even when they now fall inside the raw-data window
+// (for example after RawYears was raised): half a purge is never left as it is.
 func (s *RetentionService) eligibleYears(ctx context.Context) ([]int, error) {
+	years := make(map[int]bool)
+
 	earliest, err := s.store.EarliestPostedAt(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if earliest == nil {
-		return nil, nil
+	if earliest != nil {
+		cutoffYear := s.cfg.Now().In(s.cfg.Location).Year() - s.cfg.RawYears
+		for y := earliest.In(s.cfg.Location).Year(); y < cutoffYear; y++ {
+			years[y] = true
+		}
 	}
-	cutoffYear := s.cfg.Now().In(s.cfg.Location).Year() - s.cfg.RawYears
-	var years []int
-	for y := earliest.In(s.cfg.Location).Year(); y < cutoffYear; y++ {
-		years = append(years, y)
+
+	unfinished, err := s.store.PurgingYears(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return years, nil
+	for _, y := range unfinished {
+		years[y] = true
+	}
+
+	sorted := make([]int, 0, len(years))
+	for y := range years {
+		sorted = append(sorted, y)
+	}
+	sort.Ints(sorted)
+	return sorted, nil
 }
 
 func (s *RetentionService) processYear(ctx context.Context, year int) error {

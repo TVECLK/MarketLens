@@ -524,6 +524,34 @@ func TestStore_YearStatusesGoInOrder(t *testing.T) {
 	}
 }
 
+func TestStore_PurgingYears(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	store := repositories.NewStore(db)
+	ctx := context.Background()
+
+	if got, err := store.PurgingYears(ctx); err != nil || len(got) != 0 {
+		t.Fatalf("PurgingYears with no summaries = %v, %v, want none", got, err)
+	}
+	now := time.Now()
+	rows := []models.StatsYearTotal{
+		{Year: 2022, VacancyCount: 1, Status: models.YearStatusPurging, RolledUpAt: now},
+		{Year: 2019, VacancyCount: 1, Status: models.YearStatusPurged, RolledUpAt: now, PurgedAt: &now},
+		{Year: 2021, VacancyCount: 1, Status: models.YearStatusRolledUp, RolledUpAt: now},
+		{Year: 2020, VacancyCount: 1, Status: models.YearStatusPurging, RolledUpAt: now},
+	}
+	if err := db.Create(&rows).Error; err != nil {
+		t.Fatalf("failed to seed summaries: %v", err)
+	}
+
+	got, err := store.PurgingYears(ctx)
+	if err != nil {
+		t.Fatalf("PurgingYears: %v", err)
+	}
+	if len(got) != 2 || got[0] != 2020 || got[1] != 2022 {
+		t.Errorf("PurgingYears = %v, want [2020 2022]: only purging years, oldest first", got)
+	}
+}
+
 func TestStore_EarliestPostedAt(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	store := repositories.NewStore(db)
