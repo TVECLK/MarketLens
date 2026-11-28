@@ -18,7 +18,7 @@ info:
     - **List responses** are wrapped in an object: `{ "count": n, "<plural>": [...] }`. Paginated lists also return `total`, `limit` and `offset`.
     - **Pagination.** `limit` defaults to 20 and is silently capped at 100 (top hiring employers default to 5); a non-numeric or non-positive `limit` and a negative `offset` are ignored.
     - **Date ranges.** `from-date`/`to-date` are inclusive; `to-date` must not be before `from-date`. Analysis endpoints require both. Where they are optional (listing the root levels and the children of a parent) supplying one without the other is a 400.
-    - **Errors.** Every error body is `{ "error": "<message>" }`. 400 invalid input; 401 missing/invalid token; 403 token lacks the scope; 404 unknown id; 409 unique-constraint conflict; 500 unexpected failure; 503 a dependency (database or the identity provider) is temporarily unavailable and the request may be retried. 500 and 503 can occur on every endpoint except the health probes.
+    - **Errors.** Every error body of the `/api/v1` endpoints is `{ "error": "<message>" }`. 400 invalid input; 401 missing/invalid token; 403 token lacks the scope; 404 unknown id; 409 unique-constraint conflict; 500 unexpected failure; 503 a dependency (database or the identity provider) is temporarily unavailable and the request may be retried. 500 and 503 can occur on every `/api/v1` endpoint. **Exception - health probes:** `/healthz` and `/readyz` are outside `/api/v1` and never return the standard error body or a 500; a failing `/readyz` returns 503 with a `StatusResponse` body (`{ "status": "not ready", "message": "database unreachable" }`), which clients must handle separately from the standard error shape.
     - **Soft deletes.** DELETE soft-deletes. Deleting a node of a classification hierarchy also soft-deletes every descendant in the lower levels.
   version: "1.0.0"
   contact:
@@ -1420,7 +1420,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/StatusResponse" }
         "503":
-          description: Database unreachable (`status` is `not ready`).
+          description: "Database unreachable. Unlike every other endpoint the body is a `StatusResponse` (`status` is `not ready`), not the standard `{ \"error\": ... }` error body."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/StatusResponse" }
