@@ -4058,6 +4058,12 @@ paths:
       description: >
         Sets `end_date` on every open job of the listed sources (active and not deleted) whose
         `crawler_run_id` is not the given run - i.e. jobs the run no longer saw. 404 if the run does not exist.
+        The rule is "not the given run", not "older than the given run": a job that a **newer** run
+        has refreshed (stamped with a later `crawler_run_id`) also matches and is closed. The
+        backend does not check that the given run is still the latest, so a superseded run (one
+        marked `FAILED` because a newer run started) that reconciles late can close vacancies the
+        newer run just refreshed. Call this only for the most recent run, and only after it has
+        finished saving its jobs.
       x-required-scope: crawler:reconcile
       security:
         - BearerAuth: []
