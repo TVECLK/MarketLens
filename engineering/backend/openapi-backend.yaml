@@ -1390,7 +1390,9 @@ components:
           description: Name of a registered, active source (e.g. `ikman.lk`). Required in practice.
 
     BatchSavePayload:
-      description: A non-empty JSON array of raw jobs (the body is the array itself, not an object).
+      description: >
+        A non-empty JSON array of raw jobs (the body is the array itself, not an object). Every
+        element must decode: one wrongly typed field rejects the whole batch with 400.
       type: array
       minItems: 1
       items: { $ref: "#/components/schemas/BatchSaveJobInput" }
@@ -4019,10 +4021,15 @@ paths:
       summary: "Ingest a batch of raw crawled jobs"
       description: >
         Each job is checked, de-duplicated, classified and stored independently; one failing job
-        never blocks the rest. The response is **200 once the body parses** - per-job failures are
-        listed in `failed_jobs` (a job missing from it was saved, or was a duplicate whose crawler run
-        was refreshed). 400 only if the body is not a JSON array or the array is empty. The response
-        is sent after ingestion finishes, so it can take longer than a normal request.
+        never blocks the rest *once the batch is accepted*. The response is **200 when the body is
+        a non-empty JSON array whose elements all decode** - per-job failures are listed in
+        `failed_jobs` (a job missing from it was saved, or was a duplicate whose crawler run was
+        refreshed). The body is decoded as a whole before any job is processed, so it is rejected
+        with **400, and no job in it is saved**, if it is not a JSON array, if the array is empty,
+        or if any element has a wrongly typed field (e.g. `crawler_run_id` sent as a string
+        instead of an integer). Missing fields are not a decode error; they are reported per job in
+        `failed_jobs`. The response is sent after ingestion finishes, so it can take longer than a
+        normal request.
       x-required-scope: crawler:batch-save
       security:
         - BearerAuth: []
