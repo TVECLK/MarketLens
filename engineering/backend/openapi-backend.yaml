@@ -238,12 +238,14 @@ components:
     ListEnvelope:
       type: object
       description: Shared by every list response; the items sit under a resource-specific key.
+      required: [count]
       properties:
         count: { type: integer, description: Number of items in this response. }
 
     PaginatedEnvelope:
       type: object
       description: Shared by every paginated list response.
+      required: [count, total, limit, offset]
       properties:
         count: { type: integer, description: Number of items in this page. }
         total: { type: integer, description: Total number of items across all pages. }
@@ -296,6 +298,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [employment_sectors]
           properties:
             employment_sectors:
               type: array
@@ -319,6 +322,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [experiences]
           properties:
             experiences:
               type: array
@@ -342,6 +346,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [education_levels]
           properties:
             education_levels:
               type: array
@@ -365,6 +370,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [formalities]
           properties:
             formalities:
               type: array
@@ -388,6 +394,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [genders]
           properties:
             genders:
               type: array
@@ -411,6 +418,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [vocational_educations]
           properties:
             vocational_educations:
               type: array
@@ -457,6 +465,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [major_groups]
           properties:
             major_groups:
               type: array
@@ -504,6 +513,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [sub_major_groups]
           properties:
             sub_major_groups:
               type: array
@@ -514,6 +524,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [major_group_id, sub_major_groups]
           properties:
             major_group_id: { type: integer }
             sub_major_groups:
@@ -562,6 +573,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [minor_groups]
           properties:
             minor_groups:
               type: array
@@ -572,6 +584,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [sub_major_group_id, minor_groups]
           properties:
             sub_major_group_id: { type: integer }
             minor_groups:
@@ -620,6 +633,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [unit_groups]
           properties:
             unit_groups:
               type: array
@@ -630,6 +644,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [minor_group_id, unit_groups]
           properties:
             minor_group_id: { type: integer }
             unit_groups:
@@ -678,6 +693,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/PaginatedEnvelope"
         - type: object
+          required: [occupation_groups]
           properties:
             occupation_groups:
               type: array
@@ -688,6 +704,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [unit_group_id, occupation_groups]
           properties:
             unit_group_id: { type: integer }
             occupation_groups:
@@ -704,6 +721,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [industry_sectors]
           properties:
             industry_sectors:
               type: array
@@ -751,6 +769,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [industry_divisions]
           properties:
             industry_divisions:
               type: array
@@ -761,6 +780,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [industry_sector_id, industry_divisions]
           properties:
             industry_sector_id: { type: integer }
             industry_divisions:
@@ -809,6 +829,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [industry_groups]
           properties:
             industry_groups:
               type: array
@@ -819,6 +840,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [industry_division_id, industry_groups]
           properties:
             industry_division_id: { type: integer }
             industry_groups:
@@ -867,6 +889,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [industry_classes]
           properties:
             industry_classes:
               type: array
@@ -877,6 +900,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [industry_group_id, industry_classes]
           properties:
             industry_group_id: { type: integer }
             industry_classes:
@@ -925,6 +949,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/PaginatedEnvelope"
         - type: object
+          required: [industry_subclasses]
           properties:
             industry_subclasses:
               type: array
@@ -935,6 +960,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [industry_class_id, industry_subclasses]
           properties:
             industry_class_id: { type: integer }
             industry_subclasses:
@@ -983,6 +1009,7 @@ components:
         - $ref: "#/components/schemas/StandardLevelContext"
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [children]
           properties:
             child_level: { type: string, example: sub-major-group }
             children:
@@ -1001,6 +1028,7 @@ components:
         - $ref: "#/components/schemas/StandardLevelContext"
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [employment_sectors]
           properties:
             employment_sectors:
               type: array
@@ -1018,6 +1046,7 @@ components:
         - $ref: "#/components/schemas/StandardLevelContext"
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [experiences]
           properties:
             experiences:
               type: array
@@ -1035,6 +1064,7 @@ components:
         - $ref: "#/components/schemas/StandardLevelContext"
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [education_levels]
           properties:
             education_levels:
               type: array
@@ -1052,6 +1082,7 @@ components:
         - $ref: "#/components/schemas/StandardLevelContext"
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [formalities]
           properties:
             formalities:
               type: array
@@ -1069,6 +1100,7 @@ components:
         - $ref: "#/components/schemas/StandardLevelContext"
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [genders]
           properties:
             genders:
               type: array
@@ -1086,6 +1118,7 @@ components:
         - $ref: "#/components/schemas/StandardLevelContext"
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [vocational_educations]
           properties:
             vocational_educations:
               type: array
@@ -1103,6 +1136,7 @@ components:
         - $ref: "#/components/schemas/StandardLevelContext"
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [job_types]
           properties:
             job_types:
               type: array
@@ -1122,6 +1156,7 @@ components:
         - $ref: "#/components/schemas/StandardLevelContext"
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [provinces]
           properties:
             provinces:
               type: array
@@ -1155,6 +1190,7 @@ components:
         - $ref: "#/components/schemas/LevelContext"
         - $ref: "#/components/schemas/PaginatedEnvelope"
         - type: object
+          required: [skills]
           properties:
             skills:
               type: array
@@ -1172,6 +1208,7 @@ components:
         - $ref: "#/components/schemas/LevelContext"
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [employers]
           properties:
             employers:
               type: array
@@ -1193,6 +1230,7 @@ components:
         - $ref: "#/components/schemas/DateRange"
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [data]
           properties:
             granularity:
               type: string
@@ -1224,6 +1262,7 @@ components:
         - $ref: "#/components/schemas/DateRange"
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [data]
           properties:
             standard: { $ref: "#/components/schemas/Standard" }
             data:
@@ -1261,6 +1300,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ListEnvelope"
         - type: object
+          required: [sources]
           properties:
             sources:
               type: array
