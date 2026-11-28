@@ -1,0 +1,4086 @@
+openapi: 3.0.3
+info:
+  title: Labour Market Analysis Project - Backend API
+  description: |
+    National labour market demand for Sri Lanka.
+
+    ## Resource groups
+    - **Health** - liveness and readiness probes (unversioned, outside `/api/v1`).
+    - **KPI reference tables** - employment sectors, experience, education, formality, gender and vocational education (NVQ) lookups.
+    - **Classification hierarchies** - the occupation (SLSCO) and industry (SLSIC) hierarchies, five levels each.
+    - **Sources** - the job sources (crawled or manually entered) that jobs are attributed to.
+    - **Analysis** - generic level-scoped analysis, occupation skills and hiring employers, national vacancy trend and totals, dashboard card numbers.
+    - **Crawler** - crawler run lifecycle, batch ingestion of raw jobs, stale-vacancy reconciliation and the crawler's source list.
+
+    ## Conventions
+    - Base path `/api/v1`. Bodies are `application/json`; field names are `snake_case`; timestamps are RFC 3339; dates are `YYYY-MM-DD`.
+    - **Authentication.** Reads of the KPI, hierarchy and analysis endpoints are public. Every write, and everything under `/sources` and `/crawler`, needs a ThunderID-issued bearer token carrying the scope named in the operation's `x-required-scope`. Scopes follow `<resource>:<action>` (`create`, `update`, `delete`, `read`).
+    - **List responses** are wrapped in an object: `{ "count": n, "<plural>": [...] }`. Paginated lists also return `total`, `limit` and `offset`.
+    - **Pagination.** `limit` and `offset` are never rejected - out-of-range values fall back to the effective page settings: the effective `limit` is 20 when absent, non-positive or non-numeric (5 for top hiring employers) and is capped at 100; a negative or non-numeric `offset` is treated as 0. Paginated responses echo the effective `limit` and `offset`. The input schemas therefore carry no `minimum`/`maximum`, so schema-validating clients and gateways do not reject values the server would accept; typed clients can only send integers, while the non-numeric fallback applies to hand-built query strings.
+    - **Date ranges.** `from-date`/`to-date` are inclusive; `to-date` must not be before `from-date`. Analysis endpoints require both. Where they are optional (listing the root levels and the children of a parent) supplying one without the other is a 400.
+    - **Errors.** Every error body of the `/api/v1` endpoints is `{ "error": "<message>" }`. 400 invalid input; 401 missing/invalid token; 403 token lacks the scope; 404 unknown id; 409 unique-constraint conflict; 500 unexpected failure; 503 a dependency (database or the identity provider) is temporarily unavailable and the request may be retried. 500 and 503 can occur on every `/api/v1` endpoint. **Exception - health probes:** `/healthz` and `/readyz` are outside `/api/v1` and never return the standard error body or a 500; a failing `/readyz` returns 503 with a `StatusResponse` body (`{ "status": "not ready", "message": "database unreachable" }`), which clients must handle separately from the standard error shape.
+    - **Soft deletes.** DELETE soft-deletes. Deleting a node of a classification hierarchy also soft-deletes every descendant in the lower levels.
+  version: "1.0.0"
+  contact:
+    name: TVEC
+    url: https://github.com/TVECLK/MarketLens
+  license:
+    name: Apache-2.0
+    url: https://github.com/TVECLK/MarketLens#Apache-2.0-1-ov-file
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+
+tags:
+  - name: health
+    description: "Liveness and readiness probes."
+  - name: kpi-employment-sectors
+    description: "Employment sector reference table."
+  - name: kpi-experiences
+    description: "Experience level reference table."
+  - name: kpi-education-levels
+    description: "Education level reference table."
+  - name: kpi-formalities
+    description: "Formality category reference table."
+  - name: kpi-genders
+    description: "Gender category reference table."
+  - name: kpi-vocational-educations
+    description: "Vocational education (NVQ) level reference table."
+  - name: occupation-hierarchy
+    description: "Occupation classification (SLSCO): major group > sub major group > minor group > unit group > occupation group."
+  - name: industry-hierarchy
+    description: "Industry classification (SLSIC): industry sector > division > group > class > subclass."
+  - name: sources
+    description: "Job sources (crawled `auto` or hand-entered `manual`)."
+  - name: analysis
+    description: "Vacancy analysis scoped to one node of a classification hierarchy."
+  - name: occupation-skills
+    description: "Skills and hiring employers for an occupation hierarchy node."
+  - name: vacancy-trend
+    description: "National vacancy trend and totals."
+  - name: dashboard
+    description: "Headline numbers for the dashboard."
+  - name: crawler
+    description: "Crawler run lifecycle, ingestion and reconciliation (machine-to-machine)."
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        ThunderID-issued access token, sent as `Authorization: Bearer <token>`.
+        The scope an operation needs is given by its `x-required-scope` extension.
+
+  parameters:
+    fromDateRequired:
+      name: from-date
+      in: query
+      required: true
+      schema: { type: string, format: date }
+      description: "Start date (inclusive), `YYYY-MM-DD`."
+    toDateRequired:
+      name: to-date
+      in: query
+      required: true
+      schema: { type: string, format: date }
+      description: "End date (inclusive), `YYYY-MM-DD`. Must not be before `from-date`."
+    fromDateOptional:
+      name: from-date
+      in: query
+      required: false
+      schema: { type: string, format: date }
+      description: "Start date (inclusive), `YYYY-MM-DD`. Must be sent together with `to-date`."
+    toDateOptional:
+      name: to-date
+      in: query
+      required: false
+      schema: { type: string, format: date }
+      description: "End date (inclusive), `YYYY-MM-DD`. Must be sent together with `from-date`."
+    idPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+      description: Numeric id of the resource.
+    standardPath:
+      name: standard
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Standard" }
+      description: Classification standard the level belongs to.
+    levelPath:
+      name: level
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/HierarchyLevel" }
+      description: >
+        Hierarchy level. Must belong to `standard` - occupation: `major-group`,
+        `sub-major-group`, `minor-group`, `unit-group`, `occupation-group`; industry:
+        `industry-sector`, `industry-division`, `industry-group`, `industry-class`,
+        `industry-subclass`. A mismatch is a 400.
+    occupationLevelPath:
+      name: level
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OccupationLevel" }
+      description: Occupation hierarchy level.
+    limitQuery:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, default: 20 }
+      description: >
+        Requested page size. The server never rejects it: the effective page size is 20 when
+        the value is absent, zero, negative or not a number, and 100 when it is above 100
+        (the `limit` echoed in the response is the effective one).
+    offsetQuery:
+      name: offset
+      in: query
+      required: false
+      schema: { type: integer, default: 0 }
+      description: >
+        Number of rows to skip. The server never rejects it: a negative or non-numeric value
+        is treated as 0.
+    employersLimitQuery:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, default: 5 }
+      description: >
+        Requested number of employers. The server never rejects it: the effective count is 5
+        when the value is absent, zero, negative or not a number, and 100 when it is above 100.
+    sourceTypeQuery:
+      name: type
+      in: query
+      required: false
+      schema: { $ref: "#/components/schemas/SourceType" }
+      description: Only return sources of this type. Any other value is a 400.
+    isActiveQuery:
+      name: is-active
+      in: query
+      required: false
+      schema: { type: boolean }
+      description: Only return sources that are (`true`) or are not (`false`) active.
+
+  responses:
+    BadRequest:
+      description: "Invalid request: malformed JSON or missing/oversized field, invalid id, date or enum value, `to-date` before `from-date`, a non-existent parent id, or a level that does not belong to the standard."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Unauthorized:
+      description: "Missing, invalid or expired bearer token."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Forbidden:
+      description: "The token does not carry the scope the operation requires (`error` names it)."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFound:
+      description: "No resource with that id (or it has been deleted)."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Conflict:
+      description: "The request conflicts with existing data, e.g. the name is already used (`already exists`)."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    ServerError:
+      description: "Unexpected server error."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    ServiceUnavailable:
+      description: "A dependency (database or identity provider) is temporarily unavailable. Safe to retry."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  schemas:
+    # ---- Common ----
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string, example: invalid id parameter }
+
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string, example: Gender category deleted successfully }
+
+    StatusResponse:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok, ready, not ready] }
+        message:
+          type: string
+          description: Only present on a failing readiness check.
+          example: database unreachable
+
+    AuditedResource:
+      type: object
+      description: Fields every stored resource carries.
+      properties:
+        id: { type: integer, example: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ListEnvelope:
+      type: object
+      description: Shared by every list response; the items sit under a resource-specific key.
+      required: [count]
+      properties:
+        count: { type: integer, description: Number of items in this response. }
+
+    PaginatedEnvelope:
+      type: object
+      description: Shared by every paginated list response.
+      required: [count, total, limit, offset]
+      properties:
+        count: { type: integer, description: Number of items in this page. }
+        total: { type: integer, description: Total number of items across all pages. }
+        limit: { type: integer, description: Page size actually applied. }
+        offset: { type: integer, description: Rows skipped. }
+
+    DateRange:
+      type: object
+      description: The date range the response was computed for, echoed back.
+      properties:
+        from_date: { type: string, format: date }
+        to_date: { type: string, format: date }
+
+    Standard:
+      type: string
+      enum: [occupation, industry]
+
+    OccupationLevel:
+      type: string
+      enum: [major-group, sub-major-group, minor-group, unit-group, occupation-group]
+
+    IndustryLevel:
+      type: string
+      enum: [industry-sector, industry-division, industry-group, industry-class, industry-subclass]
+
+    HierarchyLevel:
+      description: Any level of either hierarchy.
+      oneOf:
+        - $ref: "#/components/schemas/OccupationLevel"
+        - $ref: "#/components/schemas/IndustryLevel"
+
+    # ---- KPI reference tables ----
+    # Writes are full replacements of the single field, which is required.
+
+    EmploymentSector:
+      description: "A employment sector."
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - type: object
+          properties:
+            sector: { type: string }
+
+    EmploymentSectorRequest:
+      type: object
+      required: [sector]
+      properties:
+        sector: { type: string, minLength: 1, maxLength: 100 }
+
+    EmploymentSectorListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [employment_sectors]
+          properties:
+            employment_sectors:
+              type: array
+              items: { $ref: "#/components/schemas/EmploymentSector" }
+
+    Experience:
+      description: "A experience level."
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - type: object
+          properties:
+            name: { type: string }
+
+    ExperienceRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+
+    ExperienceListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [experiences]
+          properties:
+            experiences:
+              type: array
+              items: { $ref: "#/components/schemas/Experience" }
+
+    EducationLevel:
+      description: "A education level."
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - type: object
+          properties:
+            level: { type: string }
+
+    EducationLevelRequest:
+      type: object
+      required: [level]
+      properties:
+        level: { type: string, minLength: 1, maxLength: 100 }
+
+    EducationLevelListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [education_levels]
+          properties:
+            education_levels:
+              type: array
+              items: { $ref: "#/components/schemas/EducationLevel" }
+
+    Formality:
+      description: "A formality category."
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - type: object
+          properties:
+            formality_type: { type: string }
+
+    FormalityRequest:
+      type: object
+      required: [formality_type]
+      properties:
+        formality_type: { type: string, minLength: 1, maxLength: 50 }
+
+    FormalityListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [formalities]
+          properties:
+            formalities:
+              type: array
+              items: { $ref: "#/components/schemas/Formality" }
+
+    Gender:
+      description: "A gender category."
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - type: object
+          properties:
+            gender_type: { type: string }
+
+    GenderRequest:
+      type: object
+      required: [gender_type]
+      properties:
+        gender_type: { type: string, minLength: 1, maxLength: 50 }
+
+    GenderListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [genders]
+          properties:
+            genders:
+              type: array
+              items: { $ref: "#/components/schemas/Gender" }
+
+    VocationalEducation:
+      description: "A vocational education (NVQ) level."
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - type: object
+          properties:
+            level: { type: string }
+
+    VocationalEducationRequest:
+      type: object
+      required: [level]
+      properties:
+        level: { type: string, minLength: 1, maxLength: 50 }
+
+    VocationalEducationListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [vocational_educations]
+          properties:
+            vocational_educations:
+              type: array
+              items: { $ref: "#/components/schemas/VocationalEducation" }
+
+    # ---- Classification hierarchies ----
+    # Occupation: major-group > sub-major-group > minor-group > unit-group > occupation-group
+    # Industry:   industry-sector > industry-division > industry-group > industry-class > industry-subclass
+    #
+    # Every level below the root exists in two shapes:
+    # - `<Level>` is returned by that level's GET list and GET by id. One level of parent is
+    #   preloaded and always present.
+    # - `<Level>Basic` has the parent id but a null parent object. It is returned by create and
+    #   update responses and by "children of {id}" lists (none preload the parent), and it is
+    #   how a parent appears nested inside its child (only one level is ever preloaded).
+
+    ClassificationFields:
+      type: object
+      properties:
+        name: { type: string }
+        code: { type: string }
+
+    ClassificationRequest:
+      type: object
+      required: [name, code]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        code: { type: string, minLength: 1, maxLength: 50 }
+
+    ClassificationUpdateRequest:
+      description: Partial update - send any subset of the fields. A parent id, if sent, must exist.
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        code: { type: string, minLength: 1, maxLength: 50 }
+
+    MajorGroup:
+      description: Top level of its hierarchy - a major group has no parent.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+
+    MajorGroupListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [major_groups]
+          properties:
+            major_groups:
+              type: array
+              items: { $ref: "#/components/schemas/MajorGroup" }
+
+    SubMajorGroupBasic:
+      description: A sub major group without its parent object. Returned by create/update and by the children-of-parent list.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            major_group_id: { type: integer }
+            major_group:
+              type: object
+              nullable: true
+              description: Always null here - the parent is not preloaded.
+
+    SubMajorGroup:
+      description: A sub major group with its parent. Returned by GET list and GET by id.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            major_group_id: { type: integer }
+            major_group: { $ref: "#/components/schemas/MajorGroup" }
+
+    SubMajorGroupRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationRequest"
+        - type: object
+          required: [major_group_id]
+          properties:
+            major_group_id: { type: integer, minimum: 1 }
+
+    SubMajorGroupUpdateRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationUpdateRequest"
+        - type: object
+          properties:
+            major_group_id: { type: integer, minimum: 1 }
+
+    SubMajorGroupListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [sub_major_groups]
+          properties:
+            sub_major_groups:
+              type: array
+              items: { $ref: "#/components/schemas/SubMajorGroup" }
+
+    SubMajorGroupByParentResponse:
+      description: The sub major groups under one major group.
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [major_group_id, sub_major_groups]
+          properties:
+            major_group_id: { type: integer }
+            sub_major_groups:
+              type: array
+              items: { $ref: "#/components/schemas/SubMajorGroupBasic" }
+
+    MinorGroupBasic:
+      description: A minor group without its parent object. Returned by create/update and by the children-of-parent list.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            sub_major_group_id: { type: integer }
+            sub_major_group:
+              type: object
+              nullable: true
+              description: Always null here - the parent is not preloaded.
+
+    MinorGroup:
+      description: A minor group with its parent. Returned by GET list and GET by id.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            sub_major_group_id: { type: integer }
+            sub_major_group: { $ref: "#/components/schemas/SubMajorGroupBasic" }
+
+    MinorGroupRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationRequest"
+        - type: object
+          required: [sub_major_group_id]
+          properties:
+            sub_major_group_id: { type: integer, minimum: 1 }
+
+    MinorGroupUpdateRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationUpdateRequest"
+        - type: object
+          properties:
+            sub_major_group_id: { type: integer, minimum: 1 }
+
+    MinorGroupListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [minor_groups]
+          properties:
+            minor_groups:
+              type: array
+              items: { $ref: "#/components/schemas/MinorGroup" }
+
+    MinorGroupByParentResponse:
+      description: The minor groups under one sub major group.
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [sub_major_group_id, minor_groups]
+          properties:
+            sub_major_group_id: { type: integer }
+            minor_groups:
+              type: array
+              items: { $ref: "#/components/schemas/MinorGroupBasic" }
+
+    UnitGroupBasic:
+      description: A unit group without its parent object. Returned by create/update and by the children-of-parent list.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            minor_group_id: { type: integer }
+            minor_group:
+              type: object
+              nullable: true
+              description: Always null here - the parent is not preloaded.
+
+    UnitGroup:
+      description: A unit group with its parent. Returned by GET list and GET by id.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            minor_group_id: { type: integer }
+            minor_group: { $ref: "#/components/schemas/MinorGroupBasic" }
+
+    UnitGroupRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationRequest"
+        - type: object
+          required: [minor_group_id]
+          properties:
+            minor_group_id: { type: integer, minimum: 1 }
+
+    UnitGroupUpdateRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationUpdateRequest"
+        - type: object
+          properties:
+            minor_group_id: { type: integer, minimum: 1 }
+
+    UnitGroupListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [unit_groups]
+          properties:
+            unit_groups:
+              type: array
+              items: { $ref: "#/components/schemas/UnitGroup" }
+
+    UnitGroupByParentResponse:
+      description: The unit groups under one minor group.
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [minor_group_id, unit_groups]
+          properties:
+            minor_group_id: { type: integer }
+            unit_groups:
+              type: array
+              items: { $ref: "#/components/schemas/UnitGroupBasic" }
+
+    OccupationGroupBasic:
+      description: A occupation group without its parent object. Returned by create/update and by the children-of-parent list.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            unit_group_id: { type: integer }
+            unit_group:
+              type: object
+              nullable: true
+              description: Always null here - the parent is not preloaded.
+
+    OccupationGroup:
+      description: A occupation group with its parent. Returned by GET list and GET by id.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            unit_group_id: { type: integer }
+            unit_group: { $ref: "#/components/schemas/UnitGroupBasic" }
+
+    OccupationGroupRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationRequest"
+        - type: object
+          required: [unit_group_id]
+          properties:
+            unit_group_id: { type: integer, minimum: 1 }
+
+    OccupationGroupUpdateRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationUpdateRequest"
+        - type: object
+          properties:
+            unit_group_id: { type: integer, minimum: 1 }
+
+    OccupationGroupPaginatedResponse:
+      allOf:
+        - $ref: "#/components/schemas/PaginatedEnvelope"
+        - type: object
+          required: [occupation_groups]
+          properties:
+            occupation_groups:
+              type: array
+              items: { $ref: "#/components/schemas/OccupationGroup" }
+
+    OccupationGroupByParentResponse:
+      description: The occupation groups under one unit group.
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [unit_group_id, occupation_groups]
+          properties:
+            unit_group_id: { type: integer }
+            occupation_groups:
+              type: array
+              items: { $ref: "#/components/schemas/OccupationGroupBasic" }
+
+    IndustrySector:
+      description: Top level of its hierarchy - a industry sector has no parent.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+
+    IndustrySectorListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [industry_sectors]
+          properties:
+            industry_sectors:
+              type: array
+              items: { $ref: "#/components/schemas/IndustrySector" }
+
+    IndustryDivisionBasic:
+      description: A industry division without its parent object. Returned by create/update and by the children-of-parent list.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            industry_sector_id: { type: integer }
+            industry_sector:
+              type: object
+              nullable: true
+              description: Always null here - the parent is not preloaded.
+
+    IndustryDivision:
+      description: A industry division with its parent. Returned by GET list and GET by id.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            industry_sector_id: { type: integer }
+            industry_sector: { $ref: "#/components/schemas/IndustrySector" }
+
+    IndustryDivisionRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationRequest"
+        - type: object
+          required: [industry_sector_id]
+          properties:
+            industry_sector_id: { type: integer, minimum: 1 }
+
+    IndustryDivisionUpdateRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationUpdateRequest"
+        - type: object
+          properties:
+            industry_sector_id: { type: integer, minimum: 1 }
+
+    IndustryDivisionListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [industry_divisions]
+          properties:
+            industry_divisions:
+              type: array
+              items: { $ref: "#/components/schemas/IndustryDivision" }
+
+    IndustryDivisionByParentResponse:
+      description: The industry divisions under one industry sector.
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [industry_sector_id, industry_divisions]
+          properties:
+            industry_sector_id: { type: integer }
+            industry_divisions:
+              type: array
+              items: { $ref: "#/components/schemas/IndustryDivisionBasic" }
+
+    IndustryGroupBasic:
+      description: A industry group without its parent object. Returned by create/update and by the children-of-parent list.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            industry_division_id: { type: integer }
+            industry_division:
+              type: object
+              nullable: true
+              description: Always null here - the parent is not preloaded.
+
+    IndustryGroup:
+      description: A industry group with its parent. Returned by GET list and GET by id.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            industry_division_id: { type: integer }
+            industry_division: { $ref: "#/components/schemas/IndustryDivisionBasic" }
+
+    IndustryGroupRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationRequest"
+        - type: object
+          required: [industry_division_id]
+          properties:
+            industry_division_id: { type: integer, minimum: 1 }
+
+    IndustryGroupUpdateRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationUpdateRequest"
+        - type: object
+          properties:
+            industry_division_id: { type: integer, minimum: 1 }
+
+    IndustryGroupListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [industry_groups]
+          properties:
+            industry_groups:
+              type: array
+              items: { $ref: "#/components/schemas/IndustryGroup" }
+
+    IndustryGroupByParentResponse:
+      description: The industry groups under one industry division.
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [industry_division_id, industry_groups]
+          properties:
+            industry_division_id: { type: integer }
+            industry_groups:
+              type: array
+              items: { $ref: "#/components/schemas/IndustryGroupBasic" }
+
+    IndustryClassBasic:
+      description: A industry class without its parent object. Returned by create/update and by the children-of-parent list.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            industry_group_id: { type: integer }
+            industry_group:
+              type: object
+              nullable: true
+              description: Always null here - the parent is not preloaded.
+
+    IndustryClass:
+      description: A industry class with its parent. Returned by GET list and GET by id.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            industry_group_id: { type: integer }
+            industry_group: { $ref: "#/components/schemas/IndustryGroupBasic" }
+
+    IndustryClassRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationRequest"
+        - type: object
+          required: [industry_group_id]
+          properties:
+            industry_group_id: { type: integer, minimum: 1 }
+
+    IndustryClassUpdateRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationUpdateRequest"
+        - type: object
+          properties:
+            industry_group_id: { type: integer, minimum: 1 }
+
+    IndustryClassListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [industry_classes]
+          properties:
+            industry_classes:
+              type: array
+              items: { $ref: "#/components/schemas/IndustryClass" }
+
+    IndustryClassByParentResponse:
+      description: The industry classes under one industry group.
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [industry_group_id, industry_classes]
+          properties:
+            industry_group_id: { type: integer }
+            industry_classes:
+              type: array
+              items: { $ref: "#/components/schemas/IndustryClassBasic" }
+
+    IndustrySubclassBasic:
+      description: A industry subclass without its parent object. Returned by create/update and by the children-of-parent list.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            industry_class_id: { type: integer }
+            industry_class:
+              type: object
+              nullable: true
+              description: Always null here - the parent is not preloaded.
+
+    IndustrySubclass:
+      description: A industry subclass with its parent. Returned by GET list and GET by id.
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - $ref: "#/components/schemas/ClassificationFields"
+        - type: object
+          properties:
+            industry_class_id: { type: integer }
+            industry_class: { $ref: "#/components/schemas/IndustryClassBasic" }
+
+    IndustrySubclassRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationRequest"
+        - type: object
+          required: [industry_class_id]
+          properties:
+            industry_class_id: { type: integer, minimum: 1 }
+
+    IndustrySubclassUpdateRequest:
+      allOf:
+        - $ref: "#/components/schemas/ClassificationUpdateRequest"
+        - type: object
+          properties:
+            industry_class_id: { type: integer, minimum: 1 }
+
+    IndustrySubclassPaginatedResponse:
+      allOf:
+        - $ref: "#/components/schemas/PaginatedEnvelope"
+        - type: object
+          required: [industry_subclasses]
+          properties:
+            industry_subclasses:
+              type: array
+              items: { $ref: "#/components/schemas/IndustrySubclass" }
+
+    IndustrySubclassByParentResponse:
+      description: The industry subclasses under one industry class.
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [industry_class_id, industry_subclasses]
+          properties:
+            industry_class_id: { type: integer }
+            industry_subclasses:
+              type: array
+              items: { $ref: "#/components/schemas/IndustrySubclassBasic" }
+
+    # ---- Analysis ----
+
+    LevelContext:
+      description: The node (and date range) an analysis response was computed for.
+      allOf:
+        - $ref: "#/components/schemas/DateRange"
+        - type: object
+          properties:
+            level: { type: string, example: major-group }
+            id: { type: integer, example: 1 }
+
+    StandardLevelContext:
+      allOf:
+        - $ref: "#/components/schemas/LevelContext"
+        - type: object
+          properties:
+            standard: { $ref: "#/components/schemas/Standard" }
+
+    JobCount:
+      type: object
+      properties:
+        id: { type: integer }
+        open_job_count: { type: integer, description: Open vacancies matching the node and date range. }
+
+    TotalJobCountResponse:
+      allOf:
+        - $ref: "#/components/schemas/StandardLevelContext"
+        - type: object
+          properties:
+            total_job_count: { type: integer }
+
+    ChildJobCount:
+      allOf:
+        - $ref: "#/components/schemas/JobCount"
+        - $ref: "#/components/schemas/ClassificationFields"
+
+    LevelChildrenResponse:
+      description: The immediate children of a node, each with its job count.
+      allOf:
+        - $ref: "#/components/schemas/StandardLevelContext"
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [children]
+          properties:
+            child_level: { type: string, example: sub-major-group }
+            children:
+              type: array
+              items: { $ref: "#/components/schemas/ChildJobCount" }
+
+    EmploymentSectorJobCount:
+      allOf:
+        - $ref: "#/components/schemas/JobCount"
+        - type: object
+          properties:
+            sector: { type: string }
+
+    EmploymentSectorBreakdownResponse:
+      allOf:
+        - $ref: "#/components/schemas/StandardLevelContext"
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [employment_sectors]
+          properties:
+            employment_sectors:
+              type: array
+              items: { $ref: "#/components/schemas/EmploymentSectorJobCount" }
+
+    ExperienceJobCount:
+      allOf:
+        - $ref: "#/components/schemas/JobCount"
+        - type: object
+          properties:
+            name: { type: string }
+
+    ExperienceBreakdownResponse:
+      allOf:
+        - $ref: "#/components/schemas/StandardLevelContext"
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [experiences]
+          properties:
+            experiences:
+              type: array
+              items: { $ref: "#/components/schemas/ExperienceJobCount" }
+
+    EducationLevelJobCount:
+      allOf:
+        - $ref: "#/components/schemas/JobCount"
+        - type: object
+          properties:
+            level: { type: string }
+
+    EducationLevelBreakdownResponse:
+      allOf:
+        - $ref: "#/components/schemas/StandardLevelContext"
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [education_levels]
+          properties:
+            education_levels:
+              type: array
+              items: { $ref: "#/components/schemas/EducationLevelJobCount" }
+
+    FormalityJobCount:
+      allOf:
+        - $ref: "#/components/schemas/JobCount"
+        - type: object
+          properties:
+            formality_type: { type: string }
+
+    FormalityBreakdownResponse:
+      allOf:
+        - $ref: "#/components/schemas/StandardLevelContext"
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [formalities]
+          properties:
+            formalities:
+              type: array
+              items: { $ref: "#/components/schemas/FormalityJobCount" }
+
+    GenderJobCount:
+      allOf:
+        - $ref: "#/components/schemas/JobCount"
+        - type: object
+          properties:
+            gender_type: { type: string }
+
+    GenderBreakdownResponse:
+      allOf:
+        - $ref: "#/components/schemas/StandardLevelContext"
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [genders]
+          properties:
+            genders:
+              type: array
+              items: { $ref: "#/components/schemas/GenderJobCount" }
+
+    VocationalEducationJobCount:
+      allOf:
+        - $ref: "#/components/schemas/JobCount"
+        - type: object
+          properties:
+            level: { type: string }
+
+    VocationalEducationBreakdownResponse:
+      allOf:
+        - $ref: "#/components/schemas/StandardLevelContext"
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [vocational_educations]
+          properties:
+            vocational_educations:
+              type: array
+              items: { $ref: "#/components/schemas/VocationalEducationJobCount" }
+
+    JobTypeJobCount:
+      allOf:
+        - $ref: "#/components/schemas/JobCount"
+        - type: object
+          properties:
+            type: { type: string }
+
+    JobTypeBreakdownResponse:
+      allOf:
+        - $ref: "#/components/schemas/StandardLevelContext"
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [job_types]
+          properties:
+            job_types:
+              type: array
+              items: { $ref: "#/components/schemas/JobTypeJobCount" }
+
+    ProvinceJobCount:
+      allOf:
+        - $ref: "#/components/schemas/JobCount"
+        - type: object
+          properties:
+            province: { type: string }
+            lat: { type: number, format: double }
+            lng: { type: number, format: double }
+
+    ProvinceBreakdownResponse:
+      allOf:
+        - $ref: "#/components/schemas/StandardLevelContext"
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [provinces]
+          properties:
+            provinces:
+              type: array
+              items: { $ref: "#/components/schemas/ProvinceJobCount" }
+
+    WorkModeCounts:
+      type: object
+      properties:
+        remote_count: { type: integer }
+        on_site_count: { type: integer }
+        hybrid_count: { type: integer }
+
+    WorkModeBreakdownResponse:
+      allOf:
+        - $ref: "#/components/schemas/StandardLevelContext"
+        - type: object
+          properties:
+            remote_vs_onsite_vs_hybrid: { $ref: "#/components/schemas/WorkModeCounts" }
+
+    # ---- Occupation skills / employers ----
+
+    SkillDemand:
+      allOf:
+        - $ref: "#/components/schemas/JobCount"
+        - type: object
+          properties:
+            skill: { type: string }
+
+    SkillsResponse:
+      allOf:
+        - $ref: "#/components/schemas/LevelContext"
+        - $ref: "#/components/schemas/PaginatedEnvelope"
+        - type: object
+          required: [skills]
+          properties:
+            skills:
+              type: array
+              items: { $ref: "#/components/schemas/SkillDemand" }
+
+    EmployerDemand:
+      allOf:
+        - $ref: "#/components/schemas/JobCount"
+        - type: object
+          properties:
+            name: { type: string }
+
+    TopHiringEmployersResponse:
+      allOf:
+        - $ref: "#/components/schemas/LevelContext"
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [employers]
+          properties:
+            employers:
+              type: array
+              items: { $ref: "#/components/schemas/EmployerDemand" }
+
+    # ---- National vacancy trend / totals / dashboard ----
+
+    VacancyTrendPoint:
+      type: object
+      properties:
+        label:
+          type: string
+          description: Bucket label - a day (`Jan 2`) for daily granularity, a month (`Jan 2006`) for monthly.
+          example: Jan 2
+        open_job_count: { type: integer }
+
+    VacancyTrendResponse:
+      allOf:
+        - $ref: "#/components/schemas/DateRange"
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [data]
+          properties:
+            granularity:
+              type: string
+              enum: [daily, monthly]
+              description: "`daily` when the range is shorter than 60 days, `monthly` otherwise."
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/VacancyTrendPoint" }
+
+    VacancyTotalResponse:
+      allOf:
+        - $ref: "#/components/schemas/DateRange"
+        - type: object
+          properties:
+            total_vacancies: { type: integer }
+
+    RootJobCount:
+      allOf:
+        - $ref: "#/components/schemas/JobCount"
+        - type: object
+          properties:
+            name: { type: string }
+
+    JobCountByDateRangeResponse:
+      description: >
+        Vacancy counts grouped by the root level of the standard (major group for
+        occupation, industry sector for industry).
+      allOf:
+        - $ref: "#/components/schemas/DateRange"
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [data]
+          properties:
+            standard: { $ref: "#/components/schemas/Standard" }
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/RootJobCount" }
+
+    DashboardCardDataResponse:
+      description: All-time headline numbers for the dashboard cards (not date-range filtered).
+      type: object
+      properties:
+        source_count: { type: integer, description: Number of (non-deleted) sources., example: 4 }
+        all_time_vacancy_count:
+          type: integer
+          description: Sum of `no_of_vacancies` across every job post.
+          example: 18250
+        industry_count: { type: integer, description: Number of industry sectors., example: 21 }
+
+    # ---- Sources ----
+
+    SourceType:
+      type: string
+      enum: [auto, manual]
+      description: "`auto` sources are collected by a crawler; `manual` ones are entered by hand (e.g. newspaper ads)."
+
+    Source:
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - type: object
+          properties:
+            name: { type: string, example: ikman.lk }
+            type: { $ref: "#/components/schemas/SourceType" }
+            is_active: { type: boolean }
+
+    SourceListResponse:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          required: [sources]
+          properties:
+            sources:
+              type: array
+              items: { $ref: "#/components/schemas/Source" }
+
+    SourceCreateRequest:
+      type: object
+      required: [name, type]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        type: { $ref: "#/components/schemas/SourceType" }
+        is_active: { type: boolean, default: true, description: Optional; defaults to active. }
+
+    SourceRenameRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+
+    SourceStatusUpdateRequest:
+      type: object
+      required: [is_active]
+      properties:
+        is_active: { type: boolean }
+
+    # ---- Crawler ----
+
+    CrawlerRunStatus:
+      type: string
+      enum: [RUNNING, COMPLETED, FAILED]
+
+    CrawlerRun:
+      allOf:
+        - $ref: "#/components/schemas/AuditedResource"
+        - type: object
+          properties:
+            started_at: { type: string, format: date-time, nullable: true }
+            finished_at: { type: string, format: date-time, nullable: true }
+            status: { $ref: "#/components/schemas/CrawlerRunStatus" }
+
+    CrawlerRunStatusChangeRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [COMPLETED, FAILED]
+
+    CrawlerRunJobReconcileRequest:
+      type: object
+      required: [crawler_run_id, sources]
+      properties:
+        crawler_run_id: { type: integer, minimum: 1 }
+        sources:
+          type: array
+          minItems: 1
+          description: >
+            Names of the sources this run crawled. Only open jobs of these sources - and only
+            while the source is active and not deleted - are reconciled.
+          items: { type: string }
+
+    ReconcileResponse:
+      type: object
+      properties:
+        message: { type: string, example: System-wide stale vacancy cleanup sweep finalized }
+        reconciled_stale_jobs: { type: integer, description: Number of jobs that were closed. }
+
+    BatchSaveJobInput:
+      type: object
+      description: >
+        One raw job posted by the crawler. The HTTP layer validates none of the fields; a job
+        that cannot be processed is reported back in `failed_jobs`.
+      properties:
+        job_id:
+          type: string
+          description: Crawler-side job identifier, echoed back in `failed_jobs`.
+          example: 3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b
+        employer: { type: string }
+        job_role: { type: string }
+        location: { type: string }
+        description: { type: string }
+        crawler_run_id:
+          type: integer
+          description: Id of the RUNNING crawler run that produced the job. Required in practice.
+        source:
+          type: string
+          description: Name of a registered, active source (e.g. `ikman.lk`). Required in practice.
+
+    BatchSavePayload:
+      description: >
+        A non-empty JSON array of raw jobs (the body is the array itself, not an object). Every
+        element must decode: one wrongly typed field rejects the whole batch with 400.
+      type: array
+      minItems: 1
+      items: { $ref: "#/components/schemas/BatchSaveJobInput" }
+
+    FailedJob:
+      type: object
+      required: [job_id, status_code, error]
+      properties:
+        job_id: { type: string, example: 22222222-2222-2222-2222-222222222222 }
+        status_code:
+          type: integer
+          enum: [400, 422, 503]
+          description: >
+            Why the job failed. `400`: not enough usable text, no `crawler_run_id` or no `source`.
+            `422`: permanent failure - the crawler run does not exist or is not RUNNING, the
+            source is unregistered or disabled, or extraction/validation failed; do not retry.
+            `503`: transient dependency failure; safe to retry.
+          example: 503
+        error:
+          type: string
+          example: 'job "Store Manager" at "Lanka Retail Group": transient extraction failure: deepseek returned status 429'
+
+    BatchSaveResponse:
+      type: object
+      required: [message, submitted, failed_count, failed_jobs]
+      properties:
+        message: { type: string, example: Batch processed }
+        submitted:
+          type: integer
+          description: Number of jobs in the submitted batch, failed ones included.
+          example: 2
+        failed_count: { type: integer, example: 1 }
+        failed_jobs:
+          type: array
+          description: One entry per job that failed. Empty if every job was saved (or was a duplicate of an existing job).
+          items: { $ref: "#/components/schemas/FailedJob" }
+
+
+paths:
+  # ============================================================
+  # HEALTH
+  # ============================================================
+  /healthz:
+    servers:
+      - url: http://localhost:8080
+        description: Local development (unversioned)
+    get:
+      tags: [health]
+      operationId: getLiveness
+      summary: Liveness probe
+      description: Confirms the process is up. Does not touch the database.
+      security: []
+      responses:
+        "200":
+          description: Process is alive.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StatusResponse" }
+
+  /readyz:
+    servers:
+      - url: http://localhost:8080
+        description: Local development (unversioned)
+    get:
+      tags: [health]
+      operationId: getReadiness
+      summary: Readiness probe
+      description: Checks database connectivity.
+      security: []
+      responses:
+        "200":
+          description: Ready to serve traffic.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StatusResponse" }
+        "503":
+          description: "Database unreachable. Unlike every other endpoint the body is a `StatusResponse` (`status` is `not ready`), not the standard `{ \"error\": ... }` error body."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StatusResponse" }
+
+  # ============================================================
+  # KPI: EMPLOYMENT SECTORS
+  # ============================================================
+  /employment-sectors:
+    get:
+      tags: [kpi-employment-sectors]
+      operationId: listEmploymentSectors
+      summary: "List employment sectors"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmploymentSectorListResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [kpi-employment-sectors]
+      operationId: createEmploymentSector
+      summary: "Create a employment sector"
+      x-required-scope: employment-sectors:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmploymentSectorRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmploymentSector" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /employment-sectors/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [kpi-employment-sectors]
+      operationId: getEmploymentSector
+      summary: "Get a employment sector by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmploymentSector" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [kpi-employment-sectors]
+      operationId: updateEmploymentSector
+      summary: "Update a employment sector"
+      description: >
+        Full replacement - `sector` is required.
+      x-required-scope: employment-sectors:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmploymentSectorRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmploymentSector" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [kpi-employment-sectors]
+      operationId: deleteEmploymentSector
+      summary: "Delete (soft-delete) a employment sector"
+      x-required-scope: employment-sectors:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ============================================================
+  # KPI: EXPERIENCE LEVELS
+  # ============================================================
+  /experiences:
+    get:
+      tags: [kpi-experiences]
+      operationId: listExperiences
+      summary: "List experience levels"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExperienceListResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [kpi-experiences]
+      operationId: createExperience
+      summary: "Create a experience level"
+      x-required-scope: experiences:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExperienceRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Experience" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /experiences/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [kpi-experiences]
+      operationId: getExperience
+      summary: "Get a experience level by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Experience" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [kpi-experiences]
+      operationId: updateExperience
+      summary: "Update a experience level"
+      description: >
+        Full replacement - `name` is required.
+      x-required-scope: experiences:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExperienceRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Experience" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [kpi-experiences]
+      operationId: deleteExperience
+      summary: "Delete (soft-delete) a experience level"
+      x-required-scope: experiences:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ============================================================
+  # KPI: EDUCATION LEVELS
+  # ============================================================
+  /education-levels:
+    get:
+      tags: [kpi-education-levels]
+      operationId: listEducationLevels
+      summary: "List education levels"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EducationLevelListResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [kpi-education-levels]
+      operationId: createEducationLevel
+      summary: "Create a education level"
+      x-required-scope: education-levels:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EducationLevelRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EducationLevel" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /education-levels/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [kpi-education-levels]
+      operationId: getEducationLevel
+      summary: "Get a education level by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EducationLevel" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [kpi-education-levels]
+      operationId: updateEducationLevel
+      summary: "Update a education level"
+      description: >
+        Full replacement - `level` is required.
+      x-required-scope: education-levels:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EducationLevelRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EducationLevel" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [kpi-education-levels]
+      operationId: deleteEducationLevel
+      summary: "Delete (soft-delete) a education level"
+      x-required-scope: education-levels:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ============================================================
+  # KPI: FORMALITY CATEGORIES
+  # ============================================================
+  /formalities:
+    get:
+      tags: [kpi-formalities]
+      operationId: listFormalities
+      summary: "List formality categories"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FormalityListResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [kpi-formalities]
+      operationId: createFormality
+      summary: "Create a formality category"
+      x-required-scope: formalities:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FormalityRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Formality" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /formalities/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [kpi-formalities]
+      operationId: getFormality
+      summary: "Get a formality category by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Formality" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [kpi-formalities]
+      operationId: updateFormality
+      summary: "Update a formality category"
+      description: >
+        Full replacement - `formality_type` is required.
+      x-required-scope: formalities:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FormalityRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Formality" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [kpi-formalities]
+      operationId: deleteFormality
+      summary: "Delete (soft-delete) a formality category"
+      x-required-scope: formalities:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ============================================================
+  # KPI: GENDER CATEGORIES
+  # ============================================================
+  /genders:
+    get:
+      tags: [kpi-genders]
+      operationId: listGenders
+      summary: "List gender categories"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GenderListResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [kpi-genders]
+      operationId: createGender
+      summary: "Create a gender category"
+      x-required-scope: genders:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenderRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Gender" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /genders/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [kpi-genders]
+      operationId: getGender
+      summary: "Get a gender category by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Gender" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [kpi-genders]
+      operationId: updateGender
+      summary: "Update a gender category"
+      description: >
+        Full replacement - `gender_type` is required.
+      x-required-scope: genders:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenderRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Gender" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [kpi-genders]
+      operationId: deleteGender
+      summary: "Delete (soft-delete) a gender category"
+      x-required-scope: genders:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ============================================================
+  # KPI: VOCATIONAL EDUCATION (NVQ) LEVELS
+  # ============================================================
+  /vocational-educations:
+    get:
+      tags: [kpi-vocational-educations]
+      operationId: listVocationalEducations
+      summary: "List vocational education (NVQ) levels"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VocationalEducationListResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [kpi-vocational-educations]
+      operationId: createVocationalEducation
+      summary: "Create a vocational education (NVQ) level"
+      x-required-scope: vocational-educations:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VocationalEducationRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VocationalEducation" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /vocational-educations/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [kpi-vocational-educations]
+      operationId: getVocationalEducation
+      summary: "Get a vocational education (NVQ) level by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VocationalEducation" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [kpi-vocational-educations]
+      operationId: updateVocationalEducation
+      summary: "Update a vocational education (NVQ) level"
+      description: >
+        Full replacement - `level` is required.
+      x-required-scope: vocational-educations:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VocationalEducationRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VocationalEducation" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [kpi-vocational-educations]
+      operationId: deleteVocationalEducation
+      summary: "Delete (soft-delete) a vocational education (NVQ) level"
+      x-required-scope: vocational-educations:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ============================================================
+  # OCCUPATION HIERARCHY (SLSCO)
+  # ============================================================
+  /major-groups:
+    get:
+      tags: [occupation-hierarchy]
+      operationId: listMajorGroups
+      summary: "List major groups"
+      description: >
+        Currently-active major groups by default; those that were active at any point in the range when both `from-date` and `to-date` are supplied.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/fromDateOptional" }
+        - { $ref: "#/components/parameters/toDateOptional" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MajorGroupListResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [occupation-hierarchy]
+      operationId: createMajorGroup
+      summary: "Create a major group"
+      x-required-scope: major-groups:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClassificationRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MajorGroup" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /major-groups/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [occupation-hierarchy]
+      operationId: getMajorGroup
+      summary: "Get a major group by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MajorGroup" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [occupation-hierarchy]
+      operationId: updateMajorGroup
+      summary: "Update a major group"
+      description: >
+        Partial update - send any subset of the fields.
+      x-required-scope: major-groups:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClassificationUpdateRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MajorGroup" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [occupation-hierarchy]
+      operationId: deleteMajorGroup
+      summary: "Delete (soft-delete) a major group"
+      description: >
+        Also soft-deletes every descendant of this major group in the lower levels.
+      x-required-scope: major-groups:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /sub-major-groups:
+    get:
+      tags: [occupation-hierarchy]
+      operationId: listSubMajorGroups
+      summary: "List sub major groups"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubMajorGroupListResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [occupation-hierarchy]
+      operationId: createSubMajorGroup
+      summary: "Create a sub major group"
+      description: >
+        `major_group_id` must reference an existing major group, otherwise 400.
+      x-required-scope: sub-major-groups:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubMajorGroupRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubMajorGroupBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /sub-major-groups/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [occupation-hierarchy]
+      operationId: getSubMajorGroup
+      summary: "Get a sub major group by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubMajorGroup" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [occupation-hierarchy]
+      operationId: updateSubMajorGroup
+      summary: "Update a sub major group"
+      description: >
+        Partial update - send any subset of the fields. `major_group_id`, if sent, must reference an existing parent (otherwise 400).
+      x-required-scope: sub-major-groups:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubMajorGroupUpdateRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubMajorGroupBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [occupation-hierarchy]
+      operationId: deleteSubMajorGroup
+      summary: "Delete (soft-delete) a sub major group"
+      description: >
+        Also soft-deletes every descendant of this sub major group in the lower levels.
+      x-required-scope: sub-major-groups:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /major-groups/{id}/sub-major-groups:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [occupation-hierarchy]
+      operationId: listSubMajorGroupsByParent
+      summary: "List the sub major groups of a major group"
+      description: >
+        The parent object is not included (`major_group` is null). Optional date range as for the root level: currently-active by default, active-during-range if both dates are supplied.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/fromDateOptional" }
+        - { $ref: "#/components/parameters/toDateOptional" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubMajorGroupByParentResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /minor-groups:
+    get:
+      tags: [occupation-hierarchy]
+      operationId: listMinorGroups
+      summary: "List minor groups"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MinorGroupListResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [occupation-hierarchy]
+      operationId: createMinorGroup
+      summary: "Create a minor group"
+      description: >
+        `sub_major_group_id` must reference an existing sub major group, otherwise 400.
+      x-required-scope: minor-groups:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MinorGroupRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MinorGroupBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /minor-groups/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [occupation-hierarchy]
+      operationId: getMinorGroup
+      summary: "Get a minor group by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MinorGroup" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [occupation-hierarchy]
+      operationId: updateMinorGroup
+      summary: "Update a minor group"
+      description: >
+        Partial update - send any subset of the fields. `sub_major_group_id`, if sent, must reference an existing parent (otherwise 400).
+      x-required-scope: minor-groups:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MinorGroupUpdateRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MinorGroupBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [occupation-hierarchy]
+      operationId: deleteMinorGroup
+      summary: "Delete (soft-delete) a minor group"
+      description: >
+        Also soft-deletes every descendant of this minor group in the lower levels.
+      x-required-scope: minor-groups:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /sub-major-groups/{id}/minor-groups:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [occupation-hierarchy]
+      operationId: listMinorGroupsByParent
+      summary: "List the minor groups of a sub major group"
+      description: >
+        The parent object is not included (`sub_major_group` is null). Optional date range as for the root level: currently-active by default, active-during-range if both dates are supplied.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/fromDateOptional" }
+        - { $ref: "#/components/parameters/toDateOptional" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MinorGroupByParentResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /unit-groups:
+    get:
+      tags: [occupation-hierarchy]
+      operationId: listUnitGroups
+      summary: "List unit groups"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UnitGroupListResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [occupation-hierarchy]
+      operationId: createUnitGroup
+      summary: "Create a unit group"
+      description: >
+        `minor_group_id` must reference an existing minor group, otherwise 400.
+      x-required-scope: unit-groups:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UnitGroupRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UnitGroupBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /unit-groups/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [occupation-hierarchy]
+      operationId: getUnitGroup
+      summary: "Get a unit group by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UnitGroup" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [occupation-hierarchy]
+      operationId: updateUnitGroup
+      summary: "Update a unit group"
+      description: >
+        Partial update - send any subset of the fields. `minor_group_id`, if sent, must reference an existing parent (otherwise 400).
+      x-required-scope: unit-groups:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UnitGroupUpdateRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UnitGroupBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [occupation-hierarchy]
+      operationId: deleteUnitGroup
+      summary: "Delete (soft-delete) a unit group"
+      description: >
+        Also soft-deletes every descendant of this unit group in the lower levels.
+      x-required-scope: unit-groups:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /minor-groups/{id}/unit-groups:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [occupation-hierarchy]
+      operationId: listUnitGroupsByParent
+      summary: "List the unit groups of a minor group"
+      description: >
+        The parent object is not included (`minor_group` is null). Optional date range as for the root level: currently-active by default, active-during-range if both dates are supplied.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/fromDateOptional" }
+        - { $ref: "#/components/parameters/toDateOptional" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UnitGroupByParentResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /occupation-groups:
+    get:
+      tags: [occupation-hierarchy]
+      operationId: listOccupationGroups
+      summary: "List occupation groups (paginated)"
+      description: >
+        Paginated: `limit` defaults to 20 (max 100).
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/limitQuery" }
+        - { $ref: "#/components/parameters/offsetQuery" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OccupationGroupPaginatedResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [occupation-hierarchy]
+      operationId: createOccupationGroup
+      summary: "Create a occupation group"
+      description: >
+        `unit_group_id` must reference an existing unit group, otherwise 400.
+      x-required-scope: occupation-groups:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OccupationGroupRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OccupationGroupBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /occupation-groups/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [occupation-hierarchy]
+      operationId: getOccupationGroup
+      summary: "Get a occupation group by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OccupationGroup" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [occupation-hierarchy]
+      operationId: updateOccupationGroup
+      summary: "Update a occupation group"
+      description: >
+        Partial update - send any subset of the fields. `unit_group_id`, if sent, must reference an existing parent (otherwise 400).
+      x-required-scope: occupation-groups:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OccupationGroupUpdateRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OccupationGroupBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [occupation-hierarchy]
+      operationId: deleteOccupationGroup
+      summary: "Delete (soft-delete) a occupation group"
+      x-required-scope: occupation-groups:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /unit-groups/{id}/occupation-groups:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [occupation-hierarchy]
+      operationId: listOccupationGroupsByParent
+      summary: "List the occupation groups of a unit group"
+      description: >
+        The parent object is not included (`unit_group` is null). Optional date range as for the root level: currently-active by default, active-during-range if both dates are supplied.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/fromDateOptional" }
+        - { $ref: "#/components/parameters/toDateOptional" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OccupationGroupByParentResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ============================================================
+  # INDUSTRY HIERARCHY (SLSIC)
+  # ============================================================
+  /industry-sectors:
+    get:
+      tags: [industry-hierarchy]
+      operationId: listIndustrySectors
+      summary: "List industry sectors"
+      description: >
+        Currently-active industry sectors by default; those that were active at any point in the range when both `from-date` and `to-date` are supplied.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/fromDateOptional" }
+        - { $ref: "#/components/parameters/toDateOptional" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustrySectorListResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [industry-hierarchy]
+      operationId: createIndustrySector
+      summary: "Create a industry sector"
+      x-required-scope: industry-sectors:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClassificationRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustrySector" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /industry-sectors/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [industry-hierarchy]
+      operationId: getIndustrySector
+      summary: "Get a industry sector by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustrySector" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [industry-hierarchy]
+      operationId: updateIndustrySector
+      summary: "Update a industry sector"
+      description: >
+        Partial update - send any subset of the fields.
+      x-required-scope: industry-sectors:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClassificationUpdateRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustrySector" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [industry-hierarchy]
+      operationId: deleteIndustrySector
+      summary: "Delete (soft-delete) a industry sector"
+      description: >
+        Also soft-deletes every descendant of this industry sector in the lower levels.
+      x-required-scope: industry-sectors:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /industry-divisions:
+    get:
+      tags: [industry-hierarchy]
+      operationId: listIndustryDivisions
+      summary: "List industry divisions"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryDivisionListResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [industry-hierarchy]
+      operationId: createIndustryDivision
+      summary: "Create a industry division"
+      description: >
+        `industry_sector_id` must reference an existing industry sector, otherwise 400.
+      x-required-scope: industry-divisions:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndustryDivisionRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryDivisionBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /industry-divisions/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [industry-hierarchy]
+      operationId: getIndustryDivision
+      summary: "Get a industry division by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryDivision" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [industry-hierarchy]
+      operationId: updateIndustryDivision
+      summary: "Update a industry division"
+      description: >
+        Partial update - send any subset of the fields. `industry_sector_id`, if sent, must reference an existing parent (otherwise 400).
+      x-required-scope: industry-divisions:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndustryDivisionUpdateRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryDivisionBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [industry-hierarchy]
+      operationId: deleteIndustryDivision
+      summary: "Delete (soft-delete) a industry division"
+      description: >
+        Also soft-deletes every descendant of this industry division in the lower levels.
+      x-required-scope: industry-divisions:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /industry-sectors/{id}/industry-divisions:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [industry-hierarchy]
+      operationId: listIndustryDivisionsByParent
+      summary: "List the industry divisions of a industry sector"
+      description: >
+        The parent object is not included (`industry_sector` is null). Optional date range as for the root level: currently-active by default, active-during-range if both dates are supplied.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/fromDateOptional" }
+        - { $ref: "#/components/parameters/toDateOptional" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryDivisionByParentResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /industry-groups:
+    get:
+      tags: [industry-hierarchy]
+      operationId: listIndustryGroups
+      summary: "List industry groups"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryGroupListResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [industry-hierarchy]
+      operationId: createIndustryGroup
+      summary: "Create a industry group"
+      description: >
+        `industry_division_id` must reference an existing industry division, otherwise 400.
+      x-required-scope: industry-groups:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndustryGroupRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryGroupBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /industry-groups/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [industry-hierarchy]
+      operationId: getIndustryGroup
+      summary: "Get a industry group by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryGroup" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [industry-hierarchy]
+      operationId: updateIndustryGroup
+      summary: "Update a industry group"
+      description: >
+        Partial update - send any subset of the fields. `industry_division_id`, if sent, must reference an existing parent (otherwise 400).
+      x-required-scope: industry-groups:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndustryGroupUpdateRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryGroupBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [industry-hierarchy]
+      operationId: deleteIndustryGroup
+      summary: "Delete (soft-delete) a industry group"
+      description: >
+        Also soft-deletes every descendant of this industry group in the lower levels.
+      x-required-scope: industry-groups:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /industry-divisions/{id}/industry-groups:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [industry-hierarchy]
+      operationId: listIndustryGroupsByParent
+      summary: "List the industry groups of a industry division"
+      description: >
+        The parent object is not included (`industry_division` is null). Optional date range as for the root level: currently-active by default, active-during-range if both dates are supplied.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/fromDateOptional" }
+        - { $ref: "#/components/parameters/toDateOptional" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryGroupByParentResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /industry-classes:
+    get:
+      tags: [industry-hierarchy]
+      operationId: listIndustryClasses
+      summary: "List industry classes"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryClassListResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [industry-hierarchy]
+      operationId: createIndustryClass
+      summary: "Create a industry class"
+      description: >
+        `industry_group_id` must reference an existing industry group, otherwise 400.
+      x-required-scope: industry-classes:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndustryClassRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryClassBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /industry-classes/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [industry-hierarchy]
+      operationId: getIndustryClass
+      summary: "Get a industry class by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryClass" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [industry-hierarchy]
+      operationId: updateIndustryClass
+      summary: "Update a industry class"
+      description: >
+        Partial update - send any subset of the fields. `industry_group_id`, if sent, must reference an existing parent (otherwise 400).
+      x-required-scope: industry-classes:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndustryClassUpdateRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryClassBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [industry-hierarchy]
+      operationId: deleteIndustryClass
+      summary: "Delete (soft-delete) a industry class"
+      description: >
+        Also soft-deletes every descendant of this industry class in the lower levels.
+      x-required-scope: industry-classes:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /industry-groups/{id}/industry-classes:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [industry-hierarchy]
+      operationId: listIndustryClassesByParent
+      summary: "List the industry classes of a industry group"
+      description: >
+        The parent object is not included (`industry_group` is null). Optional date range as for the root level: currently-active by default, active-during-range if both dates are supplied.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/fromDateOptional" }
+        - { $ref: "#/components/parameters/toDateOptional" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryClassByParentResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /industry-sub-classes:
+    get:
+      tags: [industry-hierarchy]
+      operationId: listIndustrySubclasses
+      summary: "List industry subclasses (paginated)"
+      description: >
+        Paginated: `limit` defaults to 20 (max 100).
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/limitQuery" }
+        - { $ref: "#/components/parameters/offsetQuery" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustrySubclassPaginatedResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [industry-hierarchy]
+      operationId: createIndustrySubclass
+      summary: "Create a industry subclass"
+      description: >
+        `industry_class_id` must reference an existing industry class, otherwise 400.
+      x-required-scope: industry-sub-classes:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndustrySubclassRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustrySubclassBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /industry-sub-classes/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [industry-hierarchy]
+      operationId: getIndustrySubclass
+      summary: "Get a industry subclass by id"
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustrySubclass" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [industry-hierarchy]
+      operationId: updateIndustrySubclass
+      summary: "Update a industry subclass"
+      description: >
+        Partial update - send any subset of the fields. `industry_class_id`, if sent, must reference an existing parent (otherwise 400).
+      x-required-scope: industry-sub-classes:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IndustrySubclassUpdateRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustrySubclassBasic" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [industry-hierarchy]
+      operationId: deleteIndustrySubclass
+      summary: "Delete (soft-delete) a industry subclass"
+      x-required-scope: industry-sub-classes:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /industry-classes/{id}/industry-subclasses:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [industry-hierarchy]
+      operationId: listIndustrySubclassesByParent
+      summary: "List the industry subclasses of a industry class"
+      description: >
+        The parent object is not included (`industry_class` is null). Optional date range as for the root level: currently-active by default, active-during-range if both dates are supplied.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/fromDateOptional" }
+        - { $ref: "#/components/parameters/toDateOptional" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustrySubclassByParentResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ============================================================
+  # SOURCES
+  # ============================================================
+  /sources:
+    get:
+      tags: [sources]
+      operationId: listSources
+      summary: "List sources"
+      x-required-scope: sources:read
+      security:
+        - BearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/sourceTypeQuery" }
+        - { $ref: "#/components/parameters/isActiveQuery" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SourceListResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      tags: [sources]
+      operationId: createSource
+      summary: "Create a source"
+      description: >
+        If a deleted source with the same name exists it is restored (keeping its id and the
+        jobs linked to it) with the given type and active state. A name used by a live source is a 409.
+      x-required-scope: sources:create
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SourceCreateRequest" }
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Source" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /sources/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    get:
+      tags: [sources]
+      operationId: getSource
+      summary: "Get a source by id"
+      x-required-scope: sources:read
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Source" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      tags: [sources]
+      operationId: renameSource
+      summary: "Rename a source"
+      description: >
+        Only manual sources can be renamed; an auto source is a 400 because its name must
+        match the crawler's `SOURCE_NAME`.
+      x-required-scope: sources:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SourceRenameRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Source" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      tags: [sources]
+      operationId: deleteSource
+      summary: "Delete (soft-delete) a source"
+      description: >
+        Jobs already linked to the source keep that link.
+      x-required-scope: sources:delete
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "Deleted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /sources/{id}/status:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    patch:
+      tags: [sources]
+      operationId: updateSourceStatus
+      summary: "Enable or disable a source"
+      x-required-scope: sources:update
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SourceStatusUpdateRequest" }
+      responses:
+        "200":
+          description: "Updated"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Source" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ============================================================
+  # GENERIC LEVEL-SCOPED ANALYSIS
+  # ============================================================
+  /{standard}/{level}/{id}/total-job-count:
+    parameters:
+      - { $ref: "#/components/parameters/standardPath" }
+      - { $ref: "#/components/parameters/levelPath" }
+      - { $ref: "#/components/parameters/idPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [analysis]
+      operationId: getTotalJobCount
+      summary: "Total job count for a hierarchy node"
+      description: >
+        Open-vacancy figures for the hierarchy node identified by `standard`, `level` and `id`, over the date range. A `level` that does not belong to `standard` is a 400. An unknown `id` returns zero counts, not a 404.
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TotalJobCountResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /{standard}/{level}/{id}/children:
+    parameters:
+      - { $ref: "#/components/parameters/standardPath" }
+      - { $ref: "#/components/parameters/levelPath" }
+      - { $ref: "#/components/parameters/idPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [analysis]
+      operationId: getLevelChildren
+      summary: "Child nodes with job counts"
+      description: >
+        Fails with 400 for a leaf level (`occupation-group`, `industry-subclass`), which has no children. Open-vacancy figures for the hierarchy node identified by `standard`, `level` and `id`, over the date range. A `level` that does not belong to `standard` is a 400. An unknown `id` returns zero counts, not a 404.
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LevelChildrenResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /{standard}/{level}/{id}/employment-sector:
+    parameters:
+      - { $ref: "#/components/parameters/standardPath" }
+      - { $ref: "#/components/parameters/levelPath" }
+      - { $ref: "#/components/parameters/idPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [analysis]
+      operationId: getEmploymentSectorBreakdown
+      summary: "Employment sector breakdown"
+      description: >
+        Open-vacancy figures for the hierarchy node identified by `standard`, `level` and `id`, over the date range. A `level` that does not belong to `standard` is a 400. An unknown `id` returns zero counts, not a 404.
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmploymentSectorBreakdownResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /{standard}/{level}/{id}/experience:
+    parameters:
+      - { $ref: "#/components/parameters/standardPath" }
+      - { $ref: "#/components/parameters/levelPath" }
+      - { $ref: "#/components/parameters/idPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [analysis]
+      operationId: getExperienceBreakdown
+      summary: "Experience level breakdown"
+      description: >
+        Open-vacancy figures for the hierarchy node identified by `standard`, `level` and `id`, over the date range. A `level` that does not belong to `standard` is a 400. An unknown `id` returns zero counts, not a 404.
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExperienceBreakdownResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /{standard}/{level}/{id}/province:
+    parameters:
+      - { $ref: "#/components/parameters/standardPath" }
+      - { $ref: "#/components/parameters/levelPath" }
+      - { $ref: "#/components/parameters/idPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [analysis]
+      operationId: getProvinceBreakdown
+      summary: "Province breakdown"
+      description: >
+        Open-vacancy figures for the hierarchy node identified by `standard`, `level` and `id`, over the date range. A `level` that does not belong to `standard` is a 400. An unknown `id` returns zero counts, not a 404.
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProvinceBreakdownResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /{standard}/{level}/{id}/education:
+    parameters:
+      - { $ref: "#/components/parameters/standardPath" }
+      - { $ref: "#/components/parameters/levelPath" }
+      - { $ref: "#/components/parameters/idPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [analysis]
+      operationId: getEducationLevelBreakdown
+      summary: "Education level breakdown"
+      description: >
+        Open-vacancy figures for the hierarchy node identified by `standard`, `level` and `id`, over the date range. A `level` that does not belong to `standard` is a 400. An unknown `id` returns zero counts, not a 404.
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EducationLevelBreakdownResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /{standard}/{level}/{id}/formality:
+    parameters:
+      - { $ref: "#/components/parameters/standardPath" }
+      - { $ref: "#/components/parameters/levelPath" }
+      - { $ref: "#/components/parameters/idPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [analysis]
+      operationId: getFormalityBreakdown
+      summary: "Formality breakdown"
+      description: >
+        Open-vacancy figures for the hierarchy node identified by `standard`, `level` and `id`, over the date range. A `level` that does not belong to `standard` is a 400. An unknown `id` returns zero counts, not a 404.
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FormalityBreakdownResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /{standard}/{level}/{id}/gender:
+    parameters:
+      - { $ref: "#/components/parameters/standardPath" }
+      - { $ref: "#/components/parameters/levelPath" }
+      - { $ref: "#/components/parameters/idPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [analysis]
+      operationId: getGenderBreakdown
+      summary: "Gender breakdown"
+      description: >
+        Open-vacancy figures for the hierarchy node identified by `standard`, `level` and `id`, over the date range. A `level` that does not belong to `standard` is a 400. An unknown `id` returns zero counts, not a 404.
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GenderBreakdownResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /{standard}/{level}/{id}/vocational-education:
+    parameters:
+      - { $ref: "#/components/parameters/standardPath" }
+      - { $ref: "#/components/parameters/levelPath" }
+      - { $ref: "#/components/parameters/idPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [analysis]
+      operationId: getVocationalEducationBreakdown
+      summary: "Vocational education (NVQ) breakdown"
+      description: >
+        Open-vacancy figures for the hierarchy node identified by `standard`, `level` and `id`, over the date range. A `level` that does not belong to `standard` is a 400. An unknown `id` returns zero counts, not a 404.
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VocationalEducationBreakdownResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /{standard}/{level}/{id}/work-modes:
+    parameters:
+      - { $ref: "#/components/parameters/standardPath" }
+      - { $ref: "#/components/parameters/levelPath" }
+      - { $ref: "#/components/parameters/idPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [analysis]
+      operationId: getWorkModeBreakdown
+      summary: "Remote vs on-site vs hybrid counts"
+      description: >
+        Open-vacancy figures for the hierarchy node identified by `standard`, `level` and `id`, over the date range. A `level` that does not belong to `standard` is a 400. An unknown `id` returns zero counts, not a 404.
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkModeBreakdownResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /{standard}/{level}/{id}/job-type:
+    parameters:
+      - { $ref: "#/components/parameters/standardPath" }
+      - { $ref: "#/components/parameters/levelPath" }
+      - { $ref: "#/components/parameters/idPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [analysis]
+      operationId: getJobTypeBreakdown
+      summary: "Job type breakdown"
+      description: >
+        Open-vacancy figures for the hierarchy node identified by `standard`, `level` and `id`, over the date range. A `level` that does not belong to `standard` is a 400. An unknown `id` returns zero counts, not a 404.
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobTypeBreakdownResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ============================================================
+  # OCCUPATION SKILLS / EMPLOYERS
+  # ============================================================
+  /occupation/{level}/{id}/skills:
+    parameters:
+      - { $ref: "#/components/parameters/occupationLevelPath" }
+      - { $ref: "#/components/parameters/idPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [occupation-skills]
+      operationId: listOccupationSkills
+      summary: "Skills in demand for an occupation node (paginated)"
+      description: >
+        Skills ordered by demand, paginated with `limit` (default 20, max 100) and `offset`.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/limitQuery" }
+        - { $ref: "#/components/parameters/offsetQuery" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SkillsResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /occupation/{level}/{id}/employers:
+    parameters:
+      - { $ref: "#/components/parameters/occupationLevelPath" }
+      - { $ref: "#/components/parameters/idPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [occupation-skills]
+      operationId: listTopHiringEmployers
+      summary: "Top hiring employers for an occupation node"
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/employersLimitQuery" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TopHiringEmployersResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ============================================================
+  # NATIONAL VACANCY TREND / TOTALS / DASHBOARD
+  # ============================================================
+  /vacancy-trend:
+    get:
+      tags: [vacancy-trend]
+      operationId: getVacancyTrend
+      summary: "Adaptive national vacancy trend"
+      description: >
+        One point per day when the range is shorter than 60 days, one per month otherwise.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/fromDateRequired" }
+        - { $ref: "#/components/parameters/toDateRequired" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VacancyTrendResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /total-vacancy:
+    get:
+      tags: [vacancy-trend]
+      operationId: getTotalVacancy
+      summary: "Total national vacancy count for a date range"
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/fromDateRequired" }
+        - { $ref: "#/components/parameters/toDateRequired" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VacancyTotalResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /analytics/{standard}/vacancy-summary:
+    parameters:
+      - { $ref: "#/components/parameters/standardPath" }
+      - { $ref: "#/components/parameters/fromDateRequired" }
+      - { $ref: "#/components/parameters/toDateRequired" }
+    get:
+      tags: [vacancy-trend]
+      operationId: getVacancySummary
+      summary: "Vacancy counts by root level for a date range"
+      description: >
+        Grouped by major group (`occupation`) or industry sector (`industry`).
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobCountByDateRangeResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /dashboard-card-data:
+    get:
+      tags: [dashboard]
+      operationId: getDashboardCardData
+      summary: "All-time dashboard card numbers"
+      description: >
+        Source count, all-time vacancy count and industry sector count. Takes no date range.
+      security: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardCardDataResponse" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ============================================================
+  # CRAWLER
+  # ============================================================
+  /crawler/sources:
+    get:
+      tags: [crawler]
+      operationId: listCrawlerSources
+      summary: "List the sources the crawler should run"
+      description: >
+        Sources that are of type `auto` and active.
+      x-required-scope: crawler:sources
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SourceListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /crawler/runs:
+    post:
+      tags: [crawler]
+      operationId: startCrawlerRun
+      summary: "Start a crawler run"
+      description: >
+        Takes no request body: the server creates the run (status `RUNNING`) and assigns its id.
+        Any run still `RUNNING` is marked `FAILED` first (so a run that was killed
+        without being completed does not stay `RUNNING`). This is not a mutual-exclusion
+        guarantee: the database does not enforce a single `RUNNING` run, so two overlapping
+        start requests can both succeed and leave two runs `RUNNING`. Callers should start
+        runs from a single scheduler.
+      x-required-scope: crawler:runs
+      security:
+        - BearerAuth: []
+      responses:
+        "201":
+          description: "Created"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CrawlerRun" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /crawler/runs/{id}/complete:
+    parameters:
+      - { $ref: "#/components/parameters/idPath" }
+    post:
+      tags: [crawler]
+      operationId: completeCrawlerRun
+      summary: "Finish a crawler run"
+      description: >
+        Sets the run's final status and finish time. `status` must be `COMPLETED` or `FAILED`.
+      x-required-scope: crawler:complete
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CrawlerRunStatusChangeRequest" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessageResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /crawler/jobs/batch-save:
+    post:
+      tags: [crawler]
+      operationId: batchSaveJobs
+      summary: "Ingest a batch of raw crawled jobs"
+      description: >
+        Each job is checked, de-duplicated, classified and stored independently; one failing job
+        never blocks the rest *once the batch is accepted*. The response is **200 when the body is
+        a non-empty JSON array whose elements all decode** - per-job failures are listed in
+        `failed_jobs` (a job missing from it was saved, or was a duplicate whose crawler run was
+        refreshed). The body is decoded as a whole before any job is processed, so it is rejected
+        with **400, and no job in it is saved**, if it is not a JSON array, if the array is empty,
+        or if any element has a wrongly typed field (e.g. `crawler_run_id` sent as a string
+        instead of an integer). Missing fields are not a decode error; they are reported per job in
+        `failed_jobs`. The response is sent after ingestion finishes, so it can take longer than a
+        normal request.
+      x-required-scope: crawler:batch-save
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BatchSavePayload" }
+      responses:
+        "200":
+          description: "Batch processed"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchSaveResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /crawler/jobs/reconcile:
+    post:
+      tags: [crawler]
+      operationId: reconcileStaleVacancies
+      summary: "Close stale vacancies after a run"
+      description: >
+        Sets `end_date` on every open job of the listed sources (active and not deleted) whose
+        `crawler_run_id` is not the given run - i.e. jobs the run no longer saw. 404 if the run does not exist.
+        The rule is "not the given run", not "older than the given run": a job that a **newer** run
+        has refreshed (stamped with a later `crawler_run_id`) also matches and is closed. The
+        backend does not check that the given run is still the latest, so a superseded run (one
+        marked `FAILED` because a newer run started) that reconciles late can close vacancies the
+        newer run just refreshed. Call this only for the most recent run, and only after it has
+        finished saving its jobs.
+      x-required-scope: crawler:reconcile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CrawlerRunJobReconcileRequest" }
+      responses:
+        "200":
+          description: "OK"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReconcileResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/ServerError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
