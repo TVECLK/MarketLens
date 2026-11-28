@@ -16,7 +16,7 @@ info:
     - Base path `/api/v1`. Bodies are `application/json`; field names are `snake_case`; timestamps are RFC 3339; dates are `YYYY-MM-DD`.
     - **Authentication.** Reads of the KPI, hierarchy and analysis endpoints are public. Every write, and everything under `/sources` and `/crawler`, needs a ThunderID-issued bearer token carrying the scope named in the operation's `x-required-scope`. Scopes follow `<resource>:<action>` (`create`, `update`, `delete`, `read`).
     - **List responses** are wrapped in an object: `{ "count": n, "<plural>": [...] }`. Paginated lists also return `total`, `limit` and `offset`.
-    - **Pagination.** `limit` defaults to 20 and is silently capped at 100 (top hiring employers default to 5); a non-numeric or non-positive `limit` and a negative `offset` are ignored.
+    - **Pagination.** `limit` and `offset` are never rejected - out-of-range values fall back to the effective page settings: the effective `limit` is 20 when absent, non-positive or non-numeric (5 for top hiring employers) and is capped at 100; a negative or non-numeric `offset` is treated as 0. Paginated responses echo the effective `limit` and `offset`. The input schemas therefore carry no `minimum`/`maximum`, so schema-validating clients and gateways do not reject values the server would accept; typed clients can only send integers, while the non-numeric fallback applies to hand-built query strings.
     - **Date ranges.** `from-date`/`to-date` are inclusive; `to-date` must not be before `from-date`. Analysis endpoints require both. Where they are optional (listing the root levels and the children of a parent) supplying one without the other is a 400.
     - **Errors.** Every error body of the `/api/v1` endpoints is `{ "error": "<message>" }`. 400 invalid input; 401 missing/invalid token; 403 token lacks the scope; 404 unknown id; 409 unique-constraint conflict; 500 unexpected failure; 503 a dependency (database or the identity provider) is temporarily unavailable and the request may be retried. 500 and 503 can occur on every `/api/v1` endpoint. **Exception - health probes:** `/healthz` and `/readyz` are outside `/api/v1` and never return the standard error body or a 500; a failing `/readyz` returns 503 with a `StatusResponse` body (`{ "status": "not ready", "message": "database unreachable" }`), which clients must handle separately from the standard error shape.
     - **Soft deletes.** DELETE soft-deletes. Deleting a node of a classification hierarchy also soft-deletes every descendant in the lower levels.
@@ -131,20 +131,27 @@ components:
       name: limit
       in: query
       required: false
-      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
-      description: Page size. Defaults to 20; values above 100 are capped at 100.
+      schema: { type: integer, default: 20 }
+      description: >
+        Requested page size. The server never rejects it: the effective page size is 20 when
+        the value is absent, zero, negative or not a number, and 100 when it is above 100
+        (the `limit` echoed in the response is the effective one).
     offsetQuery:
       name: offset
       in: query
       required: false
-      schema: { type: integer, minimum: 0, default: 0 }
-      description: Number of rows to skip.
+      schema: { type: integer, default: 0 }
+      description: >
+        Number of rows to skip. The server never rejects it: a negative or non-numeric value
+        is treated as 0.
     employersLimitQuery:
       name: limit
       in: query
       required: false
-      schema: { type: integer, minimum: 1, maximum: 100, default: 5 }
-      description: Number of employers to return. Defaults to 5; values above 100 are capped at 100.
+      schema: { type: integer, default: 5 }
+      description: >
+        Requested number of employers. The server never rejects it: the effective count is 5
+        when the value is absent, zero, negative or not a number, and 100 when it is above 100.
     sourceTypeQuery:
       name: type
       in: query
