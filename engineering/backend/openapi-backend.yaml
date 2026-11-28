@@ -3963,7 +3963,11 @@ paths:
       summary: "Start a crawler run"
       description: >
         Takes no request body: the server creates the run (status `RUNNING`) and assigns its id.
-        Any run still `RUNNING` is marked `FAILED` first, so at most one run is running at a time.
+        Any run still `RUNNING` is marked `FAILED` first (so a run that was killed
+        without being completed does not stay `RUNNING`). This is not a mutual-exclusion
+        guarantee: the database does not enforce a single `RUNNING` run, so two overlapping
+        start requests can both succeed and leave two runs `RUNNING`. Callers should start
+        runs from a single scheduler.
       x-required-scope: crawler:runs
       security:
         - BearerAuth: []
